@@ -1,5 +1,6 @@
 import type {
   FavoriteType,
+  InitiativeStatus,
   IssueRelationType,
   Priority,
   ProjectStatus,
@@ -39,6 +40,9 @@ export interface UpdateTeamInput {
   timezone?: string;
   cyclesEnabled?: boolean;
   cycleDurationWeeks?: number;
+  triageEnabled?: boolean;
+  slaUrgentHours?: number | null;
+  slaHighHours?: number | null;
 }
 
 export interface CreateIssueInput {
@@ -119,6 +123,7 @@ export interface CreateProjectInput {
   color?: string;
   status?: ProjectStatus;
   leadId?: string | null;
+  initiativeId?: string | null;
   memberIds?: string[];
   teamIds: string[];
   startDate?: string | null;
@@ -132,11 +137,47 @@ export interface UpdateProjectInput {
   color?: string;
   status?: ProjectStatus;
   leadId?: string | null;
+  initiativeId?: string | null;
   memberIds?: string[];
   teamIds?: string[];
   startDate?: string | null;
   targetDate?: string | null;
   sortOrder?: string;
+}
+
+export interface CreateInitiativeInput {
+  name: string;
+  description?: string;
+  color?: string;
+  status?: InitiativeStatus;
+  ownerId?: string | null;
+  targetDate?: string | null;
+}
+
+export interface UpdateInitiativeInput {
+  name?: string;
+  description?: string;
+  color?: string;
+  status?: InitiativeStatus;
+  ownerId?: string | null;
+  targetDate?: string | null;
+  sortOrder?: string;
+}
+
+export interface CreateDocumentInput {
+  title: string;
+  content?: string;
+  projectId?: string | null;
+}
+
+export interface UpdateDocumentInput {
+  title?: string;
+  content?: string;
+  projectId?: string | null;
+}
+
+export interface CreateWebhookInput {
+  url: string;
 }
 
 export interface CreateMilestoneInput {

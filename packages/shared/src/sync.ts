@@ -1,7 +1,10 @@
 import type {
+  Attachment,
   Comment,
   Cycle,
+  Document,
   Favorite,
+  Initiative,
   Issue,
   IssueActivity,
   IssueRelation,
@@ -13,6 +16,7 @@ import type {
   Team,
   TeamMembership,
   User,
+  Webhook,
   Workspace,
   WorkflowState,
 } from './entities.js';
@@ -42,6 +46,10 @@ export interface SyncModelMap {
   notification: Notification;
   favorite: Favorite;
   issueActivity: IssueActivity;
+  attachment: Attachment;
+  initiative: Initiative;
+  document: Document;
+  webhook: Webhook;
 }
 
 export type SyncModelName = keyof SyncModelMap;
@@ -63,6 +71,10 @@ export const SYNC_MODEL_NAMES = [
   'notification',
   'favorite',
   'issueActivity',
+  'attachment',
+  'initiative',
+  'document',
+  'webhook',
 ] as const satisfies readonly SyncModelName[];
 
 export type SyncAction = 'create' | 'update' | 'delete';
@@ -104,4 +116,8 @@ export interface BootstrapPayload {
   issueRelations: IssueRelation[];
   notifications: Notification[];
   favorites: Favorite[];
+  attachments: Attachment[];
+  initiatives: Initiative[];
+  documents: Document[];
+  webhooks: Webhook[];
 }

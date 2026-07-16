@@ -1,7 +1,15 @@
-import { createDomain, createMemoryStorage, type Storage } from '@nonlinear/core';
+import {
+  createDomain,
+  createFsBlobStore,
+  createMemoryBlobStore,
+  createMemoryStorage,
+  type Storage,
+} from '@nonlinear/core';
 import { createPostgresStorage } from '@nonlinear/storage-postgres';
 import { loadConfig } from './config.js';
 import { buildServer } from './server.js';
+
+const DUE_SOON_INTERVAL_MS = 10 * 60 * 1000;
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -11,10 +19,20 @@ async function main(): Promise<void> {
   } else {
     storage = createMemoryStorage();
   }
-  const domain = createDomain(storage);
+  const blobs =
+    config.storage === 'postgres' ? createFsBlobStore(config.blobDir) : createMemoryBlobStore();
+  const domain = createDomain(storage, { blobs });
   const app = await buildServer(domain, config);
 
+  const stopWebhooks = domain.webhooks.startDispatcher((msg) => app.log.warn(msg));
+  const dueSoonTimer = setInterval(() => {
+    void domain.dueSoon.scan().catch((err) => app.log.error(err, 'due-soon scan failed'));
+  }, DUE_SOON_INTERVAL_MS);
+  void domain.dueSoon.scan().catch(() => {});
+
   const shutdown = async (): Promise<void> => {
+    clearInterval(dueSoonTimer);
+    stopWebhooks();
     await app.close();
     await storage.close();
     process.exit(0);

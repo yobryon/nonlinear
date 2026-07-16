@@ -56,6 +56,9 @@ export type FavoriteType = (typeof FAVORITE_TYPES)[number];
 export const USER_ROLES = ['admin', 'member', 'guest'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
+export const INITIATIVE_STATUSES = ['planned', 'active', 'completed'] as const;
+export type InitiativeStatus = (typeof INITIATIVE_STATUSES)[number];
+
 export const ACTIVITY_TYPES = [
   'created',
   'state_changed',

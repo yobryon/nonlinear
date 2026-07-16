@@ -1,10 +1,12 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
+import multipart from '@fastify/multipart';
 import { DomainError, type Domain } from '@nonlinear/core';
 import type { User } from '@nonlinear/shared';
 import type { Config } from './config.js';
 import { SyncHub } from './hub.js';
+import { registerGithubWebhook } from './github.js';
 
 const SESSION_COOKIE = 'nl_session';
 
@@ -18,6 +20,8 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   const app = Fastify({ logger: true, bodyLimit: 1024 * 1024 });
   await app.register(cookie);
   await app.register(websocket);
+  await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
+  await registerGithubWebhook(app, domain, config.githubWebhookSecret);
 
   const hub = new SyncHub(domain);
 
@@ -255,6 +259,80 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   });
   app.delete('/api/notifications/:id', authed, async (req) => {
     await domain.notifications.remove(req.user.id, (req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- attachments ----
+  app.post('/api/issues/:id/attachments', authed, async (req, reply) => {
+    const file = await req.file();
+    if (!file) {
+      return reply
+        .status(400)
+        .send({ error: { code: 'no_file', message: 'Attach a file as multipart form data' } });
+    }
+    const data = await file.toBuffer();
+    return domain.attachments.create(req.user.id, (req.params as { id: string }).id, {
+      filename: file.filename,
+      contentType: file.mimetype,
+      data,
+    });
+  });
+  app.get('/api/attachments/:id/file', authed, async (req, reply) => {
+    const { attachment, data } = await domain.attachments.content(
+      (req.params as { id: string }).id,
+    );
+    const safeName = attachment.filename.replace(/[^\w.\- ]/g, '_');
+    reply.header('Content-Type', attachment.contentType);
+    reply.header('Content-Disposition', `attachment; filename="${safeName}"`);
+    return reply.send(data);
+  });
+  app.delete('/api/attachments/:id', authed, async (req) => {
+    await domain.attachments.remove((req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- initiatives ----
+  app.post('/api/initiatives', authed, async (req) => domain.initiatives.create(req.body as never));
+  app.patch('/api/initiatives/:id', authed, async (req) =>
+    domain.initiatives.update((req.params as { id: string }).id, req.body as never),
+  );
+  app.delete('/api/initiatives/:id', authed, async (req) => {
+    await domain.initiatives.remove((req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- documents ----
+  app.post('/api/documents', authed, async (req) =>
+    domain.documents.create(req.user.id, req.body as never),
+  );
+  app.patch('/api/documents/:id', authed, async (req) =>
+    domain.documents.update((req.params as { id: string }).id, req.body as never),
+  );
+  app.delete('/api/documents/:id', authed, async (req) => {
+    await domain.documents.remove((req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- outbound webhooks (admin only) ----
+  const requireAdmin = (req: FastifyRequest): void => {
+    if (req.user.role !== 'admin') {
+      throw new DomainError('forbidden', 'Only admins can manage webhooks', 403);
+    }
+  };
+  app.post('/api/webhooks', authed, async (req) => {
+    requireAdmin(req);
+    return domain.webhooks.create(req.user.id, (req.body as { url: string }).url);
+  });
+  app.patch('/api/webhooks/:id', authed, async (req) => {
+    requireAdmin(req);
+    return domain.webhooks.setEnabled(
+      (req.params as { id: string }).id,
+      (req.body as { enabled: boolean }).enabled,
+    );
+  });
+  app.delete('/api/webhooks/:id', authed, async (req) => {
+    requireAdmin(req);
+    await domain.webhooks.remove((req.params as { id: string }).id);
     return { ok: true };
   });
 

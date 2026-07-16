@@ -1,9 +1,12 @@
 import { create } from 'zustand';
 import type {
+  Attachment,
   BootstrapPayload,
   Comment,
   Cycle,
+  Document,
   Favorite,
+  Initiative,
   Issue,
   IssueRelation,
   Label,
@@ -17,6 +20,7 @@ import type {
   Team,
   TeamMembership,
   User,
+  Webhook,
   Workspace,
   WorkflowState,
 } from '@nonlinear/shared';
@@ -45,6 +49,10 @@ export interface AppState {
   issueRelations: ById<IssueRelation>;
   notifications: ById<Notification>;
   favorites: ById<Favorite>;
+  attachments: ById<Attachment>;
+  initiatives: ById<Initiative>;
+  documents: ById<Document>;
+  webhooks: ById<Webhook>;
 
   setPhase: (phase: AppState['phase']) => void;
   setConnection: (status: ConnectionStatus) => void;
@@ -70,6 +78,10 @@ const MODEL_TO_KEY = {
   issueRelation: 'issueRelations',
   notification: 'notifications',
   favorite: 'favorites',
+  attachment: 'attachments',
+  initiative: 'initiatives',
+  document: 'documents',
+  webhook: 'webhooks',
 } as const;
 
 type CollectionKey = (typeof MODEL_TO_KEY)[keyof typeof MODEL_TO_KEY];
@@ -96,6 +108,10 @@ const emptyCollections = {
   issueRelations: {},
   notifications: {},
   favorites: {},
+  attachments: {},
+  initiatives: {},
+  documents: {},
+  webhooks: {},
 };
 
 export const useStore = create<AppState>((set) => ({
@@ -128,6 +144,10 @@ export const useStore = create<AppState>((set) => ({
       issueRelations: indexById(p.issueRelations),
       notifications: indexById(p.notifications),
       favorites: indexById(p.favorites),
+      attachments: indexById(p.attachments),
+      initiatives: indexById(p.initiatives),
+      documents: indexById(p.documents),
+      webhooks: indexById(p.webhooks),
     }),
 
   applyDeltas: (deltas) =>

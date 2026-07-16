@@ -99,6 +99,18 @@ function PaletteInner({ onClose }: { onClose: () => void }) {
         run: () => go('/projects'),
       },
       {
+        id: 'initiatives',
+        label: 'Go to Initiatives',
+        icon: <ProjectIcon size={15} />,
+        run: () => go('/initiatives'),
+      },
+      {
+        id: 'documents',
+        label: 'Go to Documents',
+        icon: <ProjectIcon size={15} />,
+        run: () => go('/documents'),
+      },
+      {
         id: 'settings',
         label: 'Go to Settings',
         icon: <SettingsIcon size={15} />,

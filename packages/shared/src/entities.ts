@@ -1,6 +1,7 @@
 import type {
   ActivityType,
   FavoriteType,
+  InitiativeStatus,
   IssueRelationType,
   NotificationType,
   Priority,
@@ -45,6 +46,11 @@ export interface Team {
   cyclesEnabled: boolean;
   /** Cycle length in weeks. */
   cycleDurationWeeks: number;
+  /** When enabled, new issues land in the Triage state for review. */
+  triageEnabled: boolean;
+  /** SLA: auto-set due dates this many hours out for urgent/high issues. Null = off. */
+  slaUrgentHours: number | null;
+  slaHighHours: number | null;
   /** Next issue number to hand out (server-side concern, synced for display only). */
   issueCounter: number;
   createdAt: string;
@@ -136,6 +142,7 @@ export interface Project {
   color: string;
   status: ProjectStatus;
   leadId: string | null;
+  initiativeId: string | null;
   memberIds: string[];
   teamIds: string[];
   startDate: string | null;
@@ -194,6 +201,54 @@ export interface Favorite {
   type: FavoriteType;
   targetId: string;
   sortOrder: string;
+  createdAt: string;
+}
+
+export interface Attachment {
+  id: string;
+  issueId: string;
+  uploaderId: string;
+  filename: string;
+  contentType: string;
+  /** Bytes. */
+  size: number;
+  createdAt: string;
+}
+
+/** Roadmap grouping of projects. */
+export interface Initiative {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  status: InitiativeStatus;
+  ownerId: string | null;
+  targetDate: string | null;
+  sortOrder: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Document {
+  id: string;
+  title: string;
+  /** Markdown. */
+  content: string;
+  /** Null = workspace-level document. */
+  projectId: string | null;
+  creatorId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Outbound webhook: issue events are POSTed to the url as JSON. */
+export interface Webhook {
+  id: string;
+  url: string;
+  /** Sent as X-Nonlinear-Secret so receivers can verify origin. */
+  secret: string;
+  enabled: boolean;
+  creatorId: string;
   createdAt: string;
 }
 

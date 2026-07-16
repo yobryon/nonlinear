@@ -1,7 +1,13 @@
 import type {
+  Attachment,
   BootstrapPayload,
   Comment,
   CreateCommentInput,
+  CreateDocumentInput,
+  CreateInitiativeInput,
+  Document,
+  Initiative,
+  Webhook,
   CreateCycleInput,
   CreateFavoriteInput,
   CreateIssueInput,
@@ -131,6 +137,42 @@ export const api = {
     req<{ ok: true }>('PATCH', `/api/notifications/${id}`, { read }),
   markAllNotificationsRead: () => req<{ ok: true }>('POST', '/api/notifications/read-all'),
   deleteNotification: (id: string) => req<{ ok: true }>('DELETE', `/api/notifications/${id}`),
+
+  uploadAttachment: async (issueId: string, file: File): Promise<Attachment> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`/api/issues/${issueId}/attachments`, {
+      method: 'POST',
+      body: form,
+      credentials: 'same-origin',
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new ApiError(
+        res.status,
+        data?.error?.code ?? 'upload_failed',
+        data?.error?.message ?? 'Upload failed',
+      );
+    }
+    return res.json() as Promise<Attachment>;
+  },
+  deleteAttachment: (id: string) => req<{ ok: true }>('DELETE', `/api/attachments/${id}`),
+
+  createInitiative: (input: CreateInitiativeInput) =>
+    req<Initiative>('POST', '/api/initiatives', input),
+  updateInitiative: (id: string, input: Record<string, unknown>) =>
+    req<Initiative>('PATCH', `/api/initiatives/${id}`, input),
+  deleteInitiative: (id: string) => req<{ ok: true }>('DELETE', `/api/initiatives/${id}`),
+
+  createDocument: (input: CreateDocumentInput) => req<Document>('POST', '/api/documents', input),
+  updateDocument: (id: string, input: Record<string, unknown>) =>
+    req<Document>('PATCH', `/api/documents/${id}`, input),
+  deleteDocument: (id: string) => req<{ ok: true }>('DELETE', `/api/documents/${id}`),
+
+  createWebhook: (url: string) => req<Webhook>('POST', '/api/webhooks', { url }),
+  setWebhookEnabled: (id: string, enabled: boolean) =>
+    req<Webhook>('PATCH', `/api/webhooks/${id}`, { enabled }),
+  deleteWebhook: (id: string) => req<{ ok: true }>('DELETE', `/api/webhooks/${id}`),
 
   updateProfile: (input: UpdateProfileInput) => req<User>('PATCH', '/api/profile', input),
   adminUpdateUser: (id: string, input: { role?: string; active?: boolean }) =>

@@ -15,6 +15,10 @@ import { InboxPage } from './pages/Inbox.js';
 import { ProjectDetailPage, ProjectsPage } from './pages/Projects.js';
 import { CycleDetailPage, TeamCyclesPage } from './pages/Cycles.js';
 import { SettingsPage } from './pages/Settings.js';
+import { TriagePage } from './pages/Triage.js';
+import { InitiativeDetailPage, InitiativesPage } from './pages/Initiatives.js';
+import { DocumentDetailPage, DocumentsPage } from './pages/Documents.js';
+import { InsightsPage } from './pages/Insights.js';
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -91,18 +95,21 @@ function AppShell() {
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/my-issues" element={<MyIssuesPage />} />
             <Route path="/team/:teamKey/issues" element={<TeamIssuesPage />} />
+            <Route path="/team/:teamKey/triage" element={<TriagePage />} />
             <Route path="/team/:teamKey/cycles" element={<TeamCyclesPage />} />
+            <Route path="/team/:teamKey/insights" element={<InsightsPage />} />
             <Route path="/issue/:key" element={<IssueDetailPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/project/:projectId" element={<ProjectDetailPage />} />
             <Route path="/cycle/:cycleId" element={<CycleDetailPage />} />
+            <Route path="/initiatives" element={<InitiativesPage />} />
+            <Route path="/initiative/:initiativeId" element={<InitiativeDetailPage />} />
+            <Route path="/documents" element={<DocumentsPage />} />
+            <Route path="/document/:documentId" element={<DocumentDetailPage />} />
             <Route path="*" element={<DefaultRedirect />} />
           </Routes>
         </main>
       </div>
-      <Shortcuts />
-      <CommandPalette />
-      <NewIssueDialog />
     </div>
   );
 }
@@ -126,10 +133,15 @@ export function App() {
       )}
       {phase === 'anonymous' && <AuthPage />}
       {phase === 'ready' && (
-        <Routes>
-          <Route path="/settings/*" element={<SettingsPage />} />
-          <Route path="*" element={<AppShell />} />
-        </Routes>
+        <>
+          <Routes>
+            <Route path="/settings/*" element={<SettingsPage />} />
+            <Route path="*" element={<AppShell />} />
+          </Routes>
+          <Shortcuts />
+          <CommandPalette />
+          <NewIssueDialog />
+        </>
       )}
       <Toasts />
     </BrowserRouter>

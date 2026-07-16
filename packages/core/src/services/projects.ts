@@ -43,6 +43,7 @@ export class ProjectService {
       color: input.color ?? colorFor(name),
       status: input.status ?? 'backlog',
       leadId: input.leadId ?? null,
+      initiativeId: input.initiativeId ?? null,
       memberIds: [...new Set(input.memberIds ?? [])],
       teamIds: [...new Set(input.teamIds)],
       startDate: input.startDate ?? null,
@@ -69,6 +70,12 @@ export class ProjectService {
     if (input.icon !== undefined) project.icon = input.icon;
     if (input.color !== undefined) project.color = input.color;
     if (input.leadId !== undefined) project.leadId = input.leadId;
+    if (input.initiativeId !== undefined) {
+      if (input.initiativeId && !(await storage.initiatives.get(input.initiativeId))) {
+        throw notFound('Initiative');
+      }
+      project.initiativeId = input.initiativeId;
+    }
     if (input.memberIds !== undefined) project.memberIds = [...new Set(input.memberIds)];
     if (input.teamIds !== undefined) {
       if (input.teamIds.length === 0) {
@@ -116,6 +123,14 @@ export class ProjectService {
       if (favorite.type === 'project' && favorite.targetId === projectId) {
         await storage.favorites.delete(favorite.id);
         deltas.push(deleted('favorite', favorite.id));
+      }
+    }
+    for (const document of await storage.documents.all()) {
+      if (document.projectId === projectId) {
+        document.projectId = null;
+        document.updatedAt = now;
+        await storage.documents.update(document);
+        deltas.push(updated('document', document));
       }
     }
     await storage.projects.delete(projectId);

@@ -116,7 +116,105 @@ function WorkspaceSettings() {
           automatically join every non-private team. Share the app URL to invite teammates.
         </p>
       </div>
+      <WebhooksSection />
+      <div className="settings-section">
+        <h2>GitHub integration</h2>
+        <p className="muted" style={{ fontSize: 12.5, lineHeight: 1.7 }}>
+          Point a GitHub repository webhook (pull request events, JSON) at{' '}
+          <code>/api/integrations/github</code> and set the same secret in the server’s{' '}
+          <code>GITHUB_WEBHOOK_SECRET</code> environment variable. PRs referencing an issue key — in
+          the branch name (<code>ada/eng-42-fix</code>) or with magic words (
+          <code>Fixes ENG-42</code>) — get linked as comments, and merging moves the issue to Done.
+        </p>
+      </div>
     </>
+  );
+}
+
+function WebhooksSection() {
+  const webhooks = useStore((s) => s.webhooks);
+  const me = useStore((s) => (s.userId ? s.users[s.userId] : null));
+  const [url, setUrl] = useState('');
+  const [revealed, setRevealed] = useState<string | null>(null);
+  if (me?.role !== 'admin') return null;
+  const rows = Object.values(webhooks).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  return (
+    <div className="settings-section">
+      <h2>Webhooks</h2>
+      <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+        Issue, comment, and project events are POSTed as JSON with an{' '}
+        <code>X-Nonlinear-Secret</code> header.
+      </p>
+      {rows.map((webhook) => (
+        <div key={webhook.id} className="member-row">
+          <div className="info">
+            <div className="truncate">{webhook.url}</div>
+            <div className="email">
+              {webhook.enabled ? 'enabled' : 'disabled'} · secret:{' '}
+              {revealed === webhook.id ? (
+                <code>{webhook.secret}</code>
+              ) : (
+                <button
+                  style={{ color: 'var(--accent-text)' }}
+                  onClick={() => setRevealed(webhook.id)}
+                >
+                  reveal
+                </button>
+              )}
+            </div>
+          </div>
+          <Switch
+            on={webhook.enabled}
+            onChange={(on) => {
+              void api
+                .setWebhookEnabled(webhook.id, on)
+                .then((w) => useStore.getState().putEntity('webhook', w))
+                .catch(toastError);
+            }}
+          />
+          <button
+            className="icon-btn"
+            title="Delete webhook"
+            onClick={() => {
+              void api
+                .deleteWebhook(webhook.id)
+                .then(() => {
+                  const next = { ...useStore.getState().webhooks };
+                  delete next[webhook.id];
+                  useStore.setState({ webhooks: next });
+                })
+                .catch(toastError);
+            }}
+          >
+            <TrashIcon size={13} />
+          </button>
+        </div>
+      ))}
+      <div className="row" style={{ gap: 8, marginTop: 10, maxWidth: 480 }}>
+        <input
+          className="input"
+          placeholder="https://example.com/webhook"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+        />
+        <button
+          className="btn"
+          disabled={!url.trim()}
+          onClick={() => {
+            void api
+              .createWebhook(url.trim())
+              .then((w) => {
+                useStore.getState().putEntity('webhook', w);
+                setUrl('');
+              })
+              .catch(toastError);
+          }}
+        >
+          <PlusIcon size={13} /> Add
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -413,6 +511,42 @@ function TeamSettingsInner({ team }: { team: Team }) {
       </div>
 
       <div className="settings-section">
+        <h2>Triage</h2>
+        <div className="setting-row">
+          <div className="info">
+            <div className="label">Enable triage</div>
+            <div className="desc">
+              New issues land in a Triage state for review before planning.
+            </div>
+          </div>
+          <Switch on={team.triageEnabled} onChange={(on) => patchTeam({ triageEnabled: on })} />
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h2>SLAs</h2>
+        <div className="setting-row">
+          <div className="info">
+            <div className="label">Urgent issues</div>
+            <div className="desc">Auto-set a due date this many hours after creation.</div>
+          </div>
+          <SlaHoursInput
+            value={team.slaUrgentHours}
+            onChange={(hours) => patchTeam({ slaUrgentHours: hours })}
+          />
+        </div>
+        <div className="setting-row">
+          <div className="info">
+            <div className="label">High-priority issues</div>
+          </div>
+          <SlaHoursInput
+            value={team.slaHighHours}
+            onChange={(hours) => patchTeam({ slaHighHours: hours })}
+          />
+        </div>
+      </div>
+
+      <div className="settings-section">
         <h2>Workflow states</h2>
         {teamStates.map((state) => (
           <WorkflowStateRow key={state.id} state={state} />
@@ -530,6 +664,35 @@ function TeamSettingsInner({ team }: { team: Team }) {
         />
       )}
     </>
+  );
+}
+
+function SlaHoursInput({
+  value,
+  onChange,
+}: {
+  value: number | null;
+  onChange: (hours: number | null) => void;
+}) {
+  const [draft, setDraft] = useState(value === null ? '' : String(value));
+  return (
+    <div className="row" style={{ gap: 6 }}>
+      <input
+        className="input"
+        style={{ width: 80, height: 26 }}
+        type="number"
+        min={1}
+        max={720}
+        placeholder="off"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          const parsed = draft.trim() === '' ? null : Math.max(1, Number(draft));
+          onChange(Number.isNaN(parsed as number) ? null : parsed);
+        }}
+      />
+      <span className="dim">hours</span>
+    </div>
   );
 }
 

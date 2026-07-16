@@ -19,16 +19,25 @@ import { newId } from '../util/ids.js';
 import { nowIso } from '../util/time.js';
 import { keyAfterAll } from '../util/fractional.js';
 import { pushNotification } from './notify.js';
+import type { AttachmentService } from './attachments.js';
 
 const CATEGORY_DEFAULT_ORDER = ['backlog', 'unstarted', 'triage', 'started'] as const;
 
 export class IssueService {
-  constructor(private ctx: Ctx) {}
+  constructor(
+    private ctx: Ctx,
+    private attachments?: AttachmentService,
+  ) {}
 
   private async defaultState(teamId: string): Promise<WorkflowState> {
+    const team = await this.ctx.storage.teams.get(teamId);
     const states = (await this.ctx.storage.workflowStates.all())
       .filter((s) => s.teamId === teamId)
       .sort((a, b) => a.position - b.position);
+    if (team?.triageEnabled) {
+      const triage = states.find((s) => s.category === 'triage');
+      if (triage) return triage;
+    }
     for (const category of CATEGORY_DEFAULT_ORDER) {
       const match = states.find((s) => s.category === category);
       if (match) return match;
@@ -36,6 +45,15 @@ export class IssueService {
     const first = states[0];
     if (!first) throw new DomainError('no_states', 'Team has no workflow states', 409);
     return first;
+  }
+
+  /** SLA: derive a due date from priority when the team has SLAs configured. */
+  private slaDueDate(
+    team: { slaUrgentHours: number | null; slaHighHours: number | null },
+    priority: number,
+  ): string | null {
+    const hours = priority === 1 ? team.slaUrgentHours : priority === 2 ? team.slaHighHours : null;
+    return hours ? new Date(Date.now() + hours * 3600_000).toISOString() : null;
   }
 
   private async recordActivity(
@@ -94,7 +112,7 @@ export class IssueService {
       cycleId: input.cycleId ?? null,
       parentId: input.parentId ?? null,
       estimate: input.estimate ?? null,
-      dueDate: input.dueDate ?? null,
+      dueDate: input.dueDate ?? this.slaDueDate(team, input.priority ?? 0),
       labelIds: [...new Set(input.labelIds ?? [])],
       subscriberIds: [...subscriberIds],
       sortOrder: input.sortOrder ?? keyAfterAll(siblings.map((i) => i.sortOrder)),
@@ -195,6 +213,10 @@ export class IssueService {
         }),
       );
       issue.priority = input.priority;
+      if (!issue.dueDate && input.dueDate === undefined) {
+        const team = await storage.teams.get(issue.teamId);
+        if (team) issue.dueDate = this.slaDueDate(team, input.priority);
+      }
     }
 
     if (input.assigneeId !== undefined && input.assigneeId !== issue.assigneeId) {
@@ -361,6 +383,9 @@ export class IssueService {
     for (const activity of await storage.activities.byIssue(issueId)) {
       await storage.activities.delete(activity.id);
       deltas.push(deleted('issueActivity', activity.id));
+    }
+    if (this.attachments) {
+      deltas.push(...(await this.attachments.removeForIssue(issueId)));
     }
     for (const child of await storage.issues.all()) {
       if (child.parentId === issueId) {

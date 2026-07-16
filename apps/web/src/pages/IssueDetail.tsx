@@ -321,6 +321,8 @@ function IssueDetail({ issueId }: { issueId: string }) {
               )}
             </div>
 
+            <AttachmentsSection issueId={issueId} />
+
             {/* relations */}
             {issueRelations.length > 0 && (
               <div style={{ marginTop: 20 }}>
@@ -746,6 +748,99 @@ function IssueDetail({ issueId }: { issueId: string }) {
         </Popover>
       )}
     </>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function AttachmentsSection({ issueId }: { issueId: string }) {
+  const attachments = useStore((s) => s.attachments);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const rows = Object.values(attachments)
+    .filter((a) => a.issueId === issueId)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  const upload = async (file: File) => {
+    setUploading(true);
+    try {
+      const attachment = await api.uploadAttachment(issueId, file);
+      useStore.getState().putEntity('attachment', attachment);
+    } catch (err) {
+      toastError(err);
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div className="row" style={{ marginBottom: 6 }}>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>
+          Attachments {rows.length > 0 && <span className="muted">{rows.length}</span>}
+        </span>
+        <span className="grow" />
+        <button
+          className="icon-btn"
+          title="Upload attachment"
+          disabled={uploading}
+          onClick={() => fileRef.current?.click()}
+        >
+          <PlusIcon size={14} />
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void upload(file);
+          }}
+        />
+      </div>
+      {uploading && <div className="dim">Uploading…</div>}
+      {rows.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {rows.map((attachment) => (
+            <div key={attachment.id} className="row" style={{ fontSize: 12.5, gap: 8 }}>
+              <a
+                href={`/api/attachments/${attachment.id}/file`}
+                className="row grow truncate"
+                style={{ gap: 6, color: 'var(--accent-text)' }}
+                download={attachment.filename}
+              >
+                <LinkIcon size={12} />
+                <span className="truncate">{attachment.filename}</span>
+              </a>
+              <span className="dim">{formatBytes(attachment.size)}</span>
+              <button
+                className="icon-btn"
+                style={{ width: 20, height: 20 }}
+                title="Delete attachment"
+                onClick={() => {
+                  void api
+                    .deleteAttachment(attachment.id)
+                    .then(() => {
+                      const next = { ...useStore.getState().attachments };
+                      delete next[attachment.id];
+                      useStore.setState({ attachments: next });
+                    })
+                    .catch(toastError);
+                }}
+              >
+                <TrashIcon size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

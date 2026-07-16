@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-**nonlinear** is a self-hostable clone of [Linear](https://linear.app) — teams, issues, workflow states, priorities, labels, projects/milestones, cycles, sub-issues, relations, comments/reactions/@mentions, notifications inbox, favorites, command palette, keyboard shortcuts, and real-time delta sync — running entirely in containers. `docker compose up --build` gives you the whole product on http://localhost:8080.
+**nonlinear** is a self-hostable clone of [Linear](https://linear.app) — teams, issues, workflow states, priorities, labels, projects/milestones, cycles, sub-issues, relations, comments/reactions/@mentions, file attachments, triage inbox, SLAs, initiatives (roadmap), documents, team insights charts, notifications inbox (incl. due-soon reminders), favorites, outbound webhooks, a GitHub PR integration, command palette, keyboard shortcuts, and real-time delta sync — running entirely in containers. `docker compose up --build` gives you the whole product on http://localhost:8080.
 
 ## Hard constraints (from the project owner)
 
@@ -40,7 +40,7 @@ pnpm monorepo, TypeScript ESM end-to-end (`.js` import specifiers everywhere exc
 - **packages/shared** — the contract: entity types, enums (Linear's priority scheme 0=None 1=Urgent…4=Low; state categories triage/backlog/unstarted/started/completed/canceled), input DTOs, the sync protocol (`SyncDelta`, `BootstrapPayload`, WS messages), and the fractional-ordering util (`keyBetween`) used for board/list manual ordering.
 - **packages/core** — domain services (auth, teams, issues, comments, projects, cycles, labels, relations, favorites, notifications, bootstrap) + the storage interfaces + an in-memory reference storage used by tests and `STORAGE=memory`. All business rules live here: issue numbering (`TEAM-123`), category timestamps (startedAt/completedAt/canceledAt), activity records, notification fan-out, @mention parsing, sub-issue cycle prevention, cascade deletes, lazy cycle generation on the team cadence.
 - **packages/storage-postgres** — implements the storage interfaces. Entities are stored as one **jsonb document per row** with expression indexes on queried fields; relational tables only where semantics demand it (sessions, `team_counters` for atomic issue numbers, ordered `sync_log`). Migrations are plain SQL in `migrations/`, applied by `src/migrate.ts` at startup under a lock.
-- **apps/api** — Fastify. Session-cookie auth (`nl_session`, scrypt hashes), thin REST routes that delegate to core services, and `src/hub.ts`: the WebSocket hub that replays `sync_log` deltas after a client's `hello {lastSyncId}` (buffering live deltas until replay completes) then streams live. Notification/favorite deltas are filtered to their owner.
+- **apps/api** — Fastify. Session-cookie auth (`nl_session`, scrypt hashes), thin REST routes that delegate to core services, and `src/hub.ts`: the WebSocket hub that replays `sync_log` deltas after a client's `hello {lastSyncId}` (buffering live deltas until replay completes) then streams live. Notification/favorite deltas are filtered to their owner. Also: multipart attachment upload (blobs go through core's `BlobStore` — fs volume locally, Azure Blob would be a sibling impl), a 10-minute due-soon notification scheduler, the outbound webhook dispatcher (core `WebhookService`), and `src/github.ts` — an HMAC-verified GitHub PR webhook that links/auto-closes issues via branch names and magic words (needs `GITHUB_WEBHOOK_SECRET`).
 - **apps/web** — React + Vite + zustand. `store.ts` holds normalized entity maps; `sync.ts` bootstraps over REST then applies WS deltas (reconnect w/ backoff, `rebootstrap` support). Mutations go through REST and merge the response optimistically (`putEntity`); the same change also arrives as a delta, which is idempotent. Styling is a hand-rolled design system in `styles.css` (CSS variables, `data-theme` dark/light on `<html>`); icons are hand-drawn SVGs in `icons.tsx` mimicking Linear's state/priority iconography.
 
 ### Sync model (the load-bearing design)
@@ -53,8 +53,8 @@ The first register creates the workspace, an admin user, and a default team (wit
 
 ## Known gaps / deferred
 
-- File attachments (interface would go behind storage boundary; Azurite/Azure Blob planned).
-- Due-soon notifications need a scheduler; type exists, nothing emits it.
-- Command palette/shortcuts don't mount on `/settings/*` routes.
+- Azure Blob `BlobStore` implementation (fs volume is the current attachment store; the interface in `packages/core/src/blob.ts` is the seam).
+- Outbound webhooks are fire-and-forget (5s timeout, no retry queue).
+- No public API tokens; the REST API is session-cookie only. No GraphQL.
 - Sync log is never compacted (rebootstrap path exists and is exercised when it is).
 - No rate limiting; auth is same-origin cookie based — put HTTPS in front and set `SECURE_COOKIES=true` in production.

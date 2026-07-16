@@ -1,6 +1,7 @@
 export * from './storage.js';
 export * from './domain.js';
 export * from './memory.js';
+export * from './blob.js';
 export * from './util/ids.js';
 export * from './util/time.js';
 export * from './util/fractional.js';
@@ -15,9 +16,20 @@ export * from './services/cycles.js';
 export * from './services/labels.js';
 export * from './services/extras.js';
 export * from './services/notify.js';
+export * from './services/attachments.js';
+export * from './services/initiatives.js';
+export * from './services/documents.js';
+export * from './services/webhooks.js';
+export * from './services/duesoon.js';
 
 import type { Storage } from './storage.js';
 import { SyncBus, type Ctx } from './domain.js';
+import { createMemoryBlobStore, type BlobStore } from './blob.js';
+import { AttachmentService } from './services/attachments.js';
+import { InitiativeService } from './services/initiatives.js';
+import { DocumentService } from './services/documents.js';
+import { WebhookService } from './services/webhooks.js';
+import { DueSoonService } from './services/duesoon.js';
 import { AuthService } from './services/auth.js';
 import { TeamService } from './services/teams.js';
 import { IssueService } from './services/issues.js';
@@ -49,17 +61,29 @@ export interface Domain {
   notifications: NotificationService;
   users: UserService;
   bootstrap: BootstrapService;
+  attachments: AttachmentService;
+  initiatives: InitiativeService;
+  documents: DocumentService;
+  webhooks: WebhookService;
+  dueSoon: DueSoonService;
 }
 
-export function createDomain(storage: Storage): Domain {
+export interface DomainOptions {
+  /** Binary storage for attachments; defaults to in-memory. */
+  blobs?: BlobStore;
+}
+
+export function createDomain(storage: Storage, options: DomainOptions = {}): Domain {
   const bus = new SyncBus(storage.syncLog);
   const ctx: Ctx = { storage, bus };
+  const blobs = options.blobs ?? createMemoryBlobStore();
+  const attachments = new AttachmentService(ctx, blobs);
   return {
     ctx,
     bus,
     auth: new AuthService(ctx),
     teams: new TeamService(ctx),
-    issues: new IssueService(ctx),
+    issues: new IssueService(ctx, attachments),
     comments: new CommentService(ctx),
     projects: new ProjectService(ctx),
     cycles: new CycleService(ctx),
@@ -69,5 +93,10 @@ export function createDomain(storage: Storage): Domain {
     notifications: new NotificationService(ctx),
     users: new UserService(ctx),
     bootstrap: new BootstrapService(ctx),
+    attachments,
+    initiatives: new InitiativeService(ctx),
+    documents: new DocumentService(ctx),
+    webhooks: new WebhookService(ctx),
+    dueSoon: new DueSoonService(ctx),
   };
 }

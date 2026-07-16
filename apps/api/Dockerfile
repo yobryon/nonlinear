@@ -27,6 +27,8 @@ FROM node:22-alpine
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /out .
+# Attachment blob volume mounts here; pre-create with the runtime user's ownership.
+RUN mkdir -p /data/blobs && chown -R node:node /data
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s \

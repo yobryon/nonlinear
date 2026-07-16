@@ -215,6 +215,10 @@ export class BootstrapService {
       issueRelations,
       notifications,
       favorites,
+      attachments,
+      initiatives,
+      documents,
+      webhooks,
       syncId,
     ] = await Promise.all([
       s.users.all(),
@@ -231,6 +235,10 @@ export class BootstrapService {
       s.issueRelations.all(),
       s.notifications.all(),
       s.favorites.all(),
+      s.attachments.all(),
+      s.initiatives.all(),
+      s.documents.all(),
+      s.webhooks.all(),
       s.syncLog.currentSyncId(),
     ]);
     return {
@@ -251,6 +259,10 @@ export class BootstrapService {
       issueRelations,
       notifications: notifications.filter((n) => n.userId === userId),
       favorites: favorites.filter((f) => f.userId === userId),
+      attachments,
+      initiatives,
+      documents,
+      webhooks,
     };
   }
 }

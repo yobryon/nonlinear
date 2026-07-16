@@ -1,7 +1,10 @@
 import type {
+  Attachment,
   Comment,
   Cycle,
+  Document,
   Favorite,
+  Initiative,
   Issue,
   IssueActivity,
   IssueRelation,
@@ -14,6 +17,7 @@ import type {
   Team,
   TeamMembership,
   User,
+  Webhook,
   Workspace,
   WorkflowState,
 } from '@nonlinear/shared';
@@ -100,6 +104,10 @@ export interface Storage {
   issueRelations: EntityStore<IssueRelation>;
   notifications: EntityStore<Notification>;
   favorites: EntityStore<Favorite>;
+  attachments: EntityStore<Attachment>;
+  initiatives: EntityStore<Initiative>;
+  documents: EntityStore<Document>;
+  webhooks: EntityStore<Webhook>;
   activities: ActivityStore;
   sessions: SessionStore;
   syncLog: SyncLogStore;

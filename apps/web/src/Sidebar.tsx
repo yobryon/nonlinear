@@ -26,6 +26,62 @@ import { api } from './api.js';
 import { stopSync } from './sync.js';
 import { getTheme, toggleTheme } from './theme.js';
 
+function InitiativeGlyphSidebar() {
+  return (
+    <svg width={14} height={14} viewBox="0 0 14 14" aria-hidden>
+      <rect
+        x="1"
+        y="1"
+        width="12"
+        height="12"
+        rx="3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <circle cx="7" cy="7" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
+function DocGlyphSidebar() {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
+function InsightsGlyphSidebar() {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 3v18h18" />
+      <path d="M7 15v-4M12 15V7M17 15v-7" />
+    </svg>
+  );
+}
+
 export function Sidebar() {
   const workspace = useStore((s) => s.workspace);
   const users = useStore((s) => s.users);
@@ -43,9 +99,17 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [theme, setThemeState] = useState(getTheme());
 
+  const workflowStates = useStore((s) => s.workflowStates);
   const me = userId ? users[userId] : null;
   const unread = Object.values(notifications).filter((n) => !n.readAt).length;
   const teamList = Object.values(teams).sort((a, b) => a.name.localeCompare(b.name));
+  const triageCounts: Record<string, number> = {};
+  for (const issue of Object.values(issues)) {
+    if (issue.archivedAt) continue;
+    if (workflowStates[issue.stateId]?.category === 'triage') {
+      triageCounts[issue.teamId] = (triageCounts[issue.teamId] ?? 0) + 1;
+    }
+  }
   const myFavorites = Object.values(favorites)
     .filter((f) => f.userId === userId)
     .sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1));
@@ -154,6 +218,20 @@ export function Sidebar() {
             <ProjectIcon size={15} />
             <span className="grow">Projects</span>
           </NavLink>
+          <NavLink
+            to="/initiatives"
+            className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+          >
+            <InitiativeGlyphSidebar />
+            <span className="grow">Initiatives</span>
+          </NavLink>
+          <NavLink
+            to="/documents"
+            className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+          >
+            <DocGlyphSidebar />
+            <span className="grow">Documents</span>
+          </NavLink>
         </div>
 
         <div className="side-section">
@@ -193,6 +271,18 @@ export function Sidebar() {
                       <ListIcon size={14} />
                       <span className="grow">Issues</span>
                     </NavLink>
+                    {team.triageEnabled && (
+                      <NavLink
+                        to={`/team/${team.key}/triage`}
+                        className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                      >
+                        <InboxIcon size={14} />
+                        <span className="grow">Triage</span>
+                        {triageCounts[team.id] ? (
+                          <span className="count">{triageCounts[team.id]}</span>
+                        ) : null}
+                      </NavLink>
+                    )}
                     {team.cyclesEnabled && (
                       <NavLink
                         to={`/team/${team.key}/cycles`}
@@ -202,6 +292,13 @@ export function Sidebar() {
                         <span className="grow">Cycles</span>
                       </NavLink>
                     )}
+                    <NavLink
+                      to={`/team/${team.key}/insights`}
+                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                    >
+                      <InsightsGlyphSidebar />
+                      <span className="grow">Insights</span>
+                    </NavLink>
                     <NavLink
                       to={`/settings/team/${team.key}`}
                       className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}

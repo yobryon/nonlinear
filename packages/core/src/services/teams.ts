@@ -49,6 +49,9 @@ export class TeamService {
       timezone: 'Etc/UTC',
       cyclesEnabled: input.cyclesEnabled ?? false,
       cycleDurationWeeks: input.cycleDurationWeeks ?? 2,
+      triageEnabled: false,
+      slaUrgentHours: null,
+      slaHighHours: null,
       issueCounter: 0,
       createdAt: now,
       updatedAt: now,
@@ -100,9 +103,37 @@ export class TeamService {
     if (input.cycleDurationWeeks !== undefined) {
       team.cycleDurationWeeks = Math.max(1, Math.min(8, input.cycleDurationWeeks));
     }
+    const extraDeltas = [];
+    if (input.triageEnabled !== undefined) {
+      team.triageEnabled = input.triageEnabled;
+      if (input.triageEnabled) {
+        const hasTriage = (await storage.workflowStates.all()).some(
+          (s) => s.teamId === teamId && s.category === 'triage',
+        );
+        if (!hasTriage) {
+          const now = nowIso();
+          const state: WorkflowState = {
+            id: newId(),
+            teamId,
+            name: 'Triage',
+            color: '#f2994a',
+            category: 'triage',
+            position: -1,
+            createdAt: now,
+            updatedAt: now,
+          };
+          await storage.workflowStates.insert(state);
+          extraDeltas.push(created('workflowState', state));
+        }
+      }
+    }
+    const clampSla = (hours: number | null): number | null =>
+      hours === null ? null : Math.max(1, Math.min(24 * 30, Math.round(hours)));
+    if (input.slaUrgentHours !== undefined) team.slaUrgentHours = clampSla(input.slaUrgentHours);
+    if (input.slaHighHours !== undefined) team.slaHighHours = clampSla(input.slaHighHours);
     team.updatedAt = nowIso();
     await storage.teams.update(team);
-    await bus.publish([updated('team', team)]);
+    await bus.publish([updated('team', team), ...extraDeltas]);
     return team;
   }
 
