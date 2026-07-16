@@ -145,6 +145,34 @@ export class UserService {
     return user;
   }
 
+  /** Admin-only: change role or deactivate a member. */
+  async adminUpdate(
+    actorId: string,
+    userId: string,
+    input: { role?: 'admin' | 'member' | 'guest'; active?: boolean },
+  ): Promise<User> {
+    const { storage, bus } = this.ctx;
+    const actor = await storage.users.get(actorId);
+    if (actor?.role !== 'admin') {
+      throw new DomainError('forbidden', 'Only admins can manage members', 403);
+    }
+    const user = await storage.users.get(userId);
+    if (!user) throw notFound('User');
+    if (input.role !== undefined) user.role = input.role;
+    if (input.active !== undefined) {
+      user.active = input.active;
+      if (!input.active) await storage.sessions.deleteForUser(userId);
+    }
+    const admins = (await storage.users.all()).filter((u) => u.role === 'admin' && u.active);
+    if (!admins.some((u) => u.id !== userId) && (user.role !== 'admin' || !user.active)) {
+      throw new DomainError('last_admin', 'The workspace needs at least one active admin', 409);
+    }
+    user.updatedAt = nowIso();
+    await storage.users.update(user);
+    await bus.publish([updated('user', user)]);
+    return user;
+  }
+
   async updateWorkspace(name: string): Promise<Workspace> {
     const { storage, bus } = this.ctx;
     const workspace = (await storage.workspaces.all())[0];
