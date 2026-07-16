@@ -218,7 +218,10 @@ function NewIssueDialogInner({
           borderTop: '1px solid var(--border)',
         }}
       >
-        <label className="row" style={{ gap: 6, color: 'var(--text-3)', fontSize: 12, cursor: 'pointer' }}>
+        <label
+          className="row"
+          style={{ gap: 6, color: 'var(--text-3)', fontSize: 12, cursor: 'pointer' }}
+        >
           <input
             type="checkbox"
             checked={createMore}
@@ -230,7 +233,11 @@ function NewIssueDialogInner({
         <span className="dim" style={{ fontSize: 11.5 }}>
           <span className="kbd">⌘</span> <span className="kbd">↵</span> to create
         </span>
-        <button className="btn primary" disabled={!title.trim() || saving} onClick={() => void submit()}>
+        <button
+          className="btn primary"
+          disabled={!title.trim() || saving}
+          onClick={() => void submit()}
+        >
           Create issue
         </button>
       </div>

@@ -8,8 +8,16 @@ import { anchorFromEvent, Avatar, Picker, Switch, toast, toastError, type Anchor
 import { ArrowLeftIcon, PlusIcon, StateIcon, TrashIcon } from '../icons.js';
 
 const SWATCHES = [
-  '#5e6ad2', '#26b5ce', '#0f7488', '#4cb782', '#f2c94c',
-  '#f2994a', '#f7855b', '#eb5757', '#c052d5', '#95a2b3',
+  '#5e6ad2',
+  '#26b5ce',
+  '#0f7488',
+  '#4cb782',
+  '#f2c94c',
+  '#f2994a',
+  '#f7855b',
+  '#eb5757',
+  '#c052d5',
+  '#95a2b3',
 ];
 
 export function SettingsPage() {
@@ -21,22 +29,37 @@ export function SettingsPage() {
           <span className="grow">Back to app</span>
         </NavLink>
         <div className="side-section-header">Workspace</div>
-        <NavLink to="/settings/workspace" className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}>
+        <NavLink
+          to="/settings/workspace"
+          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+        >
           <span className="grow">General</span>
         </NavLink>
-        <NavLink to="/settings/members" className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}>
+        <NavLink
+          to="/settings/members"
+          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+        >
           <span className="grow">Members</span>
         </NavLink>
-        <NavLink to="/settings/teams" className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}>
+        <NavLink
+          to="/settings/teams"
+          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+        >
           <span className="grow">Teams</span>
         </NavLink>
-        <NavLink to="/settings/labels" className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}>
+        <NavLink
+          to="/settings/labels"
+          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+        >
           <span className="grow">Labels</span>
         </NavLink>
         <div className="side-section-header" style={{ marginTop: 14 }}>
           Account
         </div>
-        <NavLink to="/settings/profile" className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}>
+        <NavLink
+          to="/settings/profile"
+          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+        >
           <span className="grow">Profile</span>
         </NavLink>
       </div>
@@ -201,14 +224,23 @@ function TeamsSettings() {
         {Object.values(teams)
           .sort((a, b) => a.name.localeCompare(b.name))
           .map((team) => (
-            <div key={team.id} className="member-row" style={{ cursor: 'pointer' }} onClick={() => navigate(`/settings/team/${team.key}`)}>
-              <span className="team-icon" style={{ background: team.color, width: 22, height: 22, fontSize: 10 }}>
+            <div
+              key={team.id}
+              className="member-row"
+              style={{ cursor: 'pointer' }}
+              onClick={() => navigate(`/settings/team/${team.key}`)}
+            >
+              <span
+                className="team-icon"
+                style={{ background: team.color, width: 22, height: 22, fontSize: 10 }}
+              >
                 {team.key.slice(0, 2)}
               </span>
               <div className="info">
                 <div>{team.name}</div>
                 <div className="email">
-                  {team.key} · {team.cyclesEnabled ? `${team.cycleDurationWeeks}w cycles` : 'cycles off'}
+                  {team.key} ·{' '}
+                  {team.cyclesEnabled ? `${team.cycleDurationWeeks}w cycles` : 'cycles off'}
                 </div>
               </div>
             </div>
@@ -234,7 +266,11 @@ function TeamsSettings() {
             maxLength={7}
             onChange={(e) => setKey(e.target.value.toUpperCase())}
           />
-          <button className="btn primary" disabled={!name.trim() || !key.trim()} onClick={() => void create()}>
+          <button
+            className="btn primary"
+            disabled={!name.trim() || !key.trim()}
+            onClick={() => void create()}
+          >
             Create
           </button>
         </div>
@@ -244,13 +280,15 @@ function TeamsSettings() {
 }
 
 function autoKey(name: string): string {
-  return name
-    .replace(/[^a-zA-Z0-9 ]/g, '')
-    .split(/\s+/)
-    .map((w) => w[0] ?? '')
-    .join('')
-    .toUpperCase()
-    .slice(0, 3) || name.slice(0, 3).toUpperCase();
+  return (
+    name
+      .replace(/[^a-zA-Z0-9 ]/g, '')
+      .split(/\s+/)
+      .map((w) => w[0] ?? '')
+      .join('')
+      .toUpperCase()
+      .slice(0, 3) || name.slice(0, 3).toUpperCase()
+  );
 }
 
 function TeamSettings() {
@@ -443,7 +481,11 @@ function TeamSettingsInner({ team }: { team: Team }) {
             </div>
           );
         })}
-        <button className="btn" style={{ marginTop: 10 }} onClick={(e) => setMemberAnchor(anchorFromEvent(e))}>
+        <button
+          className="btn"
+          style={{ marginTop: 10 }}
+          onClick={(e) => setMemberAnchor(anchorFromEvent(e))}
+        >
           <PlusIcon size={13} /> Add member
         </button>
       </div>
@@ -453,7 +495,8 @@ function TeamSettingsInner({ team }: { team: Team }) {
         <button
           className="btn danger"
           onClick={() => {
-            if (!confirm(`Delete team ${team.name}? Its issues must be moved or deleted first.`)) return;
+            if (!confirm(`Delete team ${team.name}? Its issues must be moved or deleted first.`))
+              return;
             void api
               .deleteTeam(team.id)
               .then(() => {
@@ -575,8 +618,19 @@ function LabelsSettings() {
       <div className="settings-section">
         <h2>Create label</h2>
         <div className="row" style={{ gap: 8, maxWidth: 560, flexWrap: 'wrap' }}>
-          <input className="input" style={{ width: 180 }} placeholder="Label name" value={name} onChange={(e) => setName(e.target.value)} />
-          <select className="input" style={{ width: 160 }} value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+          <input
+            className="input"
+            style={{ width: 180 }}
+            placeholder="Label name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <select
+            className="input"
+            style={{ width: 160 }}
+            value={teamId}
+            onChange={(e) => setTeamId(e.target.value)}
+          >
             <option value="">Workspace</option>
             {Object.values(teams).map((t) => (
               <option key={t.id} value={t.id}>
@@ -648,16 +702,27 @@ function ProfileSettings() {
                   height: 18,
                   borderRadius: 9,
                   background: c,
-                  border: me.avatarColor === c ? '2px solid var(--text-1)' : '2px solid transparent',
+                  border:
+                    me.avatarColor === c ? '2px solid var(--text-1)' : '2px solid transparent',
                 }}
               />
             ))}
           </div>
         </div>
         <label className="field-label">Full name</label>
-        <input className="input" style={{ maxWidth: 320, marginBottom: 12 }} value={name} onChange={(e) => setName(e.target.value)} />
+        <input
+          className="input"
+          style={{ maxWidth: 320, marginBottom: 12 }}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
         <label className="field-label">Display name (for @mentions)</label>
-        <input className="input" style={{ maxWidth: 320, marginBottom: 14 }} value={displayName} onChange={(e) => setDisplayName(e.target.value.toLowerCase())} />
+        <input
+          className="input"
+          style={{ maxWidth: 320, marginBottom: 14 }}
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value.toLowerCase())}
+        />
         <div>
           <button
             className="btn primary"

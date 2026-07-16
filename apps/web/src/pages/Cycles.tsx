@@ -81,10 +81,16 @@ export function TeamCyclesPage() {
               className="project-row"
               onClick={() => navigate(`/cycle/${cycle.id}`)}
             >
-              <CycleIcon size={14} style={{ color: phase === 'active' ? 'var(--warning)' : 'var(--text-3)' }} />
+              <CycleIcon
+                size={14}
+                style={{ color: phase === 'active' ? 'var(--warning)' : 'var(--text-3)' }}
+              />
               <span className="name">{cycle.name || `Cycle ${cycle.number}`}</span>
               {phase === 'active' && (
-                <span className="chip" style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+                <span
+                  className="chip"
+                  style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}
+                >
                   Active
                 </span>
               )}

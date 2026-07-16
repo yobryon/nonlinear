@@ -1,10 +1,13 @@
-import type {
-  Comment,
-  CreateCommentInput,
-  CreateReactionInput,
-  Reaction,
-} from '@nonlinear/shared';
-import { DomainError, created, deleted, notFound, updated, type Ctx, type DeltaInput } from '../domain.js';
+import type { Comment, CreateCommentInput, CreateReactionInput, Reaction } from '@nonlinear/shared';
+import {
+  DomainError,
+  created,
+  deleted,
+  notFound,
+  updated,
+  type Ctx,
+  type DeltaInput,
+} from '../domain.js';
 import { newId } from '../util/ids.js';
 import { nowIso } from '../util/time.js';
 import { mentionedUserIds, pushNotification } from './notify.js';

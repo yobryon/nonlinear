@@ -77,7 +77,11 @@ export class AuthService {
       const teams = new TeamService(this.ctx);
       await teams.create(user.id, {
         name: workspace.name.replace(/'s Workspace$/, ''),
-        key: workspace.name.slice(0, 3).replace(/[^a-zA-Z]/g, 'X').toUpperCase() || 'GEN',
+        key:
+          workspace.name
+            .slice(0, 3)
+            .replace(/[^a-zA-Z]/g, 'X')
+            .toUpperCase() || 'GEN',
       });
     } else {
       // Join every non-private team so new members see the workspace immediately.

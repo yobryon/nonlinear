@@ -8,7 +8,15 @@ import type {
   User,
   Workspace,
 } from '@nonlinear/shared';
-import { DomainError, created, deleted, notFound, updated, type Ctx, type DeltaInput } from '../domain.js';
+import {
+  DomainError,
+  created,
+  deleted,
+  notFound,
+  updated,
+  type Ctx,
+  type DeltaInput,
+} from '../domain.js';
 import { newId } from '../util/ids.js';
 import { nowIso } from '../util/time.js';
 import { keyAfterAll } from '../util/fractional.js';

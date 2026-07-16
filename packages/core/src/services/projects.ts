@@ -6,7 +6,15 @@ import type {
   UpdateMilestoneInput,
   UpdateProjectInput,
 } from '@nonlinear/shared';
-import { DomainError, created, deleted, notFound, updated, type Ctx, type DeltaInput } from '../domain.js';
+import {
+  DomainError,
+  created,
+  deleted,
+  notFound,
+  updated,
+  type Ctx,
+  type DeltaInput,
+} from '../domain.js';
 import { newId } from '../util/ids.js';
 import { nowIso } from '../util/time.js';
 import { keyAfterAll } from '../util/fractional.js';
@@ -139,7 +147,10 @@ export class ProjectService {
     return milestone;
   }
 
-  async updateMilestone(milestoneId: string, input: UpdateMilestoneInput): Promise<ProjectMilestone> {
+  async updateMilestone(
+    milestoneId: string,
+    input: UpdateMilestoneInput,
+  ): Promise<ProjectMilestone> {
     const { storage, bus } = this.ctx;
     const milestone = await storage.projectMilestones.get(milestoneId);
     if (!milestone) throw notFound('Milestone');

@@ -89,9 +89,7 @@ export function TeamIssuesPage() {
               key={t}
               className={`btn ghost${tab === t ? ' active' : ''}`}
               style={
-                tab === t
-                  ? { background: 'var(--bg-active)', color: 'var(--text-1)' }
-                  : undefined
+                tab === t ? { background: 'var(--bg-active)', color: 'var(--text-1)' } : undefined
               }
               onClick={() => setTab(t)}
             >
@@ -126,7 +124,11 @@ export function TeamIssuesPage() {
       />
       <div className="content">
         {display === 'list' ? (
-          <GroupedIssueList groups={grouped} showState={grouping !== 'state'} onQuickAdd={quickAdd} />
+          <GroupedIssueList
+            groups={grouped}
+            showState={grouping !== 'state'}
+            onQuickAdd={quickAdd}
+          />
         ) : (
           <Board groups={grouped} onQuickAdd={quickAdd} />
         )}

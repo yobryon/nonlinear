@@ -1,0 +1,44 @@
+name: nonlinear
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: nonlinear
+      POSTGRES_PASSWORD: nonlinear
+      POSTGRES_DB: nonlinear
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U nonlinear -d nonlinear']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      PORT: '3000'
+      STORAGE: postgres
+      DATABASE_URL: postgres://nonlinear:nonlinear@postgres:5432/nonlinear
+      SECURE_COOKIES: 'false'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '8080:8080'
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:

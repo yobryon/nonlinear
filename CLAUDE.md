@@ -4,72 +4,57 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-**nonlinear** (codename) is a self-hostable clone of [Linear](https://linear.app) — issues, teams, projects, cycles, workflows, keyboard-first UI, and real-time sync — built so a person or small organization can run it cheaply in containers.
-
-**Status: greenfield.** As of 2026-07-15 no code exists yet; this file is the project charter. As real code, commands, and structure land, update this file to match reality — anything below marked *(planned)* is a decision, not a description of existing code.
+**nonlinear** is a self-hostable clone of [Linear](https://linear.app) — teams, issues, workflow states, priorities, labels, projects/milestones, cycles, sub-issues, relations, comments/reactions/@mentions, notifications inbox, favorites, command palette, keyboard shortcuts, and real-time delta sync — running entirely in containers. `docker compose up --build` gives you the whole product on http://localhost:8080.
 
 ## Hard constraints (from the project owner)
 
-1. **Clone Linear as closely as practical** — data model, workflows, and UX feel (speed, keyboard-first, real-time collaboration).
-2. **Fully containerized** — the whole app must run on local Docker via `docker compose up`. No host-installed services.
-3. **Azure is the eventual deploy target** — when a managed service is needed, prefer an Azure one, but keep everything runnable in plain containers first.
-4. **Low cost, low resource utilization** — compute cost should scale gently with usage. Prefer one small process over a fleet; burstable/consumption tiers over provisioned ones.
-5. **Modular storage** — all persistence goes behind interfaces so the storage engine can be swapped later. No app code talks to a database driver directly.
-6. **Front-end served like Azure Static Web Apps** — locally, a container serves the built SPA and proxies `/api/*` to the backend, mimicking SWA's linked-backend routing. Keep routing config expressible as `staticwebapp.config.json` so a real SWA deploy is a lift, not a rewrite.
+1. **Clone Linear as closely as practical** — data model, workflows, and UX feel (speed, keyboard-first, real-time).
+2. **Fully containerized** — everything runs on local Docker; no host-installed services.
+3. **Azure is the eventual deploy target** — prefer Azure managed services when needed, but keep plain-container portability. Web is designed to move to Azure Static Web Apps (see `infra/web/staticwebapp.config.json`), API to a container service, Postgres to Flexible Server (burstable tier).
+4. **Low cost / low resource** — one small API process, jsonb-on-Postgres storage, ~100 KB gzipped SPA. Prefer burstable/consumption tiers.
+5. **Modular storage** — all persistence goes through the interfaces in `packages/core/src/storage.ts`. No package outside `storage-*` may import a database driver. `STORAGE=memory|postgres` selects the engine at API startup.
+6. **Front-end served like Azure SWA** — nginx (`infra/web/nginx.conf`) serves the built SPA and proxies `/api` + `/api/ws`, mirroring `staticwebapp.config.json`.
 
-## Architecture decisions *(planned)*
-
-### Stack
-- **TypeScript monorepo** (pnpm workspaces) — one language end-to-end so the domain model and sync payload types are shared between API and web.
-- **API**: Node 22 + Fastify, a single container. WebSockets served from the same process (no separate realtime service) to keep the footprint at one small container.
-- **Web**: React + Vite SPA, built to static assets.
-- **Web serving**: nginx container serving the SPA build + proxying `/api` and `/ws` to the api container (the SWA stand-in per constraint 6).
-- **Database**: PostgreSQL 16 in a container locally; Azure Database for PostgreSQL Flexible Server (burstable tier) in production. Postgres is the *default* engine, not a hard dependency — see storage layering below.
-- **File/attachment storage**: local volume or Azurite locally; Azure Blob Storage in production, behind the same interface.
-- **Auth**: local email/password with sessions first; keep the auth boundary pluggable so Azure Entra ID can be added without touching domain code.
-
-### Repo layout
-```
-apps/
-  api/               Fastify server: REST + WebSocket sync
-  web/               React SPA
-packages/
-  core/              Domain model, business logic, and ALL storage interfaces
-  storage-postgres/  Postgres implementation of core's storage interfaces
-  shared/            API contracts + sync protocol types shared by api and web
-infra/
-  web/               nginx config (SWA stand-in), staticwebapp.config.json
-docker-compose.yml   Full local stack: web, api, postgres (+ azurite when attachments land)
-```
-
-### Storage layering (constraint 5 — the load-bearing rule)
-- `packages/core` defines repository/unit-of-work interfaces and owns the domain types. It imports **no** database drivers.
-- `packages/storage-postgres` implements those interfaces. A future `storage-sqlite`, `storage-cosmos`, etc. would be siblings.
-- `apps/api` composes core + one storage implementation at startup (constructor injection; engine chosen by env var).
-- If you find yourself importing `pg`/SQL/blob SDKs anywhere outside a `storage-*` package, stop — that's the boundary being violated.
-
-### Real-time sync
-Linear's defining trait is instant sync. The model to follow: clients keep a local cache, the server assigns a monotonically increasing sync id to every mutation, and clients catch up via "give me everything since syncId N" plus a live WebSocket delta stream. Design the sync protocol in `packages/shared` first — it shapes everything else. Keep the transport abstract enough that Azure Web PubSub could replace in-process WebSockets if horizontal scaling ever demands it.
-
-## Commands *(planned — verify against reality once code exists, then remove this caveat)*
+## Commands
 
 ```bash
-docker compose up --build     # full stack: web on :8080, api on :3000, postgres
-pnpm install                  # workspace deps (inside containers or on host for IDE support)
-pnpm dev                      # hot-reload dev servers (api + web) outside containers
-pnpm test                     # all tests (vitest)
-pnpm --filter api test        # tests for one workspace
-pnpm --filter api test path/to/file.test.ts   # single test file
-pnpm lint                     # eslint + prettier check
-pnpm typecheck                # tsc --noEmit across workspaces
+docker compose up --build      # full stack: web+api+postgres on http://localhost:8080
+pnpm install                   # workspace deps
+pnpm dev                       # hot-reload api (:3000, needs a postgres or STORAGE=memory) + web (:5173, proxies /api)
+STORAGE=memory pnpm --filter @nonlinear/api dev   # api with zero deps, in-memory storage
+pnpm test                      # all tests (vitest)
+pnpm --filter @nonlinear/core test                # one workspace
+pnpm --filter @nonlinear/core test src/util/fractional.test.ts   # single file
+POSTGRES_TEST_URL=postgres://nonlinear:nonlinear@localhost:15432/t pnpm --filter @nonlinear/storage-postgres test   # pg integration tests (skipped without env var)
+pnpm typecheck                 # tsc --noEmit across workspaces
+pnpm build                     # build all workspaces (shared must build before dependents; pnpm -r handles order)
+pnpm lint / pnpm format        # prettier check / write
 ```
 
-Tests use vitest; storage-postgres integration tests run against the compose postgres container.
+Tests import workspace siblings from **source** via vitest aliases, but `tsc` and Docker builds resolve them via each package's built `dist/` — if types seem stale or missing, rebuild the upstream package (`pnpm --filter @nonlinear/shared build` etc.).
 
-## Build order (suggested, not yet started)
+## Architecture
 
-1. Scaffold monorepo + docker compose skeleton (empty api responding on `/healthz`, nginx serving a stub SPA, postgres up).
-2. Domain model + storage interfaces in `core`; postgres implementation; migrations.
-3. Sync protocol in `shared`; REST + WebSocket endpoints in `api`.
-4. Web app: auth, issue list/board, issue detail, keyboard-first command palette.
-5. Teams, projects, cycles, workflows — iterate toward Linear parity.
+pnpm monorepo, TypeScript ESM end-to-end (`.js` import specifiers everywhere except apps/web which uses bundler resolution).
+
+- **packages/shared** — the contract: entity types, enums (Linear's priority scheme 0=None 1=Urgent…4=Low; state categories triage/backlog/unstarted/started/completed/canceled), input DTOs, the sync protocol (`SyncDelta`, `BootstrapPayload`, WS messages), and the fractional-ordering util (`keyBetween`) used for board/list manual ordering.
+- **packages/core** — domain services (auth, teams, issues, comments, projects, cycles, labels, relations, favorites, notifications, bootstrap) + the storage interfaces + an in-memory reference storage used by tests and `STORAGE=memory`. All business rules live here: issue numbering (`TEAM-123`), category timestamps (startedAt/completedAt/canceledAt), activity records, notification fan-out, @mention parsing, sub-issue cycle prevention, cascade deletes, lazy cycle generation on the team cadence.
+- **packages/storage-postgres** — implements the storage interfaces. Entities are stored as one **jsonb document per row** with expression indexes on queried fields; relational tables only where semantics demand it (sessions, `team_counters` for atomic issue numbers, ordered `sync_log`). Migrations are plain SQL in `migrations/`, applied by `src/migrate.ts` at startup under a lock.
+- **apps/api** — Fastify. Session-cookie auth (`nl_session`, scrypt hashes), thin REST routes that delegate to core services, and `src/hub.ts`: the WebSocket hub that replays `sync_log` deltas after a client's `hello {lastSyncId}` (buffering live deltas until replay completes) then streams live. Notification/favorite deltas are filtered to their owner.
+- **apps/web** — React + Vite + zustand. `store.ts` holds normalized entity maps; `sync.ts` bootstraps over REST then applies WS deltas (reconnect w/ backoff, `rebootstrap` support). Mutations go through REST and merge the response optimistically (`putEntity`); the same change also arrives as a delta, which is idempotent. Styling is a hand-rolled design system in `styles.css` (CSS variables, `data-theme` dark/light on `<html>`); icons are hand-drawn SVGs in `icons.tsx` mimicking Linear's state/priority iconography.
+
+### Sync model (the load-bearing design)
+
+Every mutation appends full-entity deltas to a monotonic sync log (`SyncBus.publish` → storage `syncLog.append` → live listeners). Clients bootstrap a full snapshot tagged with `syncId`, then stay current over `/api/ws`. On reconnect they send `lastSyncId`; the server replays anything newer or answers `rebootstrap`. When adding a new synced model: add it to `SyncModelMap`/`SYNC_MODEL_NAMES` in shared, a store + table (one jsonb table) in both storage impls, publish deltas from the service, and map it in the web store's `MODEL_TO_KEY`.
+
+### First-run behavior
+
+The first register creates the workspace, an admin user, and a default team (with Linear's default workflow states). Later registers join as members of every non-private team. `GET /api/meta` tells the login page whether setup is required.
+
+## Known gaps / deferred
+
+- File attachments (interface would go behind storage boundary; Azurite/Azure Blob planned).
+- Due-soon notifications need a scheduler; type exists, nothing emits it.
+- Command palette/shortcuts don't mount on `/settings/*` routes.
+- Sync log is never compacted (rebootstrap path exists and is exercised when it is).
+- No rate limiting; auth is same-origin cookie based — put HTTPS in front and set `SECURE_COOKIES=true` in production.

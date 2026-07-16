@@ -1,11 +1,5 @@
 import pg from 'pg';
-import type {
-  Issue,
-  IssueActivity,
-  SyncDelta,
-  Team,
-  User,
-} from '@nonlinear/shared';
+import type { Issue, IssueActivity, SyncDelta, Team, User } from '@nonlinear/shared';
 import type {
   ActivityStore,
   EntityStore,
@@ -58,10 +52,9 @@ class PgEntityStore<T extends { id: string }> implements EntityStore<T> {
 
 class PgUserStore extends PgEntityStore<User> implements UserStore {
   async getByEmail(email: string): Promise<User | null> {
-    const { rows } = await this.pool.query(
-      `SELECT data FROM users WHERE data->>'email' = $1`,
-      [email],
-    );
+    const { rows } = await this.pool.query(`SELECT data FROM users WHERE data->>'email' = $1`, [
+      email,
+    ]);
     return rows[0]?.data ?? null;
   }
 
@@ -130,10 +123,9 @@ class PgTeamStore extends PgEntityStore<Team> implements TeamStore {
 
 class PgIssueStore extends PgEntityStore<Issue> implements IssueStore {
   async byTeam(teamId: string): Promise<Issue[]> {
-    const { rows } = await this.pool.query(
-      `SELECT data FROM issues WHERE data->>'teamId' = $1`,
-      [teamId],
-    );
+    const { rows } = await this.pool.query(`SELECT data FROM issues WHERE data->>'teamId' = $1`, [
+      teamId,
+    ]);
     return rows.map((r) => r.data);
   }
 }
@@ -206,9 +198,7 @@ class PgSyncLog implements SyncLogStore {
   }
 
   async since(syncId: number): Promise<SyncDelta[] | null> {
-    const { rows: bounds } = await this.pool.query(
-      'SELECT min(sync_id)::int AS min FROM sync_log',
-    );
+    const { rows: bounds } = await this.pool.query('SELECT min(sync_id)::int AS min FROM sync_log');
     const min = bounds[0]?.min;
     if (min !== null && min !== undefined && syncId < min - 1) return null;
     const { rows } = await this.pool.query(

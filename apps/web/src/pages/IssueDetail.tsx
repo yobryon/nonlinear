@@ -55,9 +55,7 @@ export function IssueDetailPage() {
     const number = Number(key.slice(dash + 1));
     const team = Object.values(teams).find((t) => t.key === teamKey);
     if (!team) return null;
-    return (
-      Object.values(issues).find((i) => i.teamId === team.id && i.number === number) ?? null
-    );
+    return Object.values(issues).find((i) => i.teamId === team.id && i.number === number) ?? null;
   }, [key, teams, issues]);
 
   if (!issue) {
@@ -313,7 +311,9 @@ function IssueDetail({ issueId }: { issueId: string }) {
                 </button>
               </div>
               {children.length > 0 && (
-                <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                <div
+                  style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}
+                >
                   {children.map((child) => (
                     <IssueRow key={child.id} issue={child} />
                   ))}
@@ -333,10 +333,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
                     if (!other) return null;
                     return (
                       <div key={rel.id} className="row" style={{ fontSize: 12.5 }}>
-                        <span
-                          className="muted"
-                          style={{ width: 90, flexShrink: 0 }}
-                        >
+                        <span className="muted" style={{ width: 90, flexShrink: 0 }}>
                           {relationLabel(rel.type, outgoing)}
                         </span>
                         <Link
@@ -374,7 +371,10 @@ function IssueDetail({ issueId }: { issueId: string }) {
                   const commentReactions = Object.values(reactions).filter(
                     (r) => r.commentId === comment.id,
                   );
-                  const grouped = new Map<string, { count: number; mine: boolean; ids: string[] }>();
+                  const grouped = new Map<
+                    string,
+                    { count: number; mine: boolean; ids: string[] }
+                  >();
                   for (const r of commentReactions) {
                     const entry = grouped.get(r.emoji) ?? { count: 0, mine: false, ids: [] };
                     entry.count++;
@@ -392,7 +392,11 @@ function IssueDetail({ issueId }: { issueId: string }) {
                           {comment.editedAt && ' · edited'}
                         </span>
                         <span className="grow" />
-                        <CommentMenu commentId={comment.id} authorId={comment.userId} body={comment.body} />
+                        <CommentMenu
+                          commentId={comment.id}
+                          authorId={comment.userId}
+                          body={comment.body}
+                        />
                       </div>
                       <div className="comment-body">
                         <Markdown source={comment.body} />
@@ -457,7 +461,11 @@ function IssueDetail({ issueId }: { issueId: string }) {
             <span className="prop-label">Estimate</span>
             <button className="prop-value" onClick={(e) => estimatePicker.open(anchorFromEvent(e))}>
               <EstimateIcon size={14} />
-              {issue.estimate == null ? <span className="muted">None</span> : `${issue.estimate} pts`}
+              {issue.estimate == null ? (
+                <span className="muted">None</span>
+              ) : (
+                `${issue.estimate} pts`
+              )}
             </button>
           </div>
           <div className="prop-row">
@@ -500,7 +508,12 @@ function IssueDetail({ issueId }: { issueId: string }) {
           {project && (
             <div className="prop-row">
               <span className="prop-label">Milestone</span>
-              <MilestonePickerButton issueId={issueId} projectId={project.id} current={milestone?.id ?? null} label={milestone?.name} />
+              <MilestonePickerButton
+                issueId={issueId}
+                projectId={project.id}
+                current={milestone?.id ?? null}
+                label={milestone?.name}
+              />
             </div>
           )}
           {team?.cyclesEnabled && (
@@ -508,7 +521,11 @@ function IssueDetail({ issueId }: { issueId: string }) {
               <span className="prop-label">Cycle</span>
               <button className="prop-value" onClick={(e) => cyclePicker.open(anchorFromEvent(e))}>
                 <CycleIcon size={14} />
-                {cycle ? cycle.name || `Cycle ${cycle.number}` : <span className="muted">None</span>}
+                {cycle ? (
+                  cycle.name || `Cycle ${cycle.number}`
+                ) : (
+                  <span className="muted">None</span>
+                )}
               </button>
             </div>
           )}
@@ -561,31 +578,81 @@ function IssueDetail({ issueId }: { issueId: string }) {
 
       {/* pickers */}
       {statePicker.anchor && (
-        <StatePicker anchor={statePicker.anchor} onClose={statePicker.close} teamId={issue.teamId} currentId={issue.stateId} onPick={(id) => void patchIssue(issueId, { stateId: id })} />
+        <StatePicker
+          anchor={statePicker.anchor}
+          onClose={statePicker.close}
+          teamId={issue.teamId}
+          currentId={issue.stateId}
+          onPick={(id) => void patchIssue(issueId, { stateId: id })}
+        />
       )}
       {priorityPicker.anchor && (
-        <PriorityPicker anchor={priorityPicker.anchor} onClose={priorityPicker.close} currentId={issue.priority} onPick={(p) => void patchIssue(issueId, { priority: p })} />
+        <PriorityPicker
+          anchor={priorityPicker.anchor}
+          onClose={priorityPicker.close}
+          currentId={issue.priority}
+          onPick={(p) => void patchIssue(issueId, { priority: p })}
+        />
       )}
       {assigneePicker.anchor && (
-        <AssigneePicker anchor={assigneePicker.anchor} onClose={assigneePicker.close} currentId={issue.assigneeId} onPick={(id) => void patchIssue(issueId, { assigneeId: id })} />
+        <AssigneePicker
+          anchor={assigneePicker.anchor}
+          onClose={assigneePicker.close}
+          currentId={issue.assigneeId}
+          onPick={(id) => void patchIssue(issueId, { assigneeId: id })}
+        />
       )}
       {labelPicker.anchor && (
-        <LabelPicker anchor={labelPicker.anchor} onClose={labelPicker.close} teamId={issue.teamId} selected={issue.labelIds} onToggle={(id) => toggleLabel(issue, id)} />
+        <LabelPicker
+          anchor={labelPicker.anchor}
+          onClose={labelPicker.close}
+          teamId={issue.teamId}
+          selected={issue.labelIds}
+          onToggle={(id) => toggleLabel(issue, id)}
+        />
       )}
       {projectPicker.anchor && (
-        <ProjectPicker anchor={projectPicker.anchor} onClose={projectPicker.close} teamId={issue.teamId} currentId={issue.projectId} onPick={(id) => void patchIssue(issueId, { projectId: id })} />
+        <ProjectPicker
+          anchor={projectPicker.anchor}
+          onClose={projectPicker.close}
+          teamId={issue.teamId}
+          currentId={issue.projectId}
+          onPick={(id) => void patchIssue(issueId, { projectId: id })}
+        />
       )}
       {cyclePicker.anchor && (
-        <CyclePicker anchor={cyclePicker.anchor} onClose={cyclePicker.close} teamId={issue.teamId} currentId={issue.cycleId} onPick={(id) => void patchIssue(issueId, { cycleId: id })} />
+        <CyclePicker
+          anchor={cyclePicker.anchor}
+          onClose={cyclePicker.close}
+          teamId={issue.teamId}
+          currentId={issue.cycleId}
+          onPick={(id) => void patchIssue(issueId, { cycleId: id })}
+        />
       )}
       {estimatePicker.anchor && (
-        <EstimatePicker anchor={estimatePicker.anchor} onClose={estimatePicker.close} current={issue.estimate} onPick={(v) => void patchIssue(issueId, { estimate: v })} />
+        <EstimatePicker
+          anchor={estimatePicker.anchor}
+          onClose={estimatePicker.close}
+          current={issue.estimate}
+          onPick={(v) => void patchIssue(issueId, { estimate: v })}
+        />
       )}
       {duePicker.anchor && (
-        <DueDatePicker anchor={duePicker.anchor} onClose={duePicker.close} current={issue.dueDate} onPick={(d) => void patchIssue(issueId, { dueDate: d })} />
+        <DueDatePicker
+          anchor={duePicker.anchor}
+          onClose={duePicker.close}
+          current={issue.dueDate}
+          onPick={(d) => void patchIssue(issueId, { dueDate: d })}
+        />
       )}
       {parentPicker.anchor && (
-        <IssuePicker anchor={parentPicker.anchor} onClose={parentPicker.close} excludeId={issueId} placeholder="Set parent…" onPick={(id) => void patchIssue(issueId, { parentId: id })} />
+        <IssuePicker
+          anchor={parentPicker.anchor}
+          onClose={parentPicker.close}
+          excludeId={issueId}
+          placeholder="Set parent…"
+          onPick={(id) => void patchIssue(issueId, { parentId: id })}
+        />
       )}
       {teamPicker.anchor && (
         <TeamPicker
@@ -777,7 +844,11 @@ function CommentComposer({ issueId }: { issueId: string }) {
         }}
       />
       <div className="row" style={{ justifyContent: 'flex-end', padding: '0 10px 10px' }}>
-        <button className="btn primary" disabled={!body.trim() || sending} onClick={() => void send()}>
+        <button
+          className="btn primary"
+          disabled={!body.trim() || sending}
+          onClick={() => void send()}
+        >
           <SendIcon size={13} /> Comment
         </button>
       </div>
@@ -791,7 +862,11 @@ function ReactionAdder({ commentId }: { commentId: string }) {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   return (
     <>
-      <button className="reaction" title="Add reaction" onClick={(e) => setAnchor(anchorFromEvent(e))}>
+      <button
+        className="reaction"
+        title="Add reaction"
+        onClick={(e) => setAnchor(anchorFromEvent(e))}
+      >
         <PlusIcon size={11} />
       </button>
       {anchor && (
@@ -840,7 +915,11 @@ function CommentMenu({
 
   return (
     <>
-      <button className="icon-btn" style={{ width: 22, height: 22 }} onClick={(e) => setAnchor(anchorFromEvent(e))}>
+      <button
+        className="icon-btn"
+        style={{ width: 22, height: 22 }}
+        onClick={(e) => setAnchor(anchorFromEvent(e))}
+      >
         <DotsIcon size={13} />
       </button>
       {anchor && (
@@ -880,7 +959,10 @@ function CommentMenu({
         </Popover>
       )}
       {editing && (
-        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setEditing(false)}>
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => e.target === e.currentTarget && setEditing(false)}
+        >
           <div className="modal" style={{ width: 520, padding: 16 }}>
             <textarea
               className="input"
@@ -915,7 +997,17 @@ function CommentMenu({
 
 function PencilIconSmall() {
   return (
-    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg
+      width={13}
+      height={13}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
     </svg>
   );

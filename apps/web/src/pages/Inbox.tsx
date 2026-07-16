@@ -34,8 +34,7 @@ export function InboxPage() {
   const navigate = useNavigate();
 
   const rows = useMemo(
-    () =>
-      Object.values(notifications).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    () => Object.values(notifications).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [notifications],
   );
   const unread = rows.filter((n) => !n.readAt).length;
@@ -43,7 +42,9 @@ export function InboxPage() {
   const markRead = (n: Notification, read: boolean) => {
     void api
       .markNotification(n.id, read)
-      .then(() => putEntity('notification', { ...n, readAt: read ? new Date().toISOString() : null }))
+      .then(() =>
+        putEntity('notification', { ...n, readAt: read ? new Date().toISOString() : null }),
+      )
       .catch(toastError);
   };
 

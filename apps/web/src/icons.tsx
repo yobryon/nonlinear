@@ -361,9 +361,33 @@ export function PriorityIcon({ priority, size = 14 }: { priority: Priority; size
   const filled = priority === 2 ? 3 : priority === 3 ? 2 : 1;
   return (
     <svg {...common}>
-      <rect x="1.5" y="8" width="3" height="4.5" rx="1" fill={filled >= 1 ? gray : faint} opacity={filled >= 1 ? 1 : 0.5} />
-      <rect x="5.5" y="5" width="3" height="7.5" rx="1" fill={filled >= 2 ? gray : faint} opacity={filled >= 2 ? 1 : 0.5} />
-      <rect x="9.5" y="2" width="3" height="10.5" rx="1" fill={filled >= 3 ? gray : faint} opacity={filled >= 3 ? 1 : 0.5} />
+      <rect
+        x="1.5"
+        y="8"
+        width="3"
+        height="4.5"
+        rx="1"
+        fill={filled >= 1 ? gray : faint}
+        opacity={filled >= 1 ? 1 : 0.5}
+      />
+      <rect
+        x="5.5"
+        y="5"
+        width="3"
+        height="7.5"
+        rx="1"
+        fill={filled >= 2 ? gray : faint}
+        opacity={filled >= 2 ? 1 : 0.5}
+      />
+      <rect
+        x="9.5"
+        y="2"
+        width="3"
+        height="10.5"
+        rx="1"
+        fill={filled >= 3 ? gray : faint}
+        opacity={filled >= 3 ? 1 : 0.5}
+      />
     </svg>
   );
 }
@@ -385,7 +409,14 @@ export function ProjectStatusIcon({ status, size = 14 }: { status: ProjectStatus
     return (
       <svg {...common}>
         <circle cx="7" cy="7" r="6.5" fill={color} />
-        <path d="M4.4 7.2 6.2 9l3.4-3.6" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+        <path
+          d="M4.4 7.2 6.2 9l3.4-3.6"
+          stroke="#fff"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
       </svg>
     );
   }
@@ -393,7 +424,12 @@ export function ProjectStatusIcon({ status, size = 14 }: { status: ProjectStatus
     return (
       <svg {...common}>
         <circle cx="7" cy="7" r="6.5" fill={color} />
-        <path d="M4.8 4.8l4.4 4.4M9.2 4.8 4.8 9.2" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
+        <path
+          d="M4.8 4.8l4.4 4.4M9.2 4.8 4.8 9.2"
+          stroke="#fff"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
       </svg>
     );
   }
@@ -416,7 +452,15 @@ export function ProjectStatusIcon({ status, size = 14 }: { status: ProjectStatus
   if (status === 'backlog') {
     return (
       <svg {...common} fill="none">
-        <circle cx="7" cy="7" r="6" stroke={color} strokeWidth="1.6" strokeDasharray="2.4 2.2" strokeLinecap="round" />
+        <circle
+          cx="7"
+          cy="7"
+          r="6"
+          stroke={color}
+          strokeWidth="1.6"
+          strokeDasharray="2.4 2.2"
+          strokeLinecap="round"
+        />
       </svg>
     );
   }

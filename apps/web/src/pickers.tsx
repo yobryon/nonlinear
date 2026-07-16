@@ -155,7 +155,18 @@ export function LabelPicker({
       items={applicable.map((l) => ({
         id: l.id,
         label: l.name,
-        icon: <span className="dot" style={{ width: 9, height: 9, borderRadius: 5, background: l.color, display: 'inline-block' }} />,
+        icon: (
+          <span
+            className="dot"
+            style={{
+              width: 9,
+              height: 9,
+              borderRadius: 5,
+              background: l.color,
+              display: 'inline-block',
+            }}
+          />
+        ),
       }))}
       onPick={onToggle}
     />

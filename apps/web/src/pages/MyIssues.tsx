@@ -45,9 +45,7 @@ export function MyIssuesPage() {
               key={t}
               className="btn ghost"
               style={
-                tab === t
-                  ? { background: 'var(--bg-active)', color: 'var(--text-1)' }
-                  : undefined
+                tab === t ? { background: 'var(--bg-active)', color: 'var(--text-1)' } : undefined
               }
               onClick={() => setTab(t)}
             >

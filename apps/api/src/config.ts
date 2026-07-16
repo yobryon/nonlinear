@@ -13,8 +13,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: Number(env.PORT ?? 3000),
     host: env.HOST ?? '0.0.0.0',
     storage,
-    databaseUrl:
-      env.DATABASE_URL ?? 'postgres://nonlinear:nonlinear@localhost:5432/nonlinear',
+    databaseUrl: env.DATABASE_URL ?? 'postgres://nonlinear:nonlinear@localhost:5432/nonlinear',
     secureCookies: env.SECURE_COOKIES === 'true',
   };
 }

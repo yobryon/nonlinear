@@ -6,7 +6,15 @@ import type {
   UpdateIssueInput,
   WorkflowState,
 } from '@nonlinear/shared';
-import { DomainError, created, deleted, notFound, updated, type Ctx, type DeltaInput } from '../domain.js';
+import {
+  DomainError,
+  created,
+  deleted,
+  notFound,
+  updated,
+  type Ctx,
+  type DeltaInput,
+} from '../domain.js';
 import { newId } from '../util/ids.js';
 import { nowIso } from '../util/time.js';
 import { keyAfterAll } from '../util/fractional.js';
@@ -291,9 +299,7 @@ export class IssueService {
         if (!beforeSet.has(id)) {
           const label = await storage.labels.get(id);
           if (!label) throw notFound('Label');
-          deltas.push(
-            await this.recordActivity(issueId, actorId, 'label_added', { labelId: id }),
-          );
+          deltas.push(await this.recordActivity(issueId, actorId, 'label_added', { labelId: id }));
         }
       }
       for (const id of before.labelIds) {

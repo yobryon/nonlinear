@@ -17,14 +17,16 @@ import {
   UserIcon,
   LabelIcon,
 } from './icons.js';
+import { AssigneePicker, LabelPicker, PriorityPicker, StatePicker, usePicker } from './pickers.js';
 import {
-  AssigneePicker,
-  LabelPicker,
-  PriorityPicker,
-  StatePicker,
-  usePicker,
-} from './pickers.js';
-import { deleteIssue, patchIssue, setAssignee, setPriority, setState, toggleFavorite, toggleLabel } from './actions.js';
+  deleteIssue,
+  patchIssue,
+  setAssignee,
+  setPriority,
+  setState,
+  toggleFavorite,
+  toggleLabel,
+} from './actions.js';
 
 /* ================= filters ================= */
 
@@ -520,7 +522,8 @@ export function Board({
           className={`board-col${over?.group === group.key ? ' drag-over' : ''}`}
           onDragOver={(e) => {
             e.preventDefault();
-            if (over?.group !== group.key) setOver({ group: group.key, index: group.issues.length });
+            if (over?.group !== group.key)
+              setOver({ group: group.key, index: group.issues.length });
           }}
           onDragLeave={(e) => {
             if (e.currentTarget === e.target) setOver(null);
@@ -640,9 +643,7 @@ export function ViewControls({
     setDim('root');
   };
 
-  const stateItems = teamId
-    ? sortedStates(Object.values(states), teamId)
-    : Object.values(states);
+  const stateItems = teamId ? sortedStates(Object.values(states), teamId) : Object.values(states);
 
   return (
     <div className="view-controls">
@@ -703,7 +704,8 @@ export function ViewControls({
             setGroupAnchor({ x: rect.left, y: rect.bottom + 4 });
           }}
         >
-          Group: {grouping === 'state' ? 'Status' : grouping === 'priority' ? 'Priority' : 'Assignee'}
+          Group:{' '}
+          {grouping === 'state' ? 'Status' : grouping === 'priority' ? 'Priority' : 'Assignee'}
         </button>
       )}
 
@@ -734,7 +736,11 @@ export function ViewControls({
             { id: 'priority', label: 'Priority', icon: <PriorityIcon priority={2} /> },
             { id: 'assignee', label: 'Assignee', icon: <UserIcon size={14} /> },
             { id: 'label', label: 'Label', icon: <LabelIcon size={14} /> },
-            { id: 'state', label: 'Status', icon: <StateIcon category="started" color="var(--text-3)" /> },
+            {
+              id: 'state',
+              label: 'Status',
+              icon: <StateIcon category="started" color="var(--text-3)" />,
+            },
           ]}
           onPick={(id) => setDim(id as typeof dim)}
         />
@@ -763,9 +769,7 @@ export function ViewControls({
         <Picker
           anchor={filterAnchor}
           onClose={closeFilter}
-          selectedIds={
-            new Set(filters.assigneeIds.map((id) => (id === null ? '__none' : id)))
-          }
+          selectedIds={new Set(filters.assigneeIds.map((id) => (id === null ? '__none' : id)))}
           items={[
             { id: '__none', label: 'Unassigned' },
             ...Object.values(users).map((u) => ({ id: u.id, label: u.name })),
@@ -788,7 +792,15 @@ export function ViewControls({
             id: l.id,
             label: l.name,
             icon: (
-              <span style={{ width: 9, height: 9, borderRadius: 5, background: l.color, display: 'inline-block' }} />
+              <span
+                style={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: 5,
+                  background: l.color,
+                  display: 'inline-block',
+                }}
+              />
             ),
           }))}
           onPick={(id) => {
@@ -831,7 +843,13 @@ export function useGroupedIssues(
   const states = useStore((s) => s.workflowStates);
   const users = useStore((s) => s.users);
   return useMemo(
-    () => groupIssues(issues, grouping, { states, users, teamId }, { board, hideEmpty: !board && grouping === 'state' }),
+    () =>
+      groupIssues(
+        issues,
+        grouping,
+        { states, users, teamId },
+        { board, hideEmpty: !board && grouping === 'state' },
+      ),
     [issues, grouping, states, users, teamId, board],
   );
 }

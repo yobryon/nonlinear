@@ -143,8 +143,7 @@ function PaletteInner({ onClose }: { onClose: () => void }) {
   const results = useMemo(() => {
     const matchedCommands = q
       ? commands.filter(
-          (c) =>
-            c.label.toLowerCase().includes(q) || c.keywords?.toLowerCase().includes(q),
+          (c) => c.label.toLowerCase().includes(q) || c.keywords?.toLowerCase().includes(q),
         )
       : commands;
 

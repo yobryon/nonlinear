@@ -15,7 +15,14 @@ import {
   TrashIcon,
   UserIcon,
 } from '../icons.js';
-import { applyFilters, EMPTY_FILTERS, GroupedIssueList, useGroupedIssues, ViewControls, type IssueFilters } from '../issueViews.js';
+import {
+  applyFilters,
+  EMPTY_FILTERS,
+  GroupedIssueList,
+  useGroupedIssues,
+  ViewControls,
+  type IssueFilters,
+} from '../issueViews.js';
 import { openNewIssue } from '../NewIssueDialog.js';
 import { toggleFavorite } from '../actions.js';
 import { Markdown } from '../markdown.js';
@@ -159,16 +166,32 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
         <h2 style={{ fontSize: 16 }}>New project</h2>
         <div>
           <label className="field-label">Name</label>
-          <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Project name" />
+          <input
+            className="input"
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Project name"
+          />
         </div>
         <div>
           <label className="field-label">Description</label>
-          <textarea className="input" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What is this project about?" />
+          <textarea
+            className="input"
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What is this project about?"
+          />
         </div>
         <div className="row" style={{ gap: 10 }}>
           <div style={{ flex: 1 }}>
             <label className="field-label">Teams</label>
-            <button className="btn" style={{ width: '100%', justifyContent: 'flex-start' }} onClick={(e) => setTeamAnchor(anchorFromEvent(e))}>
+            <button
+              className="btn"
+              style={{ width: '100%', justifyContent: 'flex-start' }}
+              onClick={(e) => setTeamAnchor(anchorFromEvent(e))}
+            >
               {teamIds.length > 0
                 ? teamIds.map((id) => teams[id]?.name ?? '?').join(', ')
                 : 'Select teams'}
@@ -176,14 +199,23 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
           </div>
           <div style={{ flex: 1 }}>
             <label className="field-label">Target date</label>
-            <input type="date" className="input" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+            <input
+              type="date"
+              className="input"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+            />
           </div>
         </div>
         <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
           <button className="btn ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn primary" disabled={!name.trim() || teamIds.length === 0 || saving} onClick={() => void submit()}>
+          <button
+            className="btn primary"
+            disabled={!name.trim() || teamIds.length === 0 || saving}
+            onClick={() => void submit()}
+          >
             Create project
           </button>
         </div>
@@ -195,9 +227,7 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
           selectedIds={new Set(teamIds)}
           items={Object.values(teams).map((t) => ({ id: t.id, label: t.name, hint: t.key }))}
           onPick={(id) =>
-            setTeamIds((prev) =>
-              prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id],
-            )
+            setTeamIds((prev) => (prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]))
           }
         />
       )}

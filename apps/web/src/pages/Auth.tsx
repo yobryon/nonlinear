@@ -127,13 +127,11 @@ export function AuthPage() {
           <div className="auth-switch">
             {mode === 'login' ? (
               <>
-                New here?{' '}
-                <button onClick={() => setMode('register')}>Create an account</button>
+                New here? <button onClick={() => setMode('register')}>Create an account</button>
               </>
             ) : (
               <>
-                Already have an account?{' '}
-                <button onClick={() => setMode('login')}>Log in</button>
+                Already have an account? <button onClick={() => setMode('login')}>Log in</button>
               </>
             )}
           </div>

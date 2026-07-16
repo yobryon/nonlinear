@@ -176,9 +176,7 @@ export class TeamService {
   async createState(input: CreateWorkflowStateInput): Promise<WorkflowState> {
     const { storage, bus } = this.ctx;
     if (!(await storage.teams.get(input.teamId))) throw notFound('Team');
-    const siblings = (await storage.workflowStates.all()).filter(
-      (s) => s.teamId === input.teamId,
-    );
+    const siblings = (await storage.workflowStates.all()).filter((s) => s.teamId === input.teamId);
     const now = nowIso();
     const state: WorkflowState = {
       id: newId(),

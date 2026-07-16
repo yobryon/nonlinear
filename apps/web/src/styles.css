@@ -24,13 +24,9 @@
   --warning: #f2c94c;
   --success: #4cb782;
   --shadow-popover:
-    0 0 0 1px var(--border-strong),
-    0 8px 24px rgba(0, 0, 0, 0.5),
-    0 2px 8px rgba(0, 0, 0, 0.35);
+    0 0 0 1px var(--border-strong), 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.35);
   --shadow-modal:
-    0 0 0 1px var(--border-strong),
-    0 16px 60px rgba(0, 0, 0, 0.6),
-    0 4px 16px rgba(0, 0, 0, 0.4);
+    0 0 0 1px var(--border-strong), 0 16px 60px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
   --scrollbar: #2e3036;
   color-scheme: dark;
 }
@@ -59,13 +55,9 @@
   --warning: #cf9f22;
   --success: #2f9e68;
   --shadow-popover:
-    0 0 0 1px var(--border),
-    0 8px 24px rgba(20, 22, 30, 0.12),
-    0 2px 8px rgba(20, 22, 30, 0.08);
+    0 0 0 1px var(--border), 0 8px 24px rgba(20, 22, 30, 0.12), 0 2px 8px rgba(20, 22, 30, 0.08);
   --shadow-modal:
-    0 0 0 1px var(--border),
-    0 16px 60px rgba(20, 22, 30, 0.18),
-    0 4px 16px rgba(20, 22, 30, 0.1);
+    0 0 0 1px var(--border), 0 16px 60px rgba(20, 22, 30, 0.18), 0 4px 16px rgba(20, 22, 30, 0.1);
   --scrollbar: #d6d8de;
   color-scheme: light;
 }

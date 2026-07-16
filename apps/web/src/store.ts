@@ -142,8 +142,7 @@ export const useStore = create<AppState>((set) => ({
         }
         if (delta.model === 'issueActivity') continue; // fetched on demand
         const key = MODEL_TO_KEY[delta.model as keyof typeof MODEL_TO_KEY] as
-          | CollectionKey
-          | undefined;
+          CollectionKey | undefined;
         if (!key) continue;
         const current = (patch[key] ?? state[key]) as ById<{ id: string }>;
         const next = { ...current };
@@ -196,16 +195,13 @@ export function sortedStates(states: WorkflowState[], teamId: string): WorkflowS
   return states
     .filter((s) => s.teamId === teamId)
     .sort(
-      (a, b) =>
-        order.indexOf(a.category) - order.indexOf(b.category) || a.position - b.position,
+      (a, b) => order.indexOf(a.category) - order.indexOf(b.category) || a.position - b.position,
     );
 }
 
 export function currentCycle(cycles: Cycle[], teamId: string): Cycle | null {
   const now = new Date().toISOString();
-  return (
-    cycles.find((c) => c.teamId === teamId && c.startsAt <= now && c.endsAt > now) ?? null
-  );
+  return cycles.find((c) => c.teamId === teamId && c.startsAt <= now && c.endsAt > now) ?? null;
 }
 
 export function relativeTime(iso: string): string {

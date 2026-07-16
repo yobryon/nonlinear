@@ -101,9 +101,9 @@ describe('issues', () => {
     });
     expect(issue.subscriberIds).toContain(grace.id);
     const notifications = await domain.ctx.storage.notifications.all();
-    expect(
-      notifications.some((n) => n.userId === grace.id && n.type === 'issue_assigned'),
-    ).toBe(true);
+    expect(notifications.some((n) => n.userId === grace.id && n.type === 'issue_assigned')).toBe(
+      true,
+    );
   });
 
   it('rejects sub-issue cycles', async () => {
@@ -114,9 +114,9 @@ describe('issues', () => {
       title: 'B',
       parentId: a.id,
     });
-    await expect(
-      domain.issues.update(admin.id, a.id, { parentId: b.id }),
-    ).rejects.toThrow(/cycle/i);
+    await expect(domain.issues.update(admin.id, a.id, { parentId: b.id })).rejects.toThrow(
+      /cycle/i,
+    );
   });
 
   it('cascades deletes to comments, relations, and children', async () => {
@@ -180,9 +180,9 @@ describe('comments and mentions', () => {
       body: `ping @${grace.displayName} please look`,
     });
     const notifications = await domain.ctx.storage.notifications.all();
-    expect(
-      notifications.some((n) => n.userId === grace.id && n.type === 'issue_mentioned'),
-    ).toBe(true);
+    expect(notifications.some((n) => n.userId === grace.id && n.type === 'issue_mentioned')).toBe(
+      true,
+    );
   });
 });
 
