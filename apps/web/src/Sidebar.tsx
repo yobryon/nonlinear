@@ -1,0 +1,275 @@
+import { useState } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { issueKey, useStore } from './store.js';
+import { anchorFromEvent, Popover, toastError, type Anchor } from './ui.js';
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CycleIcon,
+  InboxIcon,
+  LogoutIcon,
+  MoonIcon,
+  PencilIcon,
+  ProjectIcon,
+  SearchIcon,
+  SettingsIcon,
+  StarIcon,
+  SunIcon,
+  TeamIcon,
+  ListIcon,
+  UserIcon,
+  PlusIcon,
+} from './icons.js';
+import { openNewIssue } from './NewIssueDialog.js';
+import { openPalette } from './CommandPalette.js';
+import { api } from './api.js';
+import { stopSync } from './sync.js';
+import { getTheme, toggleTheme } from './theme.js';
+
+export function Sidebar() {
+  const workspace = useStore((s) => s.workspace);
+  const users = useStore((s) => s.users);
+  const userId = useStore((s) => s.userId);
+  const teams = useStore((s) => s.teams);
+  const notifications = useStore((s) => s.notifications);
+  const favorites = useStore((s) => s.favorites);
+  const issues = useStore((s) => s.issues);
+  const projects = useStore((s) => s.projects);
+  const cycles = useStore((s) => s.cycles);
+  const reset = useStore((s) => s.reset);
+  const navigate = useNavigate();
+
+  const [wsMenu, setWsMenu] = useState<Anchor | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [theme, setThemeState] = useState(getTheme());
+
+  const me = userId ? users[userId] : null;
+  const unread = Object.values(notifications).filter((n) => !n.readAt).length;
+  const teamList = Object.values(teams).sort((a, b) => a.name.localeCompare(b.name));
+  const myFavorites = Object.values(favorites)
+    .filter((f) => f.userId === userId)
+    .sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1));
+
+  const logout = async () => {
+    try {
+      await api.logout();
+      stopSync();
+      reset();
+    } catch (err) {
+      toastError(err);
+    }
+  };
+
+  return (
+    <nav className="sidebar">
+      <div className="sidebar-top">
+        <button className="ws-button" onClick={(e) => setWsMenu(anchorFromEvent(e))}>
+          <span className="ws-logo">{(workspace?.name ?? 'N')[0]?.toUpperCase()}</span>
+          <span className="name">{workspace?.name ?? 'nonlinear'}</span>
+          <ChevronDownIcon size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+        </button>
+        <span className="grow" />
+        <button className="icon-btn" title="Search (⌘K)" onClick={openPalette}>
+          <SearchIcon size={15} />
+        </button>
+        <button className="icon-btn" title="New issue (C)" onClick={() => openNewIssue()}>
+          <PencilIcon size={15} />
+        </button>
+      </div>
+
+      <div className="sidebar-scroll">
+        <NavLink to="/inbox" className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}>
+          <InboxIcon size={15} />
+          <span className="grow">Inbox</span>
+          {unread > 0 && <span className="count badge">{unread > 99 ? '99+' : unread}</span>}
+        </NavLink>
+        <NavLink
+          to="/my-issues"
+          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+        >
+          <UserIcon size={15} />
+          <span className="grow">My Issues</span>
+        </NavLink>
+
+        {myFavorites.length > 0 && (
+          <div className="side-section">
+            <div className="side-section-header">Favorites</div>
+            {myFavorites.map((fav) => {
+              if (fav.type === 'issue') {
+                const issue = issues[fav.targetId];
+                if (!issue) return null;
+                const key = issueKey(issue, teams);
+                return (
+                  <NavLink
+                    key={fav.id}
+                    to={`/issue/${key}`}
+                    className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                  >
+                    <StarIcon size={13} filled style={{ color: 'var(--warning)' }} />
+                    <span className="grow">
+                      {key} {issue.title}
+                    </span>
+                  </NavLink>
+                );
+              }
+              if (fav.type === 'project') {
+                const project = projects[fav.targetId];
+                if (!project) return null;
+                return (
+                  <NavLink
+                    key={fav.id}
+                    to={`/project/${project.id}`}
+                    className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                  >
+                    <ProjectIcon size={13} />
+                    <span className="grow">{project.name}</span>
+                  </NavLink>
+                );
+              }
+              if (fav.type === 'cycle') {
+                const cycle = cycles[fav.targetId];
+                if (!cycle) return null;
+                return (
+                  <NavLink
+                    key={fav.id}
+                    to={`/cycle/${cycle.id}`}
+                    className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                  >
+                    <CycleIcon size={13} />
+                    <span className="grow">{cycle.name || `Cycle ${cycle.number}`}</span>
+                  </NavLink>
+                );
+              }
+              return null;
+            })}
+          </div>
+        )}
+
+        <div className="side-section">
+          <div className="side-section-header">Workspace</div>
+          <NavLink
+            to="/projects"
+            className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+          >
+            <ProjectIcon size={15} />
+            <span className="grow">Projects</span>
+          </NavLink>
+        </div>
+
+        <div className="side-section">
+          <div className="side-section-header">
+            <span className="grow" style={{ textAlign: 'left' }}>
+              Teams
+            </span>
+            <button
+              className="icon-btn"
+              style={{ width: 20, height: 20 }}
+              title="New team"
+              onClick={() => navigate('/settings/teams')}
+            >
+              <PlusIcon size={12} />
+            </button>
+          </div>
+          {teamList.map((team) => {
+            const isCollapsed = collapsed[team.id] ?? false;
+            return (
+              <div key={team.id}>
+                <button
+                  className="side-item"
+                  onClick={() => setCollapsed((c) => ({ ...c, [team.id]: !isCollapsed }))}
+                >
+                  <span className="team-icon" style={{ background: team.color }}>
+                    {team.key.slice(0, 2)}
+                  </span>
+                  <span className="grow">{team.name}</span>
+                  {isCollapsed ? <ChevronRightIcon size={12} /> : <ChevronDownIcon size={12} />}
+                </button>
+                {!isCollapsed && (
+                  <div className="side-nest">
+                    <NavLink
+                      to={`/team/${team.key}/issues`}
+                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                    >
+                      <ListIcon size={14} />
+                      <span className="grow">Issues</span>
+                    </NavLink>
+                    {team.cyclesEnabled && (
+                      <NavLink
+                        to={`/team/${team.key}/cycles`}
+                        className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                      >
+                        <CycleIcon size={14} />
+                        <span className="grow">Cycles</span>
+                      </NavLink>
+                    )}
+                    <NavLink
+                      to={`/settings/team/${team.key}`}
+                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                    >
+                      <SettingsIcon size={14} />
+                      <span className="grow">Settings</span>
+                    </NavLink>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {wsMenu && (
+        <Popover anchor={wsMenu} onClose={() => setWsMenu(null)} width={230}>
+          <div className="menu-heading">
+            {me?.name} · {me?.email}
+          </div>
+          <button
+            className="menu-item"
+            onClick={() => {
+              navigate('/settings/workspace');
+              setWsMenu(null);
+            }}
+          >
+            <SettingsIcon size={14} />
+            <span className="grow">Workspace settings</span>
+          </button>
+          <button
+            className="menu-item"
+            onClick={() => {
+              navigate('/settings/members');
+              setWsMenu(null);
+            }}
+          >
+            <TeamIcon size={14} />
+            <span className="grow">Members</span>
+          </button>
+          <button
+            className="menu-item"
+            onClick={() => {
+              navigate('/settings/profile');
+              setWsMenu(null);
+            }}
+          >
+            <UserIcon size={14} />
+            <span className="grow">My profile</span>
+          </button>
+          <div className="menu-separator" />
+          <button
+            className="menu-item"
+            onClick={() => {
+              toggleTheme();
+              setThemeState(getTheme());
+            }}
+          >
+            {theme === 'dark' ? <SunIcon size={14} /> : <MoonIcon size={14} />}
+            <span className="grow">{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span>
+          </button>
+          <div className="menu-separator" />
+          <button className="menu-item" onClick={() => void logout()}>
+            <LogoutIcon size={14} />
+            <span className="grow">Log out</span>
+          </button>
+        </Popover>
+      )}
+    </nav>
+  );
+}
