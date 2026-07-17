@@ -278,11 +278,23 @@ export function useDragReorder<T extends { id: string }>(
   const [dragId, setDragId] = useState<string | null>(null);
   const [insertBefore, setInsertBefore] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (!dragId) return;
+    const clear = () => {
+      setDragId(null);
+      setInsertBefore(null);
+    };
+    window.addEventListener('dragend', clear);
+    return () => window.removeEventListener('dragend', clear);
+  }, [dragId]);
+
   const rowProps = (item: T, index: number) => ({
     draggable: true,
     onDragStart: (e: React.DragEvent) => {
       e.dataTransfer.effectAllowed = 'move';
-      setDragId(item.id);
+      e.dataTransfer.setData('text/plain', item.id);
+      // Defer: DOM changes during dragstart abort Chrome's native drag.
+      setTimeout(() => setDragId(item.id), 0);
     },
     onDragEnd: () => {
       setDragId(null);

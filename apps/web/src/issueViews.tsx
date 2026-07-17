@@ -265,7 +265,10 @@ export function IssueRow({
         onDragStart={(e) => {
           if (!onRowDragStart) return;
           e.dataTransfer.effectAllowed = 'move';
-          onRowDragStart(issue);
+          e.dataTransfer.setData('text/plain', issue.id);
+          // Defer state past this tick: mutating the DOM during dragstart
+          // makes Chrome abort the native drag.
+          setTimeout(() => onRowDragStart(issue), 0);
         }}
         onDragEnd={onRowDragEnd}
         onClick={(e) => {
@@ -528,6 +531,22 @@ export function GroupedIssueList({
   const [dragIssue, setDragIssue] = useState<Issue | null>(null);
   const [overGroup, setOverGroup] = useState<string | null>(null);
 
+  // Safety net: if the drag ends anywhere (drop outside, Esc, abort), never
+  // strand the dragging state or the hint bar.
+  useEffect(() => {
+    if (!dragIssue) return;
+    const clear = () => {
+      setDragIssue(null);
+      setOverGroup(null);
+    };
+    window.addEventListener('dragend', clear);
+    window.addEventListener('drop', clear);
+    return () => {
+      window.removeEventListener('dragend', clear);
+      window.removeEventListener('drop', clear);
+    };
+  }, [dragIssue]);
+
   const flatIds = groups.flatMap((g) => g.issues.map((i) => i.id));
   const orderKey = flatIds.join(',');
   useEffect(() => {
@@ -767,6 +786,16 @@ export function Board({
   const [over, setOver] = useState<{ group: string; index: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ issue: Issue; anchor: Anchor } | null>(null);
 
+  useEffect(() => {
+    if (!dragId) return;
+    const clear = () => {
+      setDragId(null);
+      setOver(null);
+    };
+    window.addEventListener('dragend', clear);
+    return () => window.removeEventListener('dragend', clear);
+  }, [dragId]);
+
   const drop = (group: IssueGroup, index: number) => {
     if (!dragId) return;
     const issue = useStore.getState().issues[dragId];
@@ -830,8 +859,10 @@ export function Board({
                     className={`board-card${dragId === issue.id ? ' dragging' : ''}`}
                     draggable
                     onDragStart={(e) => {
-                      setDragId(issue.id);
                       e.dataTransfer.effectAllowed = 'move';
+                      e.dataTransfer.setData('text/plain', issue.id);
+                      // Defer: DOM changes during dragstart abort Chrome's drag.
+                      setTimeout(() => setDragId(issue.id), 0);
                     }}
                     onDragEnd={() => {
                       setDragId(null);
