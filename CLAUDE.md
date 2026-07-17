@@ -51,6 +51,10 @@ Every mutation appends full-entity deltas to a monotonic sync log (`SyncBus.publ
 
 The first register creates the workspace, an admin user, and a default team (with Linear's default workflow states). Later registers join as members of every non-private team. `GET /api/meta` tells the login page whether setup is required.
 
+## Roadmap
+
+`ROADMAP.md` tracks feature parity against Linear's marketed product (Intake/Plan/Build/Monitor frame), prioritized P1→P3. Pick from the top of P1 when asked to "continue toward parity".
+
 ## Known gaps / deferred
 
 - Azure Blob `BlobStore` implementation (fs volume is the current attachment store; the interface in `packages/core/src/blob.ts` is the seam).
