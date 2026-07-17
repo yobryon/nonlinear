@@ -160,6 +160,10 @@ export class UserService {
       user.displayName = handle;
     }
     if (input.avatarColor !== undefined) user.avatarColor = input.avatarColor;
+    if (input.mutedNotificationTypes !== undefined) {
+      user.mutedNotificationTypes = [...new Set(input.mutedNotificationTypes)];
+    }
+    if (input.emailDigest !== undefined) user.emailDigest = input.emailDigest;
     user.updatedAt = nowIso();
     await storage.users.update(user);
     await bus.publish([updated('user', user)]);
@@ -232,6 +236,14 @@ export class BootstrapService {
       initiatives,
       documents,
       webhooks,
+      customViews,
+      issueTemplates,
+      projectUpdates,
+      issueReminders,
+      customers,
+      customerRequests,
+      documentComments,
+      triageRules,
       syncId,
     ] = await Promise.all([
       s.users.all(),
@@ -252,6 +264,14 @@ export class BootstrapService {
       s.initiatives.all(),
       s.documents.all(),
       s.webhooks.all(),
+      s.customViews.all(),
+      s.issueTemplates.all(),
+      s.projectUpdates.all(),
+      s.issueReminders.all(),
+      s.customers.all(),
+      s.customerRequests.all(),
+      s.documentComments.all(),
+      s.triageRules.all(),
       s.syncLog.currentSyncId(),
     ]);
     return {
@@ -276,6 +296,14 @@ export class BootstrapService {
       initiatives,
       documents,
       webhooks,
+      customViews: customViews.filter((v) => v.shared || v.creatorId === userId),
+      issueTemplates,
+      projectUpdates,
+      issueReminders: issueReminders.filter((r) => r.userId === userId),
+      customers,
+      customerRequests,
+      documentComments,
+      triageRules,
     };
   }
 }

@@ -1,13 +1,19 @@
 import type {
   ActivityType,
+  CustomerRequestSource,
+  EstimateScale,
   FavoriteType,
+  Grouping,
   InitiativeStatus,
   IssueRelationType,
   NotificationType,
   Priority,
+  ProjectHealth,
   ProjectStatus,
   StateCategory,
   UserRole,
+  ViewDisplay,
+  WebhookFormat,
 } from './enums.js';
 
 /** All timestamps are ISO 8601 strings. All ids are opaque strings. */
@@ -29,6 +35,12 @@ export interface User {
   avatarColor: string;
   role: UserRole;
   active: boolean;
+  /** Notification types this user has muted (in-app and digest). */
+  mutedNotificationTypes: NotificationType[];
+  /** Opt-in daily email digest of unread notifications (needs SMTP on the server). */
+  emailDigest: boolean;
+  /** Server-managed: when the last digest email was sent. */
+  digestLastSentAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,6 +63,12 @@ export interface Team {
   /** SLA: auto-set due dates this many hours out for urgent/high issues. Null = off. */
   slaUrgentHours: number | null;
   slaHighHours: number | null;
+  /** Which estimate options the team uses. */
+  estimateScale: EstimateScale;
+  /** Public intake form + inbound Slack/webhook issue creation. */
+  intakeEnabled: boolean;
+  /** Shared secret for inbound intake posts; regenerated on enable. */
+  intakeToken: string | null;
   /** Next issue number to hand out (server-side concern, synced for display only). */
   issueCounter: number;
   createdAt: string;
@@ -193,6 +211,8 @@ export interface Notification {
   commentId: string | null;
   createdAt: string;
   readAt: string | null;
+  /** Hidden from the inbox until this time. */
+  snoozedUntil: string | null;
 }
 
 export interface Favorite {
@@ -247,9 +267,126 @@ export interface Webhook {
   url: string;
   /** Sent as X-Nonlinear-Secret so receivers can verify origin. */
   secret: string;
+  /** 'json' posts sync deltas; 'slack' posts Slack-compatible message payloads. */
+  format: WebhookFormat;
   enabled: boolean;
   creatorId: string;
   createdAt: string;
+}
+
+
+/** Saved issue view: a named filter/group/display configuration. */
+export interface ViewFilters {
+  priorities: Priority[];
+  assigneeIds: Array<string | null>;
+  labelIds: string[];
+  stateIds: string[];
+  projectIds: string[];
+}
+
+export interface CustomView {
+  id: string;
+  name: string;
+  creatorId: string;
+  /** Shared views appear for everyone; private ones only for the creator. */
+  shared: boolean;
+  /** Scope to a team, or null for all teams. */
+  teamId: string | null;
+  filters: ViewFilters;
+  grouping: Grouping;
+  display: ViewDisplay;
+  sortOrder: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IssueTemplate {
+  id: string;
+  teamId: string;
+  name: string;
+  titlePrefix: string;
+  description: string;
+  priority: Priority;
+  labelIds: string[];
+  estimate: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Health/status post on a project ("On track", ...). Latest one wins. */
+export interface ProjectUpdate {
+  id: string;
+  projectId: string;
+  authorId: string;
+  health: ProjectHealth;
+  /** Markdown. */
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Personal "remind me about this issue" at a time. Deleted once fired. */
+export interface IssueReminder {
+  id: string;
+  issueId: string;
+  userId: string;
+  remindAt: string;
+  createdAt: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  /** Free-form tier, e.g. "Enterprise". */
+  tier: string | null;
+  /** Annual revenue attributed to this customer, for prioritization. */
+  revenue: number | null;
+  /** Email domain used to auto-link intake submissions. */
+  domain: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerRequest {
+  id: string;
+  customerId: string;
+  issueId: string | null;
+  projectId: string | null;
+  body: string;
+  source: CustomerRequestSource;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Comment on a document, optionally anchored to quoted text. */
+export interface DocumentComment {
+  id: string;
+  documentId: string;
+  authorId: string;
+  /** Markdown. */
+  body: string;
+  /** Quoted text this comment anchors to (highlighted in the doc). */
+  anchorText: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Automation applied to new issues in a team (keyword match -> set fields). */
+export interface TriageRule {
+  id: string;
+  teamId: string;
+  name: string;
+  enabled: boolean;
+  /** Case-insensitive; rule matches if ANY keyword appears in title/description. */
+  keywords: string[];
+  setPriority: Priority | null;
+  setAssigneeId: string | null;
+  setLabelIds: string[];
+  setProjectId: string | null;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface IssueActivity {

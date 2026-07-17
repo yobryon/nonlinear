@@ -1,20 +1,28 @@
 import type {
   Attachment,
   Comment,
+  Customer,
+  CustomerRequest,
+  CustomView,
   Cycle,
   Document,
+  DocumentComment,
   Favorite,
   Initiative,
   Issue,
   IssueActivity,
   IssueRelation,
+  IssueReminder,
+  IssueTemplate,
   Label,
   Notification,
   Project,
   ProjectMilestone,
+  ProjectUpdate,
   Reaction,
   Team,
   TeamMembership,
+  TriageRule,
   User,
   Webhook,
   Workspace,
@@ -50,6 +58,14 @@ export interface SyncModelMap {
   initiative: Initiative;
   document: Document;
   webhook: Webhook;
+  customView: CustomView;
+  issueTemplate: IssueTemplate;
+  projectUpdate: ProjectUpdate;
+  issueReminder: IssueReminder;
+  customer: Customer;
+  customerRequest: CustomerRequest;
+  documentComment: DocumentComment;
+  triageRule: TriageRule;
 }
 
 export type SyncModelName = keyof SyncModelMap;
@@ -75,6 +91,14 @@ export const SYNC_MODEL_NAMES = [
   'initiative',
   'document',
   'webhook',
+  'customView',
+  'issueTemplate',
+  'projectUpdate',
+  'issueReminder',
+  'customer',
+  'customerRequest',
+  'documentComment',
+  'triageRule',
 ] as const satisfies readonly SyncModelName[];
 
 export type SyncAction = 'create' | 'update' | 'delete';
@@ -120,4 +144,12 @@ export interface BootstrapPayload {
   initiatives: Initiative[];
   documents: Document[];
   webhooks: Webhook[];
+  customViews: CustomView[];
+  issueTemplates: IssueTemplate[];
+  projectUpdates: ProjectUpdate[];
+  issueReminders: IssueReminder[];
+  customers: Customer[];
+  customerRequests: CustomerRequest[];
+  documentComments: DocumentComment[];
+  triageRules: TriageRule[];
 }

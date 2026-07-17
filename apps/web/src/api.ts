@@ -3,10 +3,26 @@ import type {
   BootstrapPayload,
   Comment,
   CreateCommentInput,
+  CreateCustomerInput,
+  CreateCustomerRequestInput,
+  CreateCustomViewInput,
+  CreateDocumentCommentInput,
   CreateDocumentInput,
   CreateInitiativeInput,
+  CreateIssueTemplateInput,
+  CreateProjectUpdateInput,
+  CreateTriageRuleInput,
+  Customer,
+  CustomerRequest,
+  CustomView,
   Document,
+  DocumentComment,
+  ImportResult,
   Initiative,
+  IssueReminder,
+  IssueTemplate,
+  ProjectUpdate,
+  TriageRule,
   Webhook,
   CreateCycleInput,
   CreateFavoriteInput,
@@ -175,6 +191,70 @@ export const api = {
   setWebhookEnabled: (id: string, enabled: boolean) =>
     req<Webhook>('PATCH', `/api/webhooks/${id}`, { enabled }),
   deleteWebhook: (id: string) => req<{ ok: true }>('DELETE', `/api/webhooks/${id}`),
+
+  createView: (input: CreateCustomViewInput) => req<CustomView>('POST', '/api/views', input),
+  updateView: (id: string, input: Record<string, unknown>) =>
+    req<CustomView>('PATCH', `/api/views/${id}`, input),
+  deleteView: (id: string) => req<{ ok: true }>('DELETE', `/api/views/${id}`),
+
+  createTemplate: (input: CreateIssueTemplateInput) =>
+    req<IssueTemplate>('POST', '/api/templates', input),
+  updateTemplate: (id: string, input: Record<string, unknown>) =>
+    req<IssueTemplate>('PATCH', `/api/templates/${id}`, input),
+  deleteTemplate: (id: string) => req<{ ok: true }>('DELETE', `/api/templates/${id}`),
+
+  createProjectUpdate: (input: CreateProjectUpdateInput) =>
+    req<ProjectUpdate>('POST', '/api/project-updates', input),
+  deleteProjectUpdate: (id: string) => req<{ ok: true }>('DELETE', `/api/project-updates/${id}`),
+
+  setReminder: (issueId: string, remindAt: string) =>
+    req<IssueReminder>('POST', '/api/reminders', { issueId, remindAt }),
+  clearReminder: (id: string) => req<{ ok: true }>('DELETE', `/api/reminders/${id}`),
+  snoozeNotification: (id: string, snoozedUntil: string | null) =>
+    req<{ ok: true }>('PATCH', `/api/notifications/${id}/snooze`, { snoozedUntil }),
+
+  createCustomer: (input: CreateCustomerInput) => req<Customer>('POST', '/api/customers', input),
+  updateCustomer: (id: string, input: Record<string, unknown>) =>
+    req<Customer>('PATCH', `/api/customers/${id}`, input),
+  deleteCustomer: (id: string) => req<{ ok: true }>('DELETE', `/api/customers/${id}`),
+  createCustomerRequest: (input: CreateCustomerRequestInput) =>
+    req<CustomerRequest>('POST', '/api/customer-requests', input),
+  updateCustomerRequest: (id: string, input: Record<string, unknown>) =>
+    req<CustomerRequest>('PATCH', `/api/customer-requests/${id}`, input),
+  deleteCustomerRequest: (id: string) =>
+    req<{ ok: true }>('DELETE', `/api/customer-requests/${id}`),
+
+  createDocumentComment: (input: CreateDocumentCommentInput) =>
+    req<DocumentComment>('POST', '/api/document-comments', input),
+  updateDocumentComment: (id: string, input: Record<string, unknown>) =>
+    req<DocumentComment>('PATCH', `/api/document-comments/${id}`, input),
+  deleteDocumentComment: (id: string) =>
+    req<{ ok: true }>('DELETE', `/api/document-comments/${id}`),
+
+  createTriageRule: (input: CreateTriageRuleInput) =>
+    req<TriageRule>('POST', '/api/triage-rules', input),
+  updateTriageRule: (id: string, input: Record<string, unknown>) =>
+    req<TriageRule>('PATCH', `/api/triage-rules/${id}`, input),
+  deleteTriageRule: (id: string) => req<{ ok: true }>('DELETE', `/api/triage-rules/${id}`),
+
+  importCsv: async (teamId: string, file: File): Promise<ImportResult> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`/api/teams/${teamId}/import`, {
+      method: 'POST',
+      body: form,
+      credentials: 'same-origin',
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new ApiError(
+        res.status,
+        data?.error?.code ?? 'import_failed',
+        data?.error?.message ?? 'Import failed',
+      );
+    }
+    return res.json() as Promise<ImportResult>;
+  },
 
   updateProfile: (input: UpdateProfileInput) => req<User>('PATCH', '/api/profile', input),
   adminUpdateUser: (id: string, input: { role?: string; active?: boolean }) =>

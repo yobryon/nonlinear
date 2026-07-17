@@ -47,8 +47,44 @@ export const NOTIFICATION_TYPES = [
   'issue_commented',
   'issue_mentioned',
   'issue_due_soon',
+  'issue_reminder',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+export const PROJECT_HEALTHS = ['on_track', 'at_risk', 'off_track'] as const;
+export type ProjectHealth = (typeof PROJECT_HEALTHS)[number];
+
+export const ESTIMATE_SCALES = ['exponential', 'fibonacci', 'linear', 'tshirt'] as const;
+export type EstimateScale = (typeof ESTIMATE_SCALES)[number];
+
+/** Estimate options per scale; labels shown for tshirt. */
+export const ESTIMATE_SCALE_VALUES: Record<
+  EstimateScale,
+  Array<{ value: number; label: string }>
+> = {
+  exponential: [1, 2, 4, 8, 16].map((v) => ({ value: v, label: String(v) })),
+  fibonacci: [1, 2, 3, 5, 8, 13].map((v) => ({ value: v, label: String(v) })),
+  linear: [1, 2, 3, 4, 5, 6, 7].map((v) => ({ value: v, label: String(v) })),
+  tshirt: [
+    { value: 1, label: 'XS' },
+    { value: 2, label: 'S' },
+    { value: 3, label: 'M' },
+    { value: 5, label: 'L' },
+    { value: 8, label: 'XL' },
+  ],
+};
+
+export const VIEW_DISPLAYS = ['list', 'board'] as const;
+export type ViewDisplay = (typeof VIEW_DISPLAYS)[number];
+
+export const GROUPINGS = ['state', 'priority', 'assignee'] as const;
+export type Grouping = (typeof GROUPINGS)[number];
+
+export const WEBHOOK_FORMATS = ['json', 'slack'] as const;
+export type WebhookFormat = (typeof WEBHOOK_FORMATS)[number];
+
+export const CUSTOMER_REQUEST_SOURCES = ['manual', 'intake'] as const;
+export type CustomerRequestSource = (typeof CUSTOMER_REQUEST_SOURCES)[number];
 
 export const FAVORITE_TYPES = ['issue', 'project', 'cycle', 'label'] as const;
 export type FavoriteType = (typeof FAVORITE_TYPES)[number];

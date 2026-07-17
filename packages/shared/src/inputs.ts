@@ -1,11 +1,19 @@
 import type {
+  CustomerRequestSource,
+  EstimateScale,
   FavoriteType,
+  Grouping,
   InitiativeStatus,
   IssueRelationType,
+  NotificationType,
   Priority,
+  ProjectHealth,
   ProjectStatus,
   StateCategory,
+  ViewDisplay,
+  WebhookFormat,
 } from './enums.js';
+import type { ViewFilters } from './entities.js';
 
 export interface RegisterInput {
   email: string;
@@ -43,6 +51,8 @@ export interface UpdateTeamInput {
   triageEnabled?: boolean;
   slaUrgentHours?: number | null;
   slaHighHours?: number | null;
+  estimateScale?: EstimateScale;
+  intakeEnabled?: boolean;
 }
 
 export interface CreateIssueInput {
@@ -178,6 +188,122 @@ export interface UpdateDocumentInput {
 
 export interface CreateWebhookInput {
   url: string;
+  format?: WebhookFormat;
+}
+
+export interface CreateCustomViewInput {
+  name: string;
+  shared?: boolean;
+  teamId?: string | null;
+  filters: ViewFilters;
+  grouping: Grouping;
+  display: ViewDisplay;
+}
+
+export interface UpdateCustomViewInput {
+  name?: string;
+  shared?: boolean;
+  filters?: ViewFilters;
+  grouping?: Grouping;
+  display?: ViewDisplay;
+  sortOrder?: string;
+}
+
+export interface CreateIssueTemplateInput {
+  teamId: string;
+  name: string;
+  titlePrefix?: string;
+  description?: string;
+  priority?: Priority;
+  labelIds?: string[];
+  estimate?: number | null;
+}
+
+export interface UpdateIssueTemplateInput {
+  name?: string;
+  titlePrefix?: string;
+  description?: string;
+  priority?: Priority;
+  labelIds?: string[];
+  estimate?: number | null;
+}
+
+export interface CreateProjectUpdateInput {
+  projectId: string;
+  health: ProjectHealth;
+  body?: string;
+}
+
+export interface SetReminderInput {
+  issueId: string;
+  remindAt: string;
+}
+
+export interface CreateCustomerInput {
+  name: string;
+  tier?: string | null;
+  revenue?: number | null;
+  domain?: string | null;
+}
+
+export interface UpdateCustomerInput {
+  name?: string;
+  tier?: string | null;
+  revenue?: number | null;
+  domain?: string | null;
+}
+
+export interface CreateCustomerRequestInput {
+  customerId: string;
+  issueId?: string | null;
+  projectId?: string | null;
+  body: string;
+  source?: CustomerRequestSource;
+}
+
+export interface UpdateCustomerRequestInput {
+  issueId?: string | null;
+  projectId?: string | null;
+  body?: string;
+}
+
+export interface CreateDocumentCommentInput {
+  documentId: string;
+  body: string;
+  anchorText?: string | null;
+}
+
+export interface UpdateDocumentCommentInput {
+  body?: string;
+  resolved?: boolean;
+}
+
+export interface CreateTriageRuleInput {
+  teamId: string;
+  name: string;
+  keywords: string[];
+  setPriority?: Priority | null;
+  setAssigneeId?: string | null;
+  setLabelIds?: string[];
+  setProjectId?: string | null;
+}
+
+export interface UpdateTriageRuleInput {
+  name?: string;
+  enabled?: boolean;
+  keywords?: string[];
+  setPriority?: Priority | null;
+  setAssigneeId?: string | null;
+  setLabelIds?: string[];
+  setProjectId?: string | null;
+  position?: number;
+}
+
+/** Row outcome of a CSV import. */
+export interface ImportResult {
+  created: number;
+  skipped: number;
+  errors: string[];
 }
 
 export interface CreateMilestoneInput {
@@ -222,6 +348,8 @@ export interface UpdateProfileInput {
   name?: string;
   displayName?: string;
   avatarColor?: string;
+  mutedNotificationTypes?: NotificationType[];
+  emailDigest?: boolean;
 }
 
 export interface CreateReactionInput {

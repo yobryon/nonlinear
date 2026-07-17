@@ -3,22 +3,30 @@ import type {
   Attachment,
   BootstrapPayload,
   Comment,
+  Customer,
+  CustomerRequest,
+  CustomView,
   Cycle,
   Document,
+  DocumentComment,
   Favorite,
   Initiative,
   Issue,
   IssueRelation,
+  IssueReminder,
+  IssueTemplate,
   Label,
   Notification,
   Project,
   ProjectMilestone,
+  ProjectUpdate,
   Reaction,
   SyncDelta,
   SyncModelMap,
   SyncModelName,
   Team,
   TeamMembership,
+  TriageRule,
   User,
   Webhook,
   Workspace,
@@ -53,6 +61,14 @@ export interface AppState {
   initiatives: ById<Initiative>;
   documents: ById<Document>;
   webhooks: ById<Webhook>;
+  customViews: ById<CustomView>;
+  issueTemplates: ById<IssueTemplate>;
+  projectUpdates: ById<ProjectUpdate>;
+  issueReminders: ById<IssueReminder>;
+  customers: ById<Customer>;
+  customerRequests: ById<CustomerRequest>;
+  documentComments: ById<DocumentComment>;
+  triageRules: ById<TriageRule>;
 
   setPhase: (phase: AppState['phase']) => void;
   setConnection: (status: ConnectionStatus) => void;
@@ -82,6 +98,14 @@ const MODEL_TO_KEY = {
   initiative: 'initiatives',
   document: 'documents',
   webhook: 'webhooks',
+  customView: 'customViews',
+  issueTemplate: 'issueTemplates',
+  projectUpdate: 'projectUpdates',
+  issueReminder: 'issueReminders',
+  customer: 'customers',
+  customerRequest: 'customerRequests',
+  documentComment: 'documentComments',
+  triageRule: 'triageRules',
 } as const;
 
 type CollectionKey = (typeof MODEL_TO_KEY)[keyof typeof MODEL_TO_KEY];
@@ -112,6 +136,14 @@ const emptyCollections = {
   initiatives: {},
   documents: {},
   webhooks: {},
+  customViews: {},
+  issueTemplates: {},
+  projectUpdates: {},
+  issueReminders: {},
+  customers: {},
+  customerRequests: {},
+  documentComments: {},
+  triageRules: {},
 };
 
 export const useStore = create<AppState>((set) => ({
@@ -148,6 +180,14 @@ export const useStore = create<AppState>((set) => ({
       initiatives: indexById(p.initiatives),
       documents: indexById(p.documents),
       webhooks: indexById(p.webhooks),
+      customViews: indexById(p.customViews),
+      issueTemplates: indexById(p.issueTemplates),
+      projectUpdates: indexById(p.projectUpdates),
+      issueReminders: indexById(p.issueReminders),
+      customers: indexById(p.customers),
+      customerRequests: indexById(p.customerRequests),
+      documentComments: indexById(p.documentComments),
+      triageRules: indexById(p.triageRules),
     }),
 
   applyDeltas: (deltas) =>

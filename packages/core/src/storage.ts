@@ -1,21 +1,29 @@
 import type {
   Attachment,
   Comment,
+  Customer,
+  CustomerRequest,
+  CustomView,
   Cycle,
   Document,
+  DocumentComment,
   Favorite,
   Initiative,
   Issue,
   IssueActivity,
   IssueRelation,
+  IssueReminder,
+  IssueTemplate,
   Label,
   Notification,
   Project,
   ProjectMilestone,
+  ProjectUpdate,
   Reaction,
   SyncDelta,
   Team,
   TeamMembership,
+  TriageRule,
   User,
   Webhook,
   Workspace,
@@ -108,6 +116,14 @@ export interface Storage {
   initiatives: EntityStore<Initiative>;
   documents: EntityStore<Document>;
   webhooks: EntityStore<Webhook>;
+  customViews: EntityStore<CustomView>;
+  issueTemplates: EntityStore<IssueTemplate>;
+  projectUpdates: EntityStore<ProjectUpdate>;
+  issueReminders: EntityStore<IssueReminder>;
+  customers: EntityStore<Customer>;
+  customerRequests: EntityStore<CustomerRequest>;
+  documentComments: EntityStore<DocumentComment>;
+  triageRules: EntityStore<TriageRule>;
   activities: ActivityStore;
   sessions: SessionStore;
   syncLog: SyncLogStore;

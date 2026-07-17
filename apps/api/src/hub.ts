@@ -11,11 +11,20 @@ interface Connection {
   buffer: SyncDelta[];
 }
 
-/** Per-user visibility: notifications and favorites only go to their owner. */
+/** Per-user visibility: personal models only go to their owner. */
 function visibleTo(delta: SyncDelta, userId: string): boolean {
-  if (delta.model !== 'notification' && delta.model !== 'favorite') return true;
   if (delta.action === 'delete') return true; // clients ignore unknown ids
-  return (delta.data as { userId?: string }).userId === userId;
+  if (delta.model === 'notification' || delta.model === 'favorite') {
+    return (delta.data as { userId?: string }).userId === userId;
+  }
+  if (delta.model === 'issueReminder') {
+    return (delta.data as { userId?: string }).userId === userId;
+  }
+  if (delta.model === 'customView') {
+    const view = delta.data as { shared?: boolean; creatorId?: string };
+    return view.shared === true || view.creatorId === userId;
+  }
+  return true;
 }
 
 export class SyncHub {

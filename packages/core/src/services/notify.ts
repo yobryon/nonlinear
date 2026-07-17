@@ -14,6 +14,8 @@ export async function pushNotification(
   },
 ): Promise<DeltaInput | null> {
   if (params.actorId === params.userId) return null;
+  const recipient = await ctx.storage.users.get(params.userId);
+  if (recipient?.mutedNotificationTypes.includes(params.type)) return null;
   const notification: Notification = {
     id: newId(),
     userId: params.userId,
@@ -23,6 +25,7 @@ export async function pushNotification(
     commentId: params.commentId ?? null,
     createdAt: nowIso(),
     readAt: null,
+    snoozedUntil: null,
   };
   await ctx.storage.notifications.insert(notification);
   return created('notification', notification);

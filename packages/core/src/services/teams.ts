@@ -8,7 +8,7 @@ import type {
   WorkflowState,
 } from '@nonlinear/shared';
 import { DomainError, created, deleted, notFound, updated, type Ctx } from '../domain.js';
-import { newId } from '../util/ids.js';
+import { newId, newToken } from '../util/ids.js';
 import { nowIso } from '../util/time.js';
 import { colorFor } from '../util/colors.js';
 
@@ -52,6 +52,9 @@ export class TeamService {
       triageEnabled: false,
       slaUrgentHours: null,
       slaHighHours: null,
+      estimateScale: 'exponential',
+      intakeEnabled: false,
+      intakeToken: null,
       issueCounter: 0,
       createdAt: now,
       updatedAt: now,
@@ -131,6 +134,11 @@ export class TeamService {
       hours === null ? null : Math.max(1, Math.min(24 * 30, Math.round(hours)));
     if (input.slaUrgentHours !== undefined) team.slaUrgentHours = clampSla(input.slaUrgentHours);
     if (input.slaHighHours !== undefined) team.slaHighHours = clampSla(input.slaHighHours);
+    if (input.estimateScale !== undefined) team.estimateScale = input.estimateScale;
+    if (input.intakeEnabled !== undefined) {
+      team.intakeEnabled = input.intakeEnabled;
+      if (input.intakeEnabled && !team.intakeToken) team.intakeToken = newToken();
+    }
     team.updatedAt = nowIso();
     await storage.teams.update(team);
     await bus.publish([updated('team', team), ...extraDeltas]);

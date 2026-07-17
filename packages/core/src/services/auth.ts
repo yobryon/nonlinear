@@ -67,6 +67,9 @@ export class AuthService {
       avatarColor: colorFor(email),
       role: isFirst ? 'admin' : 'member',
       active: true,
+      mutedNotificationTypes: [],
+      emailDigest: false,
+      digestLastSentAt: null,
       createdAt: now,
       updatedAt: now,
     };
