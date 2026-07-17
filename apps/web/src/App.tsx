@@ -20,6 +20,12 @@ import { TriagePage } from './pages/Triage.js';
 import { InitiativeDetailPage, InitiativesPage } from './pages/Initiatives.js';
 import { DocumentDetailPage, DocumentsPage } from './pages/Documents.js';
 import { InsightsPage } from './pages/Insights.js';
+import { SearchPage } from './pages/Search.js';
+import { TimelinePage } from './pages/Timeline.js';
+import { ArchivePage } from './pages/Archive.js';
+import { CustomViewPage } from './pages/CustomView.js';
+import { CustomerDetailPage, CustomersPage } from './pages/Customers.js';
+import { IntakePublicPage } from './pages/Intake.js';
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -60,7 +66,7 @@ function Shortcuts() {
         openNewIssue();
       } else if (key === '/') {
         e.preventDefault();
-        usePalette.getState().show();
+        navigate('/search');
       } else if (key === 'g') {
         pendingG = true;
         timer = setTimeout(() => {
@@ -97,6 +103,12 @@ function AppShell() {
             <Route path="/my-issues" element={<MyIssuesPage />} />
             <Route path="/team/:teamKey/issues" element={<TeamIssuesPage />} />
             <Route path="/team/:teamKey/triage" element={<TriagePage />} />
+            <Route path="/team/:teamKey/archive" element={<ArchivePage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/timeline" element={<TimelinePage />} />
+            <Route path="/view/:viewId" element={<CustomViewPage />} />
+            <Route path="/customers" element={<CustomersPage />} />
+            <Route path="/customer/:customerId" element={<CustomerDetailPage />} />
             <Route path="/team/:teamKey/cycles" element={<TeamCyclesPage />} />
             <Route path="/team/:teamKey/insights" element={<InsightsPage />} />
             <Route path="/issue/:key" element={<IssueDetailPage />} />
@@ -123,6 +135,18 @@ export function App() {
       useStore.getState().setPhase('anonymous');
     });
   }, []);
+
+  const isPublicIntake = location.pathname.startsWith('/intake/');
+  if (isPublicIntake) {
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/intake/:teamKey" element={<IntakePublicPage />} />
+        </Routes>
+        <Toasts />
+      </BrowserRouter>
+    );
+  }
 
   return (
     <BrowserRouter>

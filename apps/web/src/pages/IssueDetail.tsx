@@ -23,6 +23,7 @@ import {
   TrashIcon,
   UserIcon,
   BellIcon,
+  ClockIcon,
 } from '../icons.js';
 import { Markdown } from '../markdown.js';
 import {
@@ -83,6 +84,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
   const relations = useStore((s) => s.issueRelations);
   const allIssues = useStore((s) => s.issues);
   const favorites = useStore((s) => s.favorites);
+  const reminders = useStore((s) => s.issueReminders);
   const userId = useStore((s) => s.userId);
   const navigate = useNavigate();
 
@@ -91,6 +93,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
   const [titleDraft, setTitleDraft] = useState(maybeIssue?.title ?? '');
   const [activities, setActivities] = useState<IssueActivity[]>([]);
   const [menuAnchor, setMenuAnchor] = useState<Anchor | null>(null);
+  const [reminderAnchor, setReminderAnchor] = useState<Anchor | null>(null);
   const [relAnchor, setRelAnchor] = useState<Anchor | null>(null);
   const [relType, setRelType] = useState<IssueRelationType>('blocks');
 
@@ -156,6 +159,9 @@ function IssueDetail({ issueId }: { issueId: string }) {
     (r) => r.issueId === issueId || r.relatedIssueId === issueId,
   );
 
+  const myReminder = Object.values(reminders).find(
+    (r) => r.issueId === issueId && r.userId === userId,
+  );
   const isFavorite = Object.values(favorites).some(
     (f) => f.userId === userId && f.type === 'issue' && f.targetId === issueId,
   );
@@ -202,6 +208,13 @@ function IssueDetail({ issueId }: { issueId: string }) {
           }}
         >
           <BellIcon size={15} />
+        </button>
+        <button
+          className={`icon-btn${myReminder ? ' active' : ''}`}
+          title={myReminder ? 'Reminder set' : 'Remind me'}
+          onClick={(e) => setReminderAnchor(anchorFromEvent(e))}
+        >
+          <ClockIcon size={15} />
         </button>
         <button
           className={`icon-btn${isFavorite ? ' active' : ''}`}
@@ -707,6 +720,57 @@ function IssueDetail({ issueId }: { issueId: string }) {
         />
       )}
 
+      {reminderAnchor && (
+        <Popover anchor={reminderAnchor} onClose={() => setReminderAnchor(null)} width={180}>
+          {myReminder && (
+            <>
+              <div className="menu-heading">Reminder set for {formatDate(myReminder.remindAt)}</div>
+              <button
+                className="menu-item destructive"
+                onClick={() => {
+                  void api
+                    .clearReminder(myReminder.id)
+                    .then(() => {
+                      const next = { ...useStore.getState().issueReminders };
+                      delete next[myReminder.id];
+                      useStore.setState({ issueReminders: next });
+                    })
+                    .catch(toastError);
+                  setReminderAnchor(null);
+                }}
+              >
+                <TrashIcon size={13} />
+                <span className="grow">Clear reminder</span>
+              </button>
+              <div className="menu-separator" />
+            </>
+          )}
+          {(
+            [
+              ['In 4 hours', 4],
+              ['Tomorrow', 24],
+              ['In 3 days', 72],
+              ['Next week', 168],
+            ] as Array<[string, number]>
+          ).map(([label, hours]) => (
+            <button
+              key={label}
+              className="menu-item"
+              onClick={() => {
+                const remindAt = new Date(Date.now() + hours * 3600_000).toISOString();
+                void api
+                  .setReminder(issueId, remindAt)
+                  .then((r) => useStore.getState().putEntity('issueReminder', r))
+                  .catch(toastError);
+                setReminderAnchor(null);
+              }}
+            >
+              <ClockIcon size={13} />
+              <span className="grow">{label}</span>
+            </button>
+          ))}
+        </Popover>
+      )}
       {menuAnchor && (
         <Popover anchor={menuAnchor} onClose={() => setMenuAnchor(null)} width={200}>
           <button

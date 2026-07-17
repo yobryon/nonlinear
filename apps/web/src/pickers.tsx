@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Priority } from '@nonlinear/shared';
-import { PRIORITY_LABELS } from '@nonlinear/shared';
+import { ESTIMATE_SCALE_VALUES, PRIORITY_LABELS } from '@nonlinear/shared';
 import { useStore, sortedStates, issueKey } from './store.js';
 import { Picker, Popover, type Anchor } from './ui.js';
 import { PriorityIcon, StateIcon, ProjectStatusIcon, CycleIcon } from './icons.js';
@@ -253,40 +253,54 @@ export function CyclePicker({
   );
 }
 
-const ESTIMATES: Array<{ id: string; label: string }> = [
-  { id: '__none', label: 'No estimate' },
-  { id: '1', label: '1 point' },
-  { id: '2', label: '2 points' },
-  { id: '3', label: '3 points' },
-  { id: '5', label: '5 points' },
-  { id: '8', label: '8 points' },
-  { id: '13', label: '13 points' },
-];
-
 export function EstimatePicker({
   anchor,
   onClose,
   current,
   onPick,
+  teamId,
 }: {
   anchor: Anchor;
   onClose: () => void;
   current?: number | null;
   onPick: (estimate: number | null) => void;
+  /** Options come from the team's estimate scale when provided. */
+  teamId?: string;
 }) {
+  const teams = useStore((s) => s.teams);
+  const scale = (teamId && teams[teamId]?.estimateScale) || 'exponential';
+  const options = ESTIMATE_SCALE_VALUES[scale];
   return (
     <Picker
       anchor={anchor}
       onClose={onClose}
       searchable={false}
       selectedIds={new Set([current == null ? '__none' : String(current)])}
-      items={ESTIMATES}
+      items={[
+        { id: '__none', label: 'No estimate' },
+        ...options.map((o) => ({
+          id: String(o.value),
+          label: scale === 'tshirt' ? o.label : `${o.label} point${o.value === 1 ? '' : 's'}`,
+        })),
+      ]}
       onPick={(id) => {
         onPick(id === '__none' ? null : Number(id));
         onClose();
       }}
     />
   );
+}
+
+/** Display label for an estimate under a team's scale (tshirt sizes etc.). */
+export function estimateLabel(
+  teams: Record<string, { estimateScale?: string }>,
+  teamId: string,
+  estimate: number,
+): string {
+  const scale = (teams[teamId]?.estimateScale ??
+    'exponential') as keyof typeof ESTIMATE_SCALE_VALUES;
+  const match = ESTIMATE_SCALE_VALUES[scale]?.find((o) => o.value === estimate);
+  return scale === 'tshirt' && match ? match.label : `${estimate} pts`;
 }
 
 export function TeamPicker({

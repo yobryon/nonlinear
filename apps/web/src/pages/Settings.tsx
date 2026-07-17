@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import type { StateCategory, Team, WorkflowState } from '@nonlinear/shared';
-import { STATE_CATEGORIES } from '@nonlinear/shared';
+import { ESTIMATE_SCALES, STATE_CATEGORIES } from '@nonlinear/shared';
+import { TemplatesSettings } from '../components/TemplatesSettings.js';
+import { TriageRulesSettings } from '../components/TriageRulesSettings.js';
+import { NotificationPrefs } from '../components/NotificationPrefs.js';
+import { IntakeSettings } from '../components/IntakeSettings.js';
+import { ImportExport } from '../components/ImportExport.js';
 import { api } from '../api.js';
 import { useStore } from '../store.js';
 import {
@@ -505,6 +510,28 @@ function TeamSettingsInner({ team }: { team: Team }) {
       </div>
 
       <div className="settings-section">
+        <h2>Estimates</h2>
+        <div className="setting-row">
+          <div className="info">
+            <div className="label">Estimate scale</div>
+            <div className="desc">The point values shown when estimating issues.</div>
+          </div>
+          <select
+            className="input"
+            style={{ width: 150 }}
+            value={team.estimateScale}
+            onChange={(e) => patchTeam({ estimateScale: e.target.value })}
+          >
+            {ESTIMATE_SCALES.map((scale) => (
+              <option key={scale} value={scale}>
+                {scale === 'tshirt' ? 'T-shirt (XS–XL)' : scale[0]!.toUpperCase() + scale.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="settings-section">
         <h2>Cycles</h2>
         <div className="setting-row">
           <div className="info">
@@ -669,6 +696,26 @@ function TeamSettingsInner({ team }: { team: Team }) {
         >
           <PlusIcon size={13} /> Add member
         </button>
+      </div>
+
+      <div className="settings-section">
+        <h2>Templates</h2>
+        <TemplatesSettings team={team} />
+      </div>
+
+      <div className="settings-section">
+        <h2>Triage rules</h2>
+        <TriageRulesSettings team={team} />
+      </div>
+
+      <div className="settings-section">
+        <h2>Intake</h2>
+        <IntakeSettings team={team} />
+      </div>
+
+      <div className="settings-section">
+        <h2>Import & export</h2>
+        <ImportExport team={team} />
       </div>
 
       <div className="settings-section">
@@ -957,6 +1004,10 @@ function ProfileSettings() {
             Save
           </button>
         </div>
+      </div>
+      <div className="settings-section">
+        <h2>Notifications</h2>
+        <NotificationPrefs />
       </div>
     </>
   );

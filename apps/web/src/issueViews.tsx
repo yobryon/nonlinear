@@ -213,6 +213,34 @@ export const useSelection = create<SelectionState>((set, get) => ({
 
 /* ================= issue row ================= */
 
+/** Compact "done/total" badge shown on issues that have sub-issues. */
+function SubIssueRollup({ parentId }: { parentId: string }) {
+  const issues = useStore((s) => s.issues);
+  const children = Object.values(issues).filter((i) => i.parentId === parentId && !i.archivedAt);
+  if (children.length === 0) return null;
+  const done = children.filter((c) => c.completedAt || c.canceledAt).length;
+  return (
+    <span
+      className="chip"
+      title={`${done} of ${children.length} sub-issues done`}
+      style={{ gap: 4 }}
+    >
+      <svg
+        width={11}
+        height={11}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.4}
+        aria-hidden
+      >
+        <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />
+      </svg>
+      {done}/{children.length}
+    </span>
+  );
+}
+
 function LabelDots({ labelIds, labels }: { labelIds: string[]; labels: ById<Label> }) {
   const visible = labelIds.map((id) => labels[id]).filter(Boolean) as Label[];
   if (visible.length === 0) return null;
@@ -305,6 +333,7 @@ export function IssueRow({
         )}
         <span className="title">{issue.title}</span>
         <span className="meta">
+          <SubIssueRollup parentId={issue.id} />
           <LabelDots labelIds={issue.labelIds} labels={labels} />
           {issue.dueDate && (
             <span

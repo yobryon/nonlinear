@@ -149,6 +149,13 @@ export const TeamIcon = (p: IconProps) => (
   </I>
 );
 
+export const ClockIcon = (p: IconProps) => (
+  <I {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </I>
+);
+
 export const BellIcon = (p: IconProps) => (
   <I {...p}>
     <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />

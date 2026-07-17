@@ -26,12 +26,20 @@ services:
       DATABASE_URL: postgres://nonlinear:nonlinear@postgres:5432/nonlinear
       SECURE_COOKIES: 'false'
       BLOB_DIR: /data/blobs
+      APP_URL: http://localhost:8080
+      SMTP_URL: smtp://mailhog:1025
       # GITHUB_WEBHOOK_SECRET: set to enable the GitHub integration
     volumes:
       - blobdata:/data/blobs
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - '8025:8025'
     restart: unless-stopped
 
   web:

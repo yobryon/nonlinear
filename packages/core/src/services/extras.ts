@@ -137,6 +137,19 @@ export class NotificationService {
     await storage.notifications.delete(notificationId);
     await bus.publish([deleted('notification', notificationId)]);
   }
+
+  /** Hide a notification from the inbox until a time (null = unsnooze). */
+  async snooze(userId: string, notificationId: string, snoozedUntil: string | null): Promise<void> {
+    const { storage, bus } = this.ctx;
+    const notification = await storage.notifications.get(notificationId);
+    if (!notification || notification.userId !== userId) throw notFound('Notification');
+    if (snoozedUntil !== null && Number.isNaN(Date.parse(snoozedUntil))) {
+      throw new DomainError('invalid_date', 'Snooze time is not a valid date');
+    }
+    notification.snoozedUntil = snoozedUntil;
+    await storage.notifications.update(notification);
+    await bus.publish([updated('notification', notification)]);
+  }
 }
 
 export class UserService {

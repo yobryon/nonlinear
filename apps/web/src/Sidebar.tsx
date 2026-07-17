@@ -13,6 +13,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CycleIcon,
+  FilterIcon,
   InboxIcon,
   LogoutIcon,
   MoonIcon,
@@ -70,6 +71,44 @@ function DocGlyphSidebar() {
   );
 }
 
+function TimelineGlyphSidebar() {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <path d="M3 6h10M3 12h16M3 18h7" />
+      <circle cx="17" cy="6" r="2" />
+      <circle cx="14" cy="18" r="2" />
+    </svg>
+  );
+}
+
+function ArchiveGlyphSidebar() {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="3" y="4" width="18" height="4" rx="1" />
+      <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" />
+    </svg>
+  );
+}
+
 function InsightsGlyphSidebar() {
   return (
     <svg
@@ -119,6 +158,11 @@ export function Sidebar() {
   }
   const myFavorites = Object.values(favorites)
     .filter((f) => f.userId === userId)
+    .sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1));
+
+  const customViews = useStore((s) => s.customViews);
+  const myViews = Object.values(customViews)
+    .filter((v) => v.shared || v.creatorId === userId)
     .sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1));
 
   const favReorder = useDragReorder(myFavorites, (dragged, insertAt) => {
@@ -264,7 +308,42 @@ export function Sidebar() {
             <DocGlyphSidebar />
             <span className="grow">Documents</span>
           </NavLink>
+          <NavLink
+            to="/timeline"
+            className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+          >
+            <TimelineGlyphSidebar />
+            <span className="grow">Timeline</span>
+          </NavLink>
+          <NavLink
+            to="/customers"
+            className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+          >
+            <TeamIcon size={14} />
+            <span className="grow">Customers</span>
+          </NavLink>
         </div>
+
+        {myViews.length > 0 && (
+          <div className="side-section">
+            <div className="side-section-header">Views</div>
+            {myViews.map((view) => (
+              <NavLink
+                key={view.id}
+                to={`/view/${view.id}`}
+                className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+              >
+                <FilterIcon size={13} />
+                <span className="grow">{view.name}</span>
+                {!view.shared && (
+                  <span className="dim" style={{ fontSize: 10 }}>
+                    private
+                  </span>
+                )}
+              </NavLink>
+            ))}
+          </div>
+        )}
 
         <div className="side-section">
           <div className="side-section-header">
@@ -330,6 +409,13 @@ export function Sidebar() {
                     >
                       <InsightsGlyphSidebar />
                       <span className="grow">Insights</span>
+                    </NavLink>
+                    <NavLink
+                      to={`/team/${team.key}/archive`}
+                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                    >
+                      <ArchiveGlyphSidebar />
+                      <span className="grow">Archive</span>
                     </NavLink>
                     <NavLink
                       to={`/settings/team/${team.key}`}

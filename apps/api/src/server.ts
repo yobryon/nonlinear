@@ -7,6 +7,7 @@ import type { User } from '@nonlinear/shared';
 import type { Config } from './config.js';
 import { SyncHub } from './hub.js';
 import { registerGithubWebhook } from './github.js';
+import { registerIntake } from './intake.js';
 
 const SESSION_COOKIE = 'nl_session';
 
@@ -22,6 +23,7 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   await app.register(websocket);
   await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
   await registerGithubWebhook(app, domain, config.githubWebhookSecret);
+  registerIntake(app, domain);
 
   const hub = new SyncHub(domain);
 
@@ -328,7 +330,8 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   };
   app.post('/api/webhooks', authed, async (req) => {
     requireAdmin(req);
-    return domain.webhooks.create(req.user.id, (req.body as { url: string }).url);
+    const body = req.body as { url: string; format?: 'json' | 'slack' };
+    return domain.webhooks.create(req.user.id, body.url, body.format ?? 'json');
   });
   app.patch('/api/webhooks/:id', authed, async (req) => {
     requireAdmin(req);
@@ -341,6 +344,119 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     requireAdmin(req);
     await domain.webhooks.remove((req.params as { id: string }).id);
     return { ok: true };
+  });
+
+  // ---- custom views ----
+  app.post('/api/views', authed, async (req) =>
+    domain.views.create(req.user.id, req.body as never),
+  );
+  app.patch('/api/views/:id', authed, async (req) =>
+    domain.views.update(req.user.id, (req.params as { id: string }).id, req.body as never),
+  );
+  app.delete('/api/views/:id', authed, async (req) => {
+    await domain.views.remove(req.user.id, (req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- issue templates ----
+  app.post('/api/templates', authed, async (req) => domain.templates.create(req.body as never));
+  app.patch('/api/templates/:id', authed, async (req) =>
+    domain.templates.update((req.params as { id: string }).id, req.body as never),
+  );
+  app.delete('/api/templates/:id', authed, async (req) => {
+    await domain.templates.remove((req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- project updates (health) ----
+  app.post('/api/project-updates', authed, async (req) =>
+    domain.projectUpdates.create(req.user.id, req.body as never),
+  );
+  app.patch('/api/project-updates/:id', authed, async (req) =>
+    domain.projectUpdates.update(req.user.id, (req.params as { id: string }).id, req.body as never),
+  );
+  app.delete('/api/project-updates/:id', authed, async (req) => {
+    await domain.projectUpdates.remove(req.user.id, (req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- reminders & snooze ----
+  app.post('/api/reminders', authed, async (req) =>
+    domain.reminders.set(req.user.id, req.body as never),
+  );
+  app.delete('/api/reminders/:id', authed, async (req) => {
+    await domain.reminders.clear(req.user.id, (req.params as { id: string }).id);
+    return { ok: true };
+  });
+  app.patch('/api/notifications/:id/snooze', authed, async (req) => {
+    await domain.notifications.snooze(
+      req.user.id,
+      (req.params as { id: string }).id,
+      (req.body as { snoozedUntil: string | null }).snoozedUntil,
+    );
+    return { ok: true };
+  });
+
+  // ---- customers & requests ----
+  app.post('/api/customers', authed, async (req) => domain.customers.create(req.body as never));
+  app.patch('/api/customers/:id', authed, async (req) =>
+    domain.customers.update((req.params as { id: string }).id, req.body as never),
+  );
+  app.delete('/api/customers/:id', authed, async (req) => {
+    await domain.customers.remove((req.params as { id: string }).id);
+    return { ok: true };
+  });
+  app.post('/api/customer-requests', authed, async (req) =>
+    domain.customerRequests.create(req.body as never),
+  );
+  app.patch('/api/customer-requests/:id', authed, async (req) =>
+    domain.customerRequests.update((req.params as { id: string }).id, req.body as never),
+  );
+  app.delete('/api/customer-requests/:id', authed, async (req) => {
+    await domain.customerRequests.remove((req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- document comments ----
+  app.post('/api/document-comments', authed, async (req) =>
+    domain.docComments.create(req.user.id, req.body as never),
+  );
+  app.patch('/api/document-comments/:id', authed, async (req) =>
+    domain.docComments.update(req.user.id, (req.params as { id: string }).id, req.body as never),
+  );
+  app.delete('/api/document-comments/:id', authed, async (req) => {
+    await domain.docComments.remove(req.user.id, (req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- triage rules ----
+  app.post('/api/triage-rules', authed, async (req) =>
+    domain.triageRules.create(req.body as never),
+  );
+  app.patch('/api/triage-rules/:id', authed, async (req) =>
+    domain.triageRules.update((req.params as { id: string }).id, req.body as never),
+  );
+  app.delete('/api/triage-rules/:id', authed, async (req) => {
+    await domain.triageRules.remove((req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- CSV import/export ----
+  app.post('/api/teams/:id/import', authed, async (req, reply) => {
+    const file = await req.file();
+    if (!file) {
+      return reply
+        .status(400)
+        .send({ error: { code: 'no_file', message: 'Attach a CSV file as multipart form data' } });
+    }
+    const text = (await file.toBuffer()).toString('utf8');
+    return domain.csv.importIssues(req.user.id, (req.params as { id: string }).id, text);
+  });
+  app.get('/api/teams/:id/export.csv', authed, async (req, reply) => {
+    const csv = await domain.csv.exportIssues((req.params as { id: string }).id);
+    reply.header('Content-Type', 'text/csv; charset=utf-8');
+    reply.header('Content-Disposition', 'attachment; filename="issues.csv"');
+    return reply.send(csv);
   });
 
   // ---- profile, users, workspace ----

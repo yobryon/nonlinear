@@ -20,8 +20,13 @@ import { nowIso } from '../util/time.js';
 import { keyAfterAll } from '../util/fractional.js';
 import { colorFor } from '../util/colors.js';
 
+import type { ProjectUpdateService } from './projectUpdates.js';
+
 export class ProjectService {
-  constructor(private ctx: Ctx) {}
+  constructor(
+    private ctx: Ctx,
+    private cascades?: { projectUpdates?: ProjectUpdateService },
+  ) {}
 
   async create(input: CreateProjectInput): Promise<Project> {
     const { storage, bus } = this.ctx;
@@ -132,6 +137,9 @@ export class ProjectService {
         await storage.documents.update(document);
         deltas.push(updated('document', document));
       }
+    }
+    if (this.cascades?.projectUpdates) {
+      deltas.push(...(await this.cascades.projectUpdates.removeForProject(projectId)));
     }
     await storage.projects.delete(projectId);
     deltas.push(deleted('project', projectId));

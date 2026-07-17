@@ -3,8 +3,13 @@ import { DomainError, created, deleted, notFound, updated, type Ctx } from '../d
 import { newId } from '../util/ids.js';
 import { nowIso } from '../util/time.js';
 
+import type { DocumentCommentService } from './docComments.js';
+
 export class DocumentService {
-  constructor(private ctx: Ctx) {}
+  constructor(
+    private ctx: Ctx,
+    private cascades?: { docComments?: DocumentCommentService },
+  ) {}
 
   async create(creatorId: string, input: CreateDocumentInput): Promise<Document> {
     const { storage, bus } = this.ctx;
@@ -49,7 +54,10 @@ export class DocumentService {
   async remove(documentId: string): Promise<void> {
     const { storage, bus } = this.ctx;
     if (!(await storage.documents.get(documentId))) throw notFound('Document');
+    const deltas = this.cascades?.docComments
+      ? await this.cascades.docComments.removeForDocument(documentId)
+      : [];
     await storage.documents.delete(documentId);
-    await bus.publish([deleted('document', documentId)]);
+    await bus.publish([...deltas, deleted('document', documentId)]);
   }
 }

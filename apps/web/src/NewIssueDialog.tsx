@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Priority } from '@nonlinear/shared';
 import { PRIORITY_LABELS } from '@nonlinear/shared';
 import { create } from 'zustand';
 import { issueKey, sortedStates, useStore } from './store.js';
-import { Modal, toast, anchorFromEvent } from './ui.js';
+import { Modal, Picker, toast, anchorFromEvent } from './ui.js';
 import { PriorityIcon, StateIcon, CloseIcon } from './icons.js';
 import {
   AssigneePicker,
@@ -22,7 +22,14 @@ import { createIssue } from './actions.js';
 /** Global dialog state so any surface (palette, sidebar, shortcut) can open it. */
 interface NewIssueState {
   open: boolean;
-  defaults: { teamId?: string; stateId?: string; projectId?: string; cycleId?: string };
+  defaults: {
+    teamId?: string;
+    stateId?: string;
+    projectId?: string;
+    cycleId?: string;
+    title?: string;
+    description?: string;
+  };
   show: (defaults?: NewIssueState['defaults']) => void;
   hide: () => void;
 }
@@ -48,7 +55,7 @@ function NewIssueDialogInner({
   defaults,
   onClose,
 }: {
-  defaults: { teamId?: string; stateId?: string; projectId?: string; cycleId?: string };
+  defaults: NewIssueState['defaults'];
   onClose: () => void;
 }) {
   const teams = useStore((s) => s.teams);
@@ -61,8 +68,8 @@ function NewIssueDialogInner({
 
   const teamList = Object.values(teams).sort((a, b) => a.name.localeCompare(b.name));
   const [teamId, setTeamId] = useState(defaults.teamId ?? teamList[0]?.id ?? '');
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
+  const [title, setTitle] = useState(defaults.title ?? '');
+  const [description, setDescription] = useState(defaults.description ?? '');
   const [stateId, setStateId] = useState<string | undefined>(defaults.stateId);
   const [priority, setPriorityValue] = useState<Priority>(0);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
@@ -82,10 +89,48 @@ function NewIssueDialogInner({
   const projectPicker = usePicker();
   const cyclePicker = usePicker();
   const estimatePicker = usePicker();
+  const templatePicker = usePicker();
+
+  const allIssues = useStore((s) => s.issues);
+  const templates = useStore((s) => s.issueTemplates);
+  const teamTemplates = Object.values(templates)
+    .filter((t) => t.teamId === teamId)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   useEffect(() => {
     titleRef.current?.focus();
   }, []);
+
+  // Heuristic duplicate detection: existing open issues in the team whose
+  // title shares most significant words with what's being typed.
+  const duplicates = useMemo(() => {
+    const q = title.trim().toLowerCase();
+    if (q.length < 4 || !teamId) return [];
+    const words = new Set(q.split(/\s+/).filter((w) => w.length > 2));
+    if (words.size === 0) return [];
+    return Object.values(allIssues)
+      .filter((i) => i.teamId === teamId && !i.archivedAt)
+      .map((i) => {
+        const titleWords = new Set(i.title.toLowerCase().split(/\s+/));
+        let overlap = 0;
+        for (const w of words) if (titleWords.has(w)) overlap += 1;
+        return { issue: i, score: overlap / words.size };
+      })
+      .filter((x) => x.score >= 0.6)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3)
+      .map((x) => x.issue);
+  }, [title, teamId, allIssues]);
+
+  const applyTemplate = (templateId: string) => {
+    const tpl = templates[templateId];
+    if (!tpl) return;
+    if (tpl.titlePrefix && !title) setTitle(tpl.titlePrefix);
+    if (tpl.description) setDescription(tpl.description);
+    setPriorityValue(tpl.priority);
+    setLabelIds([...tpl.labelIds]);
+    setEstimate(tpl.estimate);
+  };
 
   const team = teams[teamId];
   const teamStates = teamId ? sortedStates(Object.values(states), teamId) : [];
@@ -136,6 +181,15 @@ function NewIssueDialogInner({
         </button>
         <span className="dim">› New issue</span>
         <span className="grow" />
+        {teamTemplates.length > 0 && (
+          <button
+            className="chip"
+            title="Start from a template"
+            onClick={(e) => templatePicker.open(anchorFromEvent(e))}
+          >
+            Template
+          </button>
+        )}
         <button className="icon-btn" onClick={onClose}>
           <CloseIcon size={15} />
         </button>
@@ -159,6 +213,34 @@ function NewIssueDialogInner({
             width: '100%',
           }}
         />
+        {duplicates.length > 0 && (
+          <div
+            style={{
+              border: '1px solid var(--border-strong)',
+              borderRadius: 8,
+              padding: '6px 10px',
+              background: 'var(--bg-raised)',
+            }}
+          >
+            <div className="dim" style={{ fontSize: 11.5, marginBottom: 4 }}>
+              Possible duplicate{duplicates.length > 1 ? 's' : ''}:
+            </div>
+            {duplicates.map((dup) => (
+              <button
+                key={dup.id}
+                className="row"
+                style={{ gap: 6, fontSize: 12.5, width: '100%', padding: '2px 0' }}
+                onClick={() => {
+                  onClose();
+                  navigate(`/issue/${issueKey(dup, teams)}`);
+                }}
+              >
+                <span className="dim">{issueKey(dup, teams)}</span>
+                <span className="truncate">{dup.title}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -316,6 +398,19 @@ function NewIssueDialogInner({
           onClose={estimatePicker.close}
           current={estimate}
           onPick={setEstimate}
+          teamId={teamId}
+        />
+      )}
+      {templatePicker.anchor && (
+        <Picker
+          anchor={templatePicker.anchor}
+          onClose={templatePicker.close}
+          placeholder="Apply template…"
+          items={teamTemplates.map((t) => ({ id: t.id, label: t.name }))}
+          onPick={(id) => {
+            applyTemplate(id);
+            templatePicker.close();
+          }}
         />
       )}
     </Modal>

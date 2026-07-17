@@ -274,7 +274,6 @@ export interface Webhook {
   createdAt: string;
 }
 
-
 /** Saved issue view: a named filter/group/display configuration. */
 export interface ViewFilters {
   priorities: Priority[];

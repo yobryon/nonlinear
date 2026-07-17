@@ -20,6 +20,9 @@ import { nowIso } from '../util/time.js';
 import { keyAfterAll } from '../util/fractional.js';
 import { pushNotification } from './notify.js';
 import type { AttachmentService } from './attachments.js';
+import type { ReminderService } from './reminders.js';
+import type { CustomerRequestService } from './customers.js';
+import { applyTriageRules } from './triageRules.js';
 
 const CATEGORY_DEFAULT_ORDER = ['backlog', 'unstarted', 'triage', 'started'] as const;
 
@@ -27,6 +30,10 @@ export class IssueService {
   constructor(
     private ctx: Ctx,
     private attachments?: AttachmentService,
+    private cascades?: {
+      reminders?: ReminderService;
+      customerRequests?: CustomerRequestService;
+    },
   ) {}
 
   private async defaultState(teamId: string): Promise<WorkflowState> {
@@ -74,10 +81,12 @@ export class IssueService {
     return created('issueActivity', activity);
   }
 
-  async create(actorId: string, input: CreateIssueInput): Promise<Issue> {
+  async create(actorId: string, rawInput: CreateIssueInput): Promise<Issue> {
     const { storage, bus } = this.ctx;
-    const team = await storage.teams.get(input.teamId);
+    const team = await storage.teams.get(rawInput.teamId);
     if (!team) throw notFound('Team');
+    // Automated triage rules fill fields the caller left unset.
+    const input = await applyTriageRules(this.ctx, team.id, rawInput);
     const title = input.title.trim();
     if (!title) throw new DomainError('invalid_title', 'Title is required');
 
@@ -386,6 +395,12 @@ export class IssueService {
     }
     if (this.attachments) {
       deltas.push(...(await this.attachments.removeForIssue(issueId)));
+    }
+    if (this.cascades?.reminders) {
+      deltas.push(...(await this.cascades.reminders.removeForIssue(issueId)));
+    }
+    if (this.cascades?.customerRequests) {
+      deltas.push(...(await this.cascades.customerRequests.detachIssue(issueId)));
     }
     for (const child of await storage.issues.all()) {
       if (child.parentId === issueId) {

@@ -1,20 +1,92 @@
 import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
+import type { Grouping } from '@nonlinear/shared';
+import { api } from '../api.js';
 import { useStore } from '../store.js';
+import { anchorFromEvent, Popover, toast, toastError, type Anchor } from '../ui.js';
 import {
   applyFilters,
   Board,
   EMPTY_FILTERS,
+  filtersActive,
   GroupedIssueList,
   useGroupedIssues,
   ViewControls,
-  type Grouping,
   type IssueFilters,
 } from '../issueViews.js';
-import { BoardIcon, ListIcon } from '../icons.js';
+import { BoardIcon, ListIcon, PlusIcon } from '../icons.js';
 import { openNewIssue } from '../NewIssueDialog.js';
 
 type Tab = 'all' | 'active' | 'backlog';
+
+/** Persist the current filter/group/display config as a named custom view. */
+function SaveViewButton({
+  teamId,
+  filters,
+  grouping,
+  display,
+}: {
+  teamId: string;
+  filters: IssueFilters;
+  grouping: Grouping;
+  display: 'list' | 'board';
+}) {
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const [name, setName] = useState('');
+  const [shared, setShared] = useState(true);
+  const navigate = useNavigate();
+
+  const save = () => {
+    if (!name.trim()) return;
+    void api
+      .createView({ name, shared, teamId, filters, grouping, display })
+      .then((view) => {
+        useStore.getState().putEntity('customView', view);
+        toast(`View “${view.name}” saved`, 'success');
+        setAnchor(null);
+        navigate(`/view/${view.id}`);
+      })
+      .catch(toastError);
+  };
+
+  return (
+    <>
+      <button className="filter-pill" onClick={(e) => setAnchor(anchorFromEvent(e))}>
+        <PlusIcon size={12} /> Save view
+      </button>
+      {anchor && (
+        <Popover anchor={anchor} onClose={() => setAnchor(null)} width={250}>
+          <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              className="input"
+              autoFocus
+              placeholder="View name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') save();
+              }}
+            />
+            <label
+              className="row"
+              style={{ gap: 6, fontSize: 12, color: 'var(--text-3)', cursor: 'pointer' }}
+            >
+              <input
+                type="checkbox"
+                checked={shared}
+                onChange={(e) => setShared(e.target.checked)}
+              />
+              Share with the workspace
+            </label>
+            <button className="btn primary" disabled={!name.trim()} onClick={save}>
+              Save view
+            </button>
+          </div>
+        </Popover>
+      )}
+    </>
+  );
+}
 
 export function TeamIssuesPage() {
   const { teamKey } = useParams<{ teamKey: string }>();
@@ -121,6 +193,16 @@ export function TeamIssuesPage() {
         grouping={display === 'list' ? grouping : undefined}
         onGrouping={display === 'list' ? setGrouping : undefined}
         teamId={team.id}
+        extra={
+          filtersActive(filters) ? (
+            <SaveViewButton
+              teamId={team.id}
+              filters={filters}
+              grouping={grouping}
+              display={display}
+            />
+          ) : undefined
+        }
       />
       <div className="content">
         {display === 'list' ? (

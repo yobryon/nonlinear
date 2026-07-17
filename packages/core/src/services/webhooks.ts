@@ -9,7 +9,11 @@ const FORWARDED_MODELS = new Set(['issue', 'comment', 'project']);
 export class WebhookService {
   constructor(private ctx: Ctx) {}
 
-  async create(creatorId: string, url: string, format: 'json' | 'slack' = 'json'): Promise<Webhook> {
+  async create(
+    creatorId: string,
+    url: string,
+    format: 'json' | 'slack' = 'json',
+  ): Promise<Webhook> {
     const { storage, bus } = this.ctx;
     let parsed: URL;
     try {

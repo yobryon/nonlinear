@@ -3,7 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import type { Project, ProjectStatus } from '@nonlinear/shared';
 import { PROJECT_STATUSES } from '@nonlinear/shared';
 import { api } from '../api.js';
-import { formatDate, useStore } from '../store.js';
+import { formatDate, relativeTime, useStore } from '../store.js';
 import {
   anchorFromEvent,
   Avatar,
@@ -46,6 +46,168 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
   completed: 'Completed',
   canceled: 'Canceled',
 };
+
+const HEALTH_META: Record<string, { label: string; color: string }> = {
+  on_track: { label: 'On track', color: 'var(--success)' },
+  at_risk: { label: 'At risk', color: 'var(--warning)' },
+  off_track: { label: 'Off track', color: 'var(--danger)' },
+};
+
+/** Latest health from a project's update feed, or null. */
+export function latestHealth(projectId: string): 'on_track' | 'at_risk' | 'off_track' | null {
+  const updates = Object.values(useStore.getState().projectUpdates)
+    .filter((u) => u.projectId === projectId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return updates[0]?.health ?? null;
+}
+
+function HealthChip({ projectId }: { projectId: string }) {
+  const projectUpdates = useStore((s) => s.projectUpdates);
+  const latest = Object.values(projectUpdates)
+    .filter((u) => u.projectId === projectId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+  if (!latest) return null;
+  const meta = HEALTH_META[latest.health]!;
+  return (
+    <span className="status-chip" title={`Health: ${meta.label}`} style={{ color: meta.color }}>
+      <span
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: 4,
+          background: meta.color,
+          display: 'inline-block',
+        }}
+      />
+      {meta.label}
+    </span>
+  );
+}
+
+/** Post project health updates and show the update feed. */
+function ProjectUpdatesSection({ projectId }: { projectId: string }) {
+  const projectUpdates = useStore((s) => s.projectUpdates);
+  const users = useStore((s) => s.users);
+  const userId = useStore((s) => s.userId);
+  const [health, setHealth] = useState<'on_track' | 'at_risk' | 'off_track'>('on_track');
+  const [body, setBody] = useState('');
+  const [expanded, setExpanded] = useState(false);
+
+  const updates = Object.values(projectUpdates)
+    .filter((u) => u.projectId === projectId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const post = () => {
+    void api
+      .createProjectUpdate({ projectId, health, body })
+      .then((u) => {
+        useStore.getState().putEntity('projectUpdate', u);
+        setBody('');
+        setExpanded(false);
+      })
+      .catch(toastError);
+  };
+
+  return (
+    <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)' }}>
+      {!expanded ? (
+        <button className="btn ghost" style={{ marginLeft: -8 }} onClick={() => setExpanded(true)}>
+          <PlusIcon size={13} /> Post project update
+        </button>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 640 }}>
+          <div className="row" style={{ gap: 6 }}>
+            {(['on_track', 'at_risk', 'off_track'] as const).map((h) => (
+              <button
+                key={h}
+                className="chip"
+                style={
+                  health === h
+                    ? { color: HEALTH_META[h]!.color, borderColor: HEALTH_META[h]!.color }
+                    : undefined
+                }
+                onClick={() => setHealth(h)}
+              >
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: 4,
+                    background: HEALTH_META[h]!.color,
+                    display: 'inline-block',
+                  }}
+                />
+                {HEALTH_META[h]!.label}
+              </button>
+            ))}
+          </div>
+          <textarea
+            className="input"
+            rows={3}
+            placeholder="What changed since the last update?"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+          />
+          <div className="row" style={{ justifyContent: 'flex-end', gap: 6 }}>
+            <button className="btn ghost" onClick={() => setExpanded(false)}>
+              Cancel
+            </button>
+            <button className="btn primary" onClick={post}>
+              Post update
+            </button>
+          </div>
+        </div>
+      )}
+      {updates.length > 0 && (
+        <div
+          style={{
+            marginTop: expanded ? 12 : 8,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          {updates.slice(0, 5).map((u) => {
+            const author = users[u.authorId];
+            const meta = HEALTH_META[u.health]!;
+            return (
+              <div key={u.id} className="row" style={{ alignItems: 'flex-start', gap: 8 }}>
+                <Avatar user={author} size={20} />
+                <div className="grow">
+                  <div className="row" style={{ gap: 6, fontSize: 12.5 }}>
+                    <span style={{ fontWeight: 600 }}>{author?.name ?? 'Someone'}</span>
+                    <span style={{ color: meta.color }}>{meta.label}</span>
+                    <span className="dim">{relativeTime(u.createdAt)} ago</span>
+                    {userId === u.authorId && (
+                      <button
+                        className="icon-btn"
+                        style={{ width: 18, height: 18 }}
+                        title="Delete update"
+                        onClick={() => {
+                          void api
+                            .deleteProjectUpdate(u.id)
+                            .then(() => {
+                              const next = { ...useStore.getState().projectUpdates };
+                              delete next[u.id];
+                              useStore.setState({ projectUpdates: next });
+                            })
+                            .catch(toastError);
+                        }}
+                      >
+                        <TrashIcon size={11} />
+                      </button>
+                    )}
+                  </div>
+                  {u.body && <Markdown source={u.body} />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function projectProgress(projectId: string): { done: number; total: number } {
   const { issues, workflowStates } = useStore.getState();
@@ -117,6 +279,7 @@ export function ProjectsPage() {
               <ProjectStatusIcon status={project.status} />
               <span className="name">{project.name}</span>
               <span className="status-chip muted">{STATUS_LABELS[project.status]}</span>
+              <HealthChip projectId={project.id} />
               <span className="grow" />
               <div className="progress-bar">
                 <div style={{ width: `${pct}%` }} />
@@ -326,10 +489,13 @@ function ProjectDetail({ project }: { project: Project }) {
         >
           <StarIcon size={15} filled={isFavorite} />
         </button>
+        <HealthChip projectId={project.id} />
         <button className="icon-btn" onClick={(e) => setMenuAnchor(anchorFromEvent(e))}>
           <DotsIcon size={15} />
         </button>
       </div>
+
+      <ProjectUpdatesSection projectId={project.id} />
 
       {(project.description || projectMilestones.length > 0) && (
         <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>

@@ -21,6 +21,14 @@ export * from './services/initiatives.js';
 export * from './services/documents.js';
 export * from './services/webhooks.js';
 export * from './services/duesoon.js';
+export * from './services/views.js';
+export * from './services/templates.js';
+export * from './services/projectUpdates.js';
+export * from './services/reminders.js';
+export * from './services/customers.js';
+export * from './services/docComments.js';
+export * from './services/triageRules.js';
+export * from './services/importer.js';
 
 import type { Storage } from './storage.js';
 import { SyncBus, type Ctx } from './domain.js';
@@ -30,6 +38,14 @@ import { InitiativeService } from './services/initiatives.js';
 import { DocumentService } from './services/documents.js';
 import { WebhookService } from './services/webhooks.js';
 import { DueSoonService } from './services/duesoon.js';
+import { CustomViewService } from './services/views.js';
+import { IssueTemplateService } from './services/templates.js';
+import { ProjectUpdateService } from './services/projectUpdates.js';
+import { ReminderService } from './services/reminders.js';
+import { CustomerRequestService, CustomerService } from './services/customers.js';
+import { DocumentCommentService } from './services/docComments.js';
+import { TriageRuleService } from './services/triageRules.js';
+import { CsvService } from './services/importer.js';
 import { AuthService } from './services/auth.js';
 import { TeamService } from './services/teams.js';
 import { IssueService } from './services/issues.js';
@@ -66,6 +82,15 @@ export interface Domain {
   documents: DocumentService;
   webhooks: WebhookService;
   dueSoon: DueSoonService;
+  views: CustomViewService;
+  templates: IssueTemplateService;
+  projectUpdates: ProjectUpdateService;
+  reminders: ReminderService;
+  customers: CustomerService;
+  customerRequests: CustomerRequestService;
+  docComments: DocumentCommentService;
+  triageRules: TriageRuleService;
+  csv: CsvService;
 }
 
 export interface DomainOptions {
@@ -78,14 +103,19 @@ export function createDomain(storage: Storage, options: DomainOptions = {}): Dom
   const ctx: Ctx = { storage, bus };
   const blobs = options.blobs ?? createMemoryBlobStore();
   const attachments = new AttachmentService(ctx, blobs);
+  const projectUpdates = new ProjectUpdateService(ctx);
+  const reminders = new ReminderService(ctx);
+  const customerRequests = new CustomerRequestService(ctx);
+  const docComments = new DocumentCommentService(ctx);
+  const issues = new IssueService(ctx, attachments, { reminders, customerRequests });
   return {
     ctx,
     bus,
     auth: new AuthService(ctx),
     teams: new TeamService(ctx),
-    issues: new IssueService(ctx, attachments),
+    issues,
     comments: new CommentService(ctx),
-    projects: new ProjectService(ctx),
+    projects: new ProjectService(ctx, { projectUpdates }),
     cycles: new CycleService(ctx),
     labels: new LabelService(ctx),
     relations: new RelationService(ctx),
@@ -95,8 +125,17 @@ export function createDomain(storage: Storage, options: DomainOptions = {}): Dom
     bootstrap: new BootstrapService(ctx),
     attachments,
     initiatives: new InitiativeService(ctx),
-    documents: new DocumentService(ctx),
+    documents: new DocumentService(ctx, { docComments }),
     webhooks: new WebhookService(ctx),
     dueSoon: new DueSoonService(ctx),
+    views: new CustomViewService(ctx),
+    templates: new IssueTemplateService(ctx),
+    projectUpdates,
+    reminders,
+    customers: new CustomerService(ctx),
+    customerRequests,
+    docComments,
+    triageRules: new TriageRuleService(ctx),
+    csv: new CsvService(ctx, issues),
   };
 }

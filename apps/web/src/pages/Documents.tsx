@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Document } from '@nonlinear/shared';
 import { api } from '../api.js';
@@ -6,6 +6,7 @@ import { relativeTime, useStore } from '../store.js';
 import { Avatar, anchorFromEvent, Popover, toastError, type Anchor } from '../ui.js';
 import { DotsIcon, PencilIcon, PlusIcon, ProjectIcon, TrashIcon } from '../icons.js';
 import { Markdown } from '../markdown.js';
+import { DocumentCommentsPanel, getSelectionInElement } from '../components/DocumentComments.js';
 
 function DocGlyph({ size = 15 }: { size?: number }) {
   return (
@@ -131,6 +132,8 @@ function DocumentEditor({ doc }: { doc: Document }) {
   const [editing, setEditing] = useState(doc.content === '');
   const [menuAnchor, setMenuAnchor] = useState<Anchor | null>(null);
   const [projectAnchor, setProjectAnchor] = useState<Anchor | null>(null);
+  const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const project = doc.projectId ? projects[doc.projectId] : null;
 
   useEffect(() => {
@@ -170,68 +173,85 @@ function DocumentEditor({ doc }: { doc: Document }) {
         </button>
       </div>
 
-      <div className="content">
-        <div style={{ maxWidth: 760, margin: '0 auto', padding: '28px 40px 80px' }}>
-          <input
-            className="detail-title"
-            style={{ marginBottom: 14 }}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={() => {
-              if (title.trim() && title !== doc.title) save({ title });
-              else setTitle(doc.title);
-            }}
-          />
-          {editing ? (
-            <>
-              <textarea
-                className="input"
-                autoFocus
-                rows={Math.max(16, content.split('\n').length + 2)}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    save({ content });
-                    setEditing(false);
-                  }
-                }}
-                placeholder="Write in markdown…"
-              />
-              <div className="row" style={{ justifyContent: 'flex-end', marginTop: 10, gap: 6 }}>
-                <button
-                  className="btn ghost"
-                  onClick={() => {
-                    setContent(doc.content);
-                    setEditing(false);
+      <div className="detail">
+        <div
+          className="detail-main"
+          ref={contentRef}
+          onMouseUp={() => {
+            if (editing || !contentRef.current) return;
+            const sel = getSelectionInElement(contentRef.current);
+            if (sel) setPendingAnchor(sel);
+          }}
+        >
+          <div className="container">
+            <input
+              className="detail-title"
+              style={{ marginBottom: 14 }}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={() => {
+                if (title.trim() && title !== doc.title) save({ title });
+                else setTitle(doc.title);
+              }}
+            />
+            {editing ? (
+              <>
+                <textarea
+                  className="input"
+                  autoFocus
+                  rows={Math.max(16, content.split('\n').length + 2)}
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      save({ content });
+                      setEditing(false);
+                    }
                   }}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="btn primary"
-                  onClick={() => {
-                    save({ content });
-                    setEditing(false);
-                  }}
-                >
-                  Save
-                </button>
+                  placeholder="Write in markdown…"
+                />
+                <div className="row" style={{ justifyContent: 'flex-end', marginTop: 10, gap: 6 }}>
+                  <button
+                    className="btn ghost"
+                    onClick={() => {
+                      setContent(doc.content);
+                      setEditing(false);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn primary"
+                    onClick={() => {
+                      save({ content });
+                      setEditing(false);
+                    }}
+                  >
+                    Save
+                  </button>
+                </div>
+              </>
+            ) : doc.content.trim() ? (
+              <div onDoubleClick={() => setEditing(true)} style={{ cursor: 'text' }}>
+                <Markdown source={doc.content} />
               </div>
-            </>
-          ) : doc.content.trim() ? (
-            <div onDoubleClick={() => setEditing(true)} style={{ cursor: 'text' }}>
-              <Markdown source={doc.content} />
-            </div>
-          ) : (
-            <button
-              className="btn ghost"
-              style={{ color: 'var(--text-4)' }}
-              onClick={() => setEditing(true)}
-            >
-              Start writing…
-            </button>
-          )}
+            ) : (
+              <button
+                className="btn ghost"
+                style={{ color: 'var(--text-4)' }}
+                onClick={() => setEditing(true)}
+              >
+                Start writing…
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="detail-side">
+          <DocumentCommentsPanel
+            documentId={doc.id}
+            pendingAnchor={pendingAnchor}
+            onAnchorConsumed={() => setPendingAnchor(null)}
+          />
         </div>
       </div>
 

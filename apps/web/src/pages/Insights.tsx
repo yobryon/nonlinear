@@ -4,6 +4,7 @@ import type { Issue, WorkflowState } from '@nonlinear/shared';
 import { PRIORITY_LABELS, type Priority } from '@nonlinear/shared';
 import { sortedStates, useStore } from '../store.js';
 import { PriorityIcon, StateIcon } from '../icons.js';
+import { VelocityChart } from '../components/VelocityChart.js';
 
 /** Series colors validated (light+dark) with the dataviz palette checker. */
 const SERIES = {
@@ -368,6 +369,9 @@ export function InsightsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 720 }}>
           <Section title={`Throughput — last ${WEEKS} weeks`}>
             <ThroughputChart buckets={buckets} />
+          </Section>
+          <Section title="Velocity — points completed per week">
+            <VelocityChart teamId={team.id} />
           </Section>
           <Section title="Issues by status">
             <DistributionBars rows={stateRows} />

@@ -12,6 +12,7 @@ import {
   type IssueFilters,
 } from '../issueViews.js';
 import { toggleFavorite } from '../actions.js';
+import { BurnupChart } from '../components/BurnupChart.js';
 
 function cyclePhase(cycle: Cycle): 'past' | 'active' | 'upcoming' {
   const now = new Date().toISOString();
@@ -173,6 +174,19 @@ export function CycleDetailPage() {
       </div>
       <ViewControls filters={filters} onFilters={setFilters} teamId={team.id} />
       <div className="content">
+        <div
+          style={{
+            margin: '14px 20px',
+            padding: '14px 16px',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            background: 'var(--bg-surface)',
+            maxWidth: 720,
+          }}
+        >
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Burn-up</div>
+          <BurnupChart cycleId={cycle.id} />
+        </div>
         <GroupedIssueList groups={grouped} grouping="state" />
       </div>
     </>

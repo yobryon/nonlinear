@@ -8,6 +8,7 @@ import {
 import { createPostgresStorage } from '@nonlinear/storage-postgres';
 import { loadConfig } from './config.js';
 import { buildServer } from './server.js';
+import { createDigestSender } from './digest.js';
 
 const DUE_SOON_INTERVAL_MS = 10 * 60 * 1000;
 
@@ -25,13 +26,31 @@ async function main(): Promise<void> {
   const app = await buildServer(domain, config);
 
   const stopWebhooks = domain.webhooks.startDispatcher((msg) => app.log.warn(msg));
-  const dueSoonTimer = setInterval(() => {
+  const scan = () => {
     void domain.dueSoon.scan().catch((err) => app.log.error(err, 'due-soon scan failed'));
-  }, DUE_SOON_INTERVAL_MS);
-  void domain.dueSoon.scan().catch(() => {});
+    void domain.reminders.scan().catch((err) => app.log.error(err, 'reminder scan failed'));
+  };
+  const dueSoonTimer = setInterval(scan, DUE_SOON_INTERVAL_MS);
+  scan();
+
+  let digestTimer: ReturnType<typeof setInterval> | null = null;
+  if (config.smtpUrl) {
+    const sendDigests = createDigestSender(domain, config.smtpUrl, config.smtpFrom, config.appUrl);
+    const runDigests = () => {
+      void sendDigests()
+        .then((n) => {
+          if (n > 0) app.log.info(`sent ${n} digest email(s)`);
+        })
+        .catch((err) => app.log.error(err, 'digest send failed'));
+    };
+    digestTimer = setInterval(runDigests, 60 * 60 * 1000);
+    setTimeout(runDigests, 30_000);
+    app.log.info('email digests enabled');
+  }
 
   const shutdown = async (): Promise<void> => {
     clearInterval(dueSoonTimer);
+    if (digestTimer) clearInterval(digestTimer);
     stopWebhooks();
     await app.close();
     await storage.close();
