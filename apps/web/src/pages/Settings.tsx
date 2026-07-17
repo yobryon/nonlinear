@@ -576,34 +576,28 @@ function TeamSettingsInner({ team }: { team: Team }) {
 
       <div className="settings-section">
         <h2>Workflow states</h2>
-        {teamStates.map((state, index) => {
-          const props = stateReorder.rowProps(state, index);
-          return (
-            <div
-              key={state.id}
-              className={`${stateReorder.insertBefore === index ? 'reorder-before' : ''} ${
-                stateReorder.dragId === state.id ? 'reorder-dragging' : ''
-              }`.trim()}
-              onDragOver={props.onDragOver}
-              onDrop={props.onDrop}
-            >
-              <WorkflowStateRow
-                state={state}
-                dragHandle={
-                  <span
-                    className="drag-handle"
-                    title="Drag to reorder"
-                    draggable
-                    onDragStart={props.onDragStart}
-                    onDragEnd={props.onDragEnd}
-                  >
-                    ⋮⋮
-                  </span>
-                }
-              />
-            </div>
-          );
-        })}
+        {teamStates.map((state, index) => (
+          <div
+            key={state.id}
+            className={`${stateReorder.insertBefore === index ? 'reorder-before' : ''} ${
+              stateReorder.dragId === state.id ? 'reorder-dragging' : ''
+            }`.trim()}
+            {...stateReorder.itemProps(index)}
+          >
+            <WorkflowStateRow
+              state={state}
+              dragHandle={
+                <span
+                  className="drag-handle"
+                  title="Drag to reorder"
+                  {...stateReorder.dragProps(state, state.name)}
+                >
+                  ⋮⋮
+                </span>
+              }
+            />
+          </div>
+        ))}
         <div className="row" style={{ gap: 8, marginTop: 10, maxWidth: 480 }}>
           <input
             className="input"

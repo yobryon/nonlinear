@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { create } from 'zustand';
+import { beginPointerDrag } from './dragdrop.js';
 import type { Issue, Label, Priority, User, WorkflowState } from '@nonlinear/shared';
 import { PRIORITY_LABELS, keyBetween } from '@nonlinear/shared';
 import { issueKey, formatDate, relativeTime, sortedStates, useStore, type ById } from './store.js';
@@ -231,14 +232,12 @@ function LabelDots({ labelIds, labels }: { labelIds: string[]; labels: ById<Labe
 export function IssueRow({
   issue,
   showState = true,
-  onRowDragStart,
-  onRowDragEnd,
+  onRowPointerDown,
   isDragging = false,
 }: {
   issue: Issue;
   showState?: boolean;
-  onRowDragStart?: (issue: Issue) => void;
-  onRowDragEnd?: () => void;
+  onRowPointerDown?: (e: React.PointerEvent, issue: Issue) => void;
   isDragging?: boolean;
 }) {
   const teams = useStore((s) => s.teams);
@@ -261,16 +260,7 @@ export function IssueRow({
     <>
       <div
         className={`issue-row${selected ? ' selected' : ''}${isDragging ? ' dragging' : ''}`}
-        draggable={onRowDragStart !== undefined}
-        onDragStart={(e) => {
-          if (!onRowDragStart) return;
-          e.dataTransfer.effectAllowed = 'move';
-          e.dataTransfer.setData('text/plain', issue.id);
-          // Defer state past this tick: mutating the DOM during dragstart
-          // makes Chrome abort the native drag.
-          setTimeout(() => onRowDragStart(issue), 0);
-        }}
-        onDragEnd={onRowDragEnd}
+        onPointerDown={onRowPointerDown ? (e) => onRowPointerDown(e, issue) : undefined}
         onClick={(e) => {
           if (e.metaKey || e.ctrlKey) {
             useSelection.getState().toggle(issue.id);
@@ -528,24 +518,11 @@ export function GroupedIssueList({
   showState?: boolean;
   onQuickAdd?: (group: IssueGroup) => void;
 }) {
+  const teams = useStore((s) => s.teams);
   const [dragIssue, setDragIssue] = useState<Issue | null>(null);
   const [overGroup, setOverGroup] = useState<string | null>(null);
-
-  // Safety net: if the drag ends anywhere (drop outside, Esc, abort), never
-  // strand the dragging state or the hint bar.
-  useEffect(() => {
-    if (!dragIssue) return;
-    const clear = () => {
-      setDragIssue(null);
-      setOverGroup(null);
-    };
-    window.addEventListener('dragend', clear);
-    window.addEventListener('drop', clear);
-    return () => {
-      window.removeEventListener('dragend', clear);
-      window.removeEventListener('drop', clear);
-    };
-  }, [dragIssue]);
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
 
   const flatIds = groups.flatMap((g) => g.issues.map((i) => i.id));
   const orderKey = flatIds.join(',');
@@ -569,16 +546,33 @@ export function GroupedIssueList({
   const droppable = (group: IssueGroup): boolean =>
     grouping !== undefined && dragIssue !== null && groupPatch(grouping, group) !== null;
 
-  const drop = (group: IssueGroup) => {
-    if (!grouping || !dragIssue) return;
-    const patch = groupPatch(grouping, group);
-    if (!patch) return;
-    // Dragging a selected row moves the whole selection.
-    const selection = useSelection.getState().ids;
-    const targets = selection.has(dragIssue.id) ? [...selection] : [dragIssue.id];
-    for (const id of targets) void patchIssue(id, patch);
-    setDragIssue(null);
-    setOverGroup(null);
+  const groupKeyAt = (target: Element | null): string | null =>
+    (target?.closest('[data-group-key]') as HTMLElement | null)?.dataset.groupKey ?? null;
+
+  const startRowDrag = (e: React.PointerEvent, issue: Issue) => {
+    if (!grouping) return;
+    if ((e.target as HTMLElement).closest('button, a, input')) return;
+    beginPointerDrag({
+      event: e,
+      ghostText: `${issueKey(issue, teams)}  ${issue.title}`,
+      onActivate: () => setDragIssue(issue),
+      onHover: (target) => setOverGroup(groupKeyAt(target)),
+      onDrop: (target) => {
+        const key = groupKeyAt(target);
+        const group = groupsRef.current.find((g) => g.key === key);
+        if (!group) return;
+        const patch = groupPatch(grouping, group);
+        if (!patch) return;
+        // Dragging a selected row moves the whole selection.
+        const selection = useSelection.getState().ids;
+        const targets = selection.has(issue.id) ? [...selection] : [issue.id];
+        for (const id of targets) void patchIssue(id, patch);
+      },
+      onEnd: () => {
+        setDragIssue(null);
+        setOverGroup(null);
+      },
+    });
   };
 
   const hoveredGroup = groups.find((g) => g.key === overGroup);
@@ -590,19 +584,7 @@ export function GroupedIssueList({
           {group.issues.length > 0 && (
             <div
               className={`drop-group${overGroup === group.key && droppable(group) ? ' drag-over' : ''}`}
-              onDragOver={(e) => {
-                if (!droppable(group)) return;
-                e.preventDefault();
-                if (overGroup !== group.key) setOverGroup(group.key);
-              }}
-              onDragLeave={(e) => {
-                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-                if (overGroup === group.key) setOverGroup(null);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                drop(group);
-              }}
+              data-group-key={group.key}
             >
               <div className="group-header">
                 {group.icon}
@@ -620,15 +602,7 @@ export function GroupedIssueList({
                   issue={issue}
                   showState={showState}
                   isDragging={dragIssue?.id === issue.id}
-                  onRowDragStart={grouping ? setDragIssue : undefined}
-                  onRowDragEnd={
-                    grouping
-                      ? () => {
-                          setDragIssue(null);
-                          setOverGroup(null);
-                        }
-                      : undefined
-                  }
+                  onRowPointerDown={grouping ? startRowDrag : undefined}
                 />
               ))}
             </div>
@@ -785,35 +759,57 @@ export function Board({
   const [dragId, setDragId] = useState<string | null>(null);
   const [over, setOver] = useState<{ group: string; index: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ issue: Issue; anchor: Anchor } | null>(null);
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
 
-  useEffect(() => {
-    if (!dragId) return;
-    const clear = () => {
-      setDragId(null);
-      setOver(null);
-    };
-    window.addEventListener('dragend', clear);
-    return () => window.removeEventListener('dragend', clear);
-  }, [dragId]);
-
-  const drop = (group: IssueGroup, index: number) => {
-    if (!dragId) return;
-    const issue = useStore.getState().issues[dragId];
-    if (!issue || !group.stateId) return;
-    const cards = group.issues.filter((i) => i.id !== dragId);
-    const before = cards[index - 1]?.sortOrder ?? null;
-    const after = cards[index]?.sortOrder ?? null;
-    let sortOrder: string;
-    try {
-      sortOrder = keyBetween(before, after);
-    } catch {
-      sortOrder = issue.sortOrder;
+  /** Column + insertion index under the cursor. */
+  const hitTest = (target: Element | null, e: PointerEvent) => {
+    const card = target?.closest('[data-card-group]') as HTMLElement | null;
+    if (card) {
+      const rect = card.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      const index = Number(card.dataset.cardIndex);
+      return { group: card.dataset.cardGroup!, index: before ? index : index + 1 };
     }
-    const patch: Record<string, unknown> = { sortOrder };
-    if (issue.stateId !== group.stateId) patch.stateId = group.stateId;
-    void patchIssue(dragId, patch);
-    setDragId(null);
-    setOver(null);
+    const col = target?.closest('[data-board-group]') as HTMLElement | null;
+    if (col) {
+      const key = col.dataset.boardGroup!;
+      const group = groupsRef.current.find((g) => g.key === key);
+      return { group: key, index: group?.issues.length ?? 0 };
+    }
+    return null;
+  };
+
+  const startCardDrag = (e: React.PointerEvent, issue: Issue) => {
+    if ((e.target as HTMLElement).closest('button, a, input')) return;
+    beginPointerDrag({
+      event: e,
+      ghostText: `${issueKey(issue, teams)}  ${issue.title}`,
+      onActivate: () => setDragId(issue.id),
+      onHover: (target, ev) => setOver(hitTest(target, ev)),
+      onDrop: (target, ev) => {
+        const hit = hitTest(target, ev);
+        if (!hit) return;
+        const group = groupsRef.current.find((g) => g.key === hit.group);
+        if (!group?.stateId) return;
+        const cards = group.issues.filter((i) => i.id !== issue.id);
+        const before = cards[hit.index - 1]?.sortOrder ?? null;
+        const after = cards[hit.index]?.sortOrder ?? null;
+        let sortOrder: string;
+        try {
+          sortOrder = keyBetween(before, after);
+        } catch {
+          sortOrder = issue.sortOrder;
+        }
+        const patch: Record<string, unknown> = { sortOrder };
+        if (issue.stateId !== group.stateId) patch.stateId = group.stateId;
+        void patchIssue(issue.id, patch);
+      },
+      onEnd: () => {
+        setDragId(null);
+        setOver(null);
+      },
+    });
   };
 
   return (
@@ -822,18 +818,7 @@ export function Board({
         <div
           key={group.key}
           className={`board-col${over?.group === group.key ? ' drag-over' : ''}`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            if (over?.group !== group.key)
-              setOver({ group: group.key, index: group.issues.length });
-          }}
-          onDragLeave={(e) => {
-            if (e.currentTarget === e.target) setOver(null);
-          }}
-          onDrop={(e) => {
-            e.preventDefault();
-            drop(group, over?.group === group.key ? over.index : group.issues.length);
-          }}
+          data-board-group={group.key}
         >
           <div className="board-col-header">
             {group.icon}
@@ -857,29 +842,9 @@ export function Board({
                   />
                   <div
                     className={`board-card${dragId === issue.id ? ' dragging' : ''}`}
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.effectAllowed = 'move';
-                      e.dataTransfer.setData('text/plain', issue.id);
-                      // Defer: DOM changes during dragstart abort Chrome's drag.
-                      setTimeout(() => setDragId(issue.id), 0);
-                    }}
-                    onDragEnd={() => {
-                      setDragId(null);
-                      setOver(null);
-                    }}
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      const before = e.clientY < rect.top + rect.height / 2;
-                      setOver({ group: group.key, index: before ? index : index + 1 });
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      drop(group, over?.group === group.key ? over.index : index);
-                    }}
+                    data-card-group={group.key}
+                    data-card-index={index}
+                    onPointerDown={(e) => startCardDrag(e, issue)}
                     onClick={() => navigate(`/issue/${issueKey(issue, teams)}`)}
                     onContextMenu={(e) => {
                       e.preventDefault();

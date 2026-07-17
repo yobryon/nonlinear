@@ -174,13 +174,16 @@ export function Sidebar() {
             <div className="side-section-header">Favorites</div>
             {myFavorites.map((fav, index) => {
               let node = null;
+              let label = '';
               if (fav.type === 'issue') {
                 const issue = issues[fav.targetId];
                 if (issue) {
                   const key = issueKey(issue, teams);
+                  label = `${key} ${issue.title}`;
                   node = (
                     <NavLink
                       to={`/issue/${key}`}
+                      draggable={false}
                       className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
                     >
                       <StarIcon size={13} filled style={{ color: 'var(--warning)' }} />
@@ -193,9 +196,11 @@ export function Sidebar() {
               } else if (fav.type === 'project') {
                 const project = projects[fav.targetId];
                 if (project) {
+                  label = project.name;
                   node = (
                     <NavLink
                       to={`/project/${project.id}`}
+                      draggable={false}
                       className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
                     >
                       <ProjectIcon size={13} />
@@ -206,9 +211,11 @@ export function Sidebar() {
               } else if (fav.type === 'cycle') {
                 const cycle = cycles[fav.targetId];
                 if (cycle) {
+                  label = cycle.name || `Cycle ${cycle.number}`;
                   node = (
                     <NavLink
                       to={`/cycle/${cycle.id}`}
+                      draggable={false}
                       className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
                     >
                       <CycleIcon size={13} />
@@ -224,7 +231,8 @@ export function Sidebar() {
                   className={`${favReorder.insertBefore === index ? 'reorder-before' : ''} ${
                     favReorder.dragId === fav.id ? 'reorder-dragging' : ''
                   }`.trim()}
-                  {...favReorder.rowProps(fav, index)}
+                  {...favReorder.itemProps(index)}
+                  {...favReorder.dragProps(fav, label)}
                 >
                   {node}
                 </div>

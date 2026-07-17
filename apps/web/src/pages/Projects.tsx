@@ -346,7 +346,8 @@ function ProjectDetail({ project }: { project: Project }) {
                       milestoneReorder.dragId === m.id ? 'reorder-dragging' : ''
                     }`.trim()}
                     style={{ padding: '3px 0', gap: 8, cursor: 'grab' }}
-                    {...milestoneReorder.rowProps(m, index)}
+                    {...milestoneReorder.itemProps(index)}
+                    {...milestoneReorder.dragProps(m, m.name)}
                   >
                     <ProjectIcon size={13} />
                     <span style={{ fontWeight: 500 }}>{m.name}</span>
