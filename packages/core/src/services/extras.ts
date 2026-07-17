@@ -89,6 +89,19 @@ export class FavoriteService {
     await storage.favorites.delete(favoriteId);
     await bus.publish([deleted('favorite', favoriteId)]);
   }
+
+  async reorder(userId: string, favoriteId: string, sortOrder: string): Promise<Favorite> {
+    const { storage, bus } = this.ctx;
+    const favorite = await storage.favorites.get(favoriteId);
+    if (!favorite) throw notFound('Favorite');
+    if (favorite.userId !== userId) {
+      throw new DomainError('forbidden', 'Not your favorite', 403);
+    }
+    favorite.sortOrder = sortOrder;
+    await storage.favorites.update(favorite);
+    await bus.publish([updated('favorite', favorite)]);
+    return favorite;
+  }
 }
 
 export class NotificationService {

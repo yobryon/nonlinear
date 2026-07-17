@@ -7,6 +7,7 @@ import { CommandPalette, usePalette } from './CommandPalette.js';
 import { NewIssueDialog, openNewIssue, useNewIssue } from './NewIssueDialog.js';
 import { Toasts } from './ui.js';
 import { SpinnerIcon } from './icons.js';
+import { BulkBar } from './issueViews.js';
 import { AuthPage } from './pages/Auth.js';
 import { TeamIssuesPage } from './pages/TeamIssues.js';
 import { IssueDetailPage } from './pages/IssueDetail.js';
@@ -141,6 +142,7 @@ export function App() {
           <Shortcuts />
           <CommandPalette />
           <NewIssueDialog />
+          <BulkBar />
         </>
       )}
       <Toasts />

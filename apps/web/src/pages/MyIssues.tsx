@@ -62,7 +62,7 @@ export function MyIssuesPage() {
         onGrouping={setGrouping}
       />
       <div className="content">
-        <GroupedIssueList groups={grouped} />
+        <GroupedIssueList groups={grouped} grouping={grouping} />
       </div>
     </>
   );

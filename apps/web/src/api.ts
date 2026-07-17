@@ -132,6 +132,8 @@ export const api = {
 
   addFavorite: (input: CreateFavoriteInput) => req<Favorite>('POST', '/api/favorites', input),
   removeFavorite: (id: string) => req<{ ok: true }>('DELETE', `/api/favorites/${id}`),
+  reorderFavorite: (id: string, sortOrder: string) =>
+    req<Favorite>('PATCH', `/api/favorites/${id}`, { sortOrder }),
 
   markNotification: (id: string, read: boolean) =>
     req<{ ok: true }>('PATCH', `/api/notifications/${id}`, { read }),

@@ -126,6 +126,7 @@ export function TeamIssuesPage() {
         {display === 'list' ? (
           <GroupedIssueList
             groups={grouped}
+            grouping={grouping}
             showState={grouping !== 'state'}
             onQuickAdd={quickAdd}
           />

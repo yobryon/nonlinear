@@ -1,5 +1,6 @@
-import { Fragment, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { create } from 'zustand';
 import type { Issue, Label, Priority, User, WorkflowState } from '@nonlinear/shared';
 import { PRIORITY_LABELS, keyBetween } from '@nonlinear/shared';
 import { issueKey, formatDate, relativeTime, sortedStates, useStore, type ById } from './store.js';
@@ -165,6 +166,50 @@ export function groupIssues(
   return groups.filter((g) => g.issues.length > 0);
 }
 
+/* ================= selection ================= */
+
+interface SelectionState {
+  ids: Set<string>;
+  anchorId: string | null;
+  /** Flat visible order, kept current by the list for shift-range selection. */
+  order: string[];
+  toggle: (id: string) => void;
+  rangeTo: (id: string) => void;
+  clear: () => void;
+  setOrder: (order: string[]) => void;
+}
+
+export const useSelection = create<SelectionState>((set, get) => ({
+  ids: new Set(),
+  anchorId: null,
+  order: [],
+  toggle: (id) =>
+    set((s) => {
+      const ids = new Set(s.ids);
+      if (ids.has(id)) ids.delete(id);
+      else ids.add(id);
+      return { ids, anchorId: id };
+    }),
+  rangeTo: (id) => {
+    const { anchorId, order, ids } = get();
+    if (!anchorId || anchorId === id) {
+      get().toggle(id);
+      return;
+    }
+    const a = order.indexOf(anchorId);
+    const b = order.indexOf(id);
+    if (a === -1 || b === -1) {
+      get().toggle(id);
+      return;
+    }
+    const next = new Set(ids);
+    for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(order[i]!);
+    set({ ids: next });
+  },
+  clear: () => set({ ids: new Set(), anchorId: null }),
+  setOrder: (order) => set({ order }),
+}));
+
 /* ================= issue row ================= */
 
 function LabelDots({ labelIds, labels }: { labelIds: string[]; labels: ById<Label> }) {
@@ -183,13 +228,26 @@ function LabelDots({ labelIds, labels }: { labelIds: string[]; labels: ById<Labe
   );
 }
 
-export function IssueRow({ issue, showState = true }: { issue: Issue; showState?: boolean }) {
+export function IssueRow({
+  issue,
+  showState = true,
+  onRowDragStart,
+  onRowDragEnd,
+  isDragging = false,
+}: {
+  issue: Issue;
+  showState?: boolean;
+  onRowDragStart?: (issue: Issue) => void;
+  onRowDragEnd?: () => void;
+  isDragging?: boolean;
+}) {
   const teams = useStore((s) => s.teams);
   const states = useStore((s) => s.workflowStates);
   const users = useStore((s) => s.users);
   const labels = useStore((s) => s.labels);
   const navigate = useNavigate();
   const [ctxAnchor, setCtxAnchor] = useState<Anchor | null>(null);
+  const selected = useSelection((s) => s.ids.has(issue.id));
 
   const statePicker = usePicker();
   const priorityPicker = usePicker();
@@ -202,8 +260,26 @@ export function IssueRow({ issue, showState = true }: { issue: Issue; showState?
   return (
     <>
       <div
-        className="issue-row"
-        onClick={() => navigate(`/issue/${key}`)}
+        className={`issue-row${selected ? ' selected' : ''}${isDragging ? ' dragging' : ''}`}
+        draggable={onRowDragStart !== undefined}
+        onDragStart={(e) => {
+          if (!onRowDragStart) return;
+          e.dataTransfer.effectAllowed = 'move';
+          onRowDragStart(issue);
+        }}
+        onDragEnd={onRowDragEnd}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey) {
+            useSelection.getState().toggle(issue.id);
+            return;
+          }
+          if (e.shiftKey) {
+            useSelection.getState().rangeTo(issue.id);
+            return;
+          }
+          useSelection.getState().clear();
+          navigate(`/issue/${key}`);
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           setCtxAnchor(anchorFromMouse(e));
@@ -430,15 +506,35 @@ export function IssueContextMenu({
 
 /* ================= grouped list ================= */
 
+/** What dropping into a group changes, given the active grouping. */
+function groupPatch(grouping: Grouping, group: IssueGroup): Record<string, unknown> | null {
+  if (grouping === 'state') return group.stateId ? { stateId: group.stateId } : null;
+  if (grouping === 'priority') return { priority: Number(group.key) as Priority };
+  return { assigneeId: group.key === '__unassigned' ? null : group.key };
+}
+
 export function GroupedIssueList({
   groups,
+  grouping,
   showState = true,
   onQuickAdd,
 }: {
   groups: IssueGroup[];
+  /** Enables dragging rows between groups; drop reassigns the grouped field. */
+  grouping?: Grouping;
   showState?: boolean;
   onQuickAdd?: (group: IssueGroup) => void;
 }) {
+  const [dragIssue, setDragIssue] = useState<Issue | null>(null);
+  const [overGroup, setOverGroup] = useState<string | null>(null);
+
+  const flatIds = groups.flatMap((g) => g.issues.map((i) => i.id));
+  const orderKey = flatIds.join(',');
+  useEffect(() => {
+    useSelection.getState().setOrder(flatIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderKey]);
+
   const total = groups.reduce((n, g) => n + g.issues.length, 0);
   if (total === 0) {
     return (
@@ -450,12 +546,45 @@ export function GroupedIssueList({
       </div>
     );
   }
+
+  const droppable = (group: IssueGroup): boolean =>
+    grouping !== undefined && dragIssue !== null && groupPatch(grouping, group) !== null;
+
+  const drop = (group: IssueGroup) => {
+    if (!grouping || !dragIssue) return;
+    const patch = groupPatch(grouping, group);
+    if (!patch) return;
+    // Dragging a selected row moves the whole selection.
+    const selection = useSelection.getState().ids;
+    const targets = selection.has(dragIssue.id) ? [...selection] : [dragIssue.id];
+    for (const id of targets) void patchIssue(id, patch);
+    setDragIssue(null);
+    setOverGroup(null);
+  };
+
+  const hoveredGroup = groups.find((g) => g.key === overGroup);
+
   return (
     <div>
       {groups.map((group) => (
         <Fragment key={group.key}>
           {group.issues.length > 0 && (
-            <>
+            <div
+              className={`drop-group${overGroup === group.key && droppable(group) ? ' drag-over' : ''}`}
+              onDragOver={(e) => {
+                if (!droppable(group)) return;
+                e.preventDefault();
+                if (overGroup !== group.key) setOverGroup(group.key);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                if (overGroup === group.key) setOverGroup(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                drop(group);
+              }}
+            >
               <div className="group-header">
                 {group.icon}
                 <span>{group.label}</span>
@@ -467,13 +596,157 @@ export function GroupedIssueList({
                 )}
               </div>
               {group.issues.map((issue) => (
-                <IssueRow key={issue.id} issue={issue} showState={showState} />
+                <IssueRow
+                  key={issue.id}
+                  issue={issue}
+                  showState={showState}
+                  isDragging={dragIssue?.id === issue.id}
+                  onRowDragStart={grouping ? setDragIssue : undefined}
+                  onRowDragEnd={
+                    grouping
+                      ? () => {
+                          setDragIssue(null);
+                          setOverGroup(null);
+                        }
+                      : undefined
+                  }
+                />
               ))}
-            </>
+            </div>
           )}
         </Fragment>
       ))}
+      {dragIssue && (
+        <div className="drag-hint">
+          {hoveredGroup && droppable(hoveredGroup) ? (
+            <>
+              Drop to move to <strong>{hoveredGroup.label}</strong>
+            </>
+          ) : (
+            'Drag over a group to move this issue'
+          )}
+        </div>
+      )}
     </div>
+  );
+}
+
+/* ================= bulk actions ================= */
+
+export function BulkBar() {
+  const ids = useSelection((s) => s.ids);
+  const clear = useSelection((s) => s.clear);
+  const issues = useStore((s) => s.issues);
+  const [mode, setMode] = useState<'none' | 'state' | 'priority' | 'assignee' | 'labels'>('none');
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
+
+  const selected = [...ids].map((id) => issues[id]).filter(Boolean) as Issue[];
+
+  useEffect(() => {
+    if (selected.length === 0) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        clear();
+        setMode('none');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selected.length, clear]);
+
+  if (selected.length === 0) return null;
+
+  const teamIds = new Set(selected.map((i) => i.teamId));
+  const sameTeam = teamIds.size === 1 ? selected[0]!.teamId : null;
+
+  const applyAll = (patch: Record<string, unknown>) => {
+    for (const issue of selected) void patchIssue(issue.id, patch);
+  };
+
+  const openPicker = (nextMode: typeof mode) => (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setAnchor({ x: rect.left, y: rect.top - 8 });
+    setMode(nextMode);
+  };
+
+  return (
+    <>
+      <div className="bulk-bar">
+        <span className="bulk-count">{selected.length} selected</span>
+        {sameTeam && (
+          <button className="chip" onClick={openPicker('state')}>
+            <StateIcon category="started" color="var(--text-3)" size={12} />
+            Status
+          </button>
+        )}
+        <button className="chip" onClick={openPicker('priority')}>
+          <PriorityIcon priority={2} size={12} />
+          Priority
+        </button>
+        <button className="chip" onClick={openPicker('assignee')}>
+          <UserIcon size={12} />
+          Assignee
+        </button>
+        <button className="chip" onClick={openPicker('labels')}>
+          <LabelIcon size={12} />
+          Labels
+        </button>
+        <button
+          className="chip"
+          style={{ color: 'var(--danger)' }}
+          onClick={() => {
+            if (!confirm(`Delete ${selected.length} issue${selected.length === 1 ? '' : 's'}?`))
+              return;
+            for (const issue of selected) void deleteIssue(issue.id);
+            clear();
+          }}
+        >
+          <TrashIcon size={12} />
+          Delete
+        </button>
+        <button className="icon-btn" title="Clear selection (Esc)" onClick={clear}>
+          <CloseIcon size={13} />
+        </button>
+      </div>
+
+      {anchor && mode === 'state' && sameTeam && (
+        <StatePicker
+          anchor={anchor}
+          onClose={() => setMode('none')}
+          teamId={sameTeam}
+          onPick={(id) => applyAll({ stateId: id })}
+        />
+      )}
+      {anchor && mode === 'priority' && (
+        <PriorityPicker
+          anchor={anchor}
+          onClose={() => setMode('none')}
+          onPick={(p) => applyAll({ priority: p })}
+        />
+      )}
+      {anchor && mode === 'assignee' && (
+        <AssigneePicker
+          anchor={anchor}
+          onClose={() => setMode('none')}
+          onPick={(id) => applyAll({ assigneeId: id })}
+        />
+      )}
+      {anchor && mode === 'labels' && (
+        <LabelPicker
+          anchor={anchor}
+          onClose={() => setMode('none')}
+          teamId={sameTeam ?? '__mixed'}
+          selected={[]}
+          onToggle={(labelId) => {
+            for (const issue of selected) {
+              if (!issue.labelIds.includes(labelId)) {
+                void patchIssue(issue.id, { labelIds: [...issue.labelIds, labelId] });
+              }
+            }
+          }}
+        />
+      )}
+    </>
   );
 }
 

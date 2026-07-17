@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { issueKey, useStore } from './store.js';
-import { anchorFromEvent, Popover, toastError, type Anchor } from './ui.js';
+import {
+  anchorFromEvent,
+  Popover,
+  sortKeyForInsert,
+  toastError,
+  useDragReorder,
+  type Anchor,
+} from './ui.js';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -114,6 +121,13 @@ export function Sidebar() {
     .filter((f) => f.userId === userId)
     .sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1));
 
+  const favReorder = useDragReorder(myFavorites, (dragged, insertAt) => {
+    const sortOrder = sortKeyForInsert(myFavorites, dragged, insertAt);
+    if (!sortOrder) return;
+    useStore.getState().putEntity('favorite', { ...dragged, sortOrder });
+    void api.reorderFavorite(dragged.id, sortOrder).catch(toastError);
+  });
+
   const logout = async () => {
     try {
       await api.logout();
@@ -158,53 +172,63 @@ export function Sidebar() {
         {myFavorites.length > 0 && (
           <div className="side-section">
             <div className="side-section-header">Favorites</div>
-            {myFavorites.map((fav) => {
+            {myFavorites.map((fav, index) => {
+              let node = null;
               if (fav.type === 'issue') {
                 const issue = issues[fav.targetId];
-                if (!issue) return null;
-                const key = issueKey(issue, teams);
-                return (
-                  <NavLink
-                    key={fav.id}
-                    to={`/issue/${key}`}
-                    className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-                  >
-                    <StarIcon size={13} filled style={{ color: 'var(--warning)' }} />
-                    <span className="grow">
-                      {key} {issue.title}
-                    </span>
-                  </NavLink>
-                );
-              }
-              if (fav.type === 'project') {
+                if (issue) {
+                  const key = issueKey(issue, teams);
+                  node = (
+                    <NavLink
+                      to={`/issue/${key}`}
+                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                    >
+                      <StarIcon size={13} filled style={{ color: 'var(--warning)' }} />
+                      <span className="grow">
+                        {key} {issue.title}
+                      </span>
+                    </NavLink>
+                  );
+                }
+              } else if (fav.type === 'project') {
                 const project = projects[fav.targetId];
-                if (!project) return null;
-                return (
-                  <NavLink
-                    key={fav.id}
-                    to={`/project/${project.id}`}
-                    className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-                  >
-                    <ProjectIcon size={13} />
-                    <span className="grow">{project.name}</span>
-                  </NavLink>
-                );
-              }
-              if (fav.type === 'cycle') {
+                if (project) {
+                  node = (
+                    <NavLink
+                      to={`/project/${project.id}`}
+                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                    >
+                      <ProjectIcon size={13} />
+                      <span className="grow">{project.name}</span>
+                    </NavLink>
+                  );
+                }
+              } else if (fav.type === 'cycle') {
                 const cycle = cycles[fav.targetId];
-                if (!cycle) return null;
-                return (
-                  <NavLink
-                    key={fav.id}
-                    to={`/cycle/${cycle.id}`}
-                    className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-                  >
-                    <CycleIcon size={13} />
-                    <span className="grow">{cycle.name || `Cycle ${cycle.number}`}</span>
-                  </NavLink>
-                );
+                if (cycle) {
+                  node = (
+                    <NavLink
+                      to={`/cycle/${cycle.id}`}
+                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                    >
+                      <CycleIcon size={13} />
+                      <span className="grow">{cycle.name || `Cycle ${cycle.number}`}</span>
+                    </NavLink>
+                  );
+                }
               }
-              return null;
+              if (!node) return null;
+              return (
+                <div
+                  key={fav.id}
+                  className={`${favReorder.insertBefore === index ? 'reorder-before' : ''} ${
+                    favReorder.dragId === fav.id ? 'reorder-dragging' : ''
+                  }`.trim()}
+                  {...favReorder.rowProps(fav, index)}
+                >
+                  {node}
+                </div>
+              );
             })}
           </div>
         )}

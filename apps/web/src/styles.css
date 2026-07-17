@@ -701,6 +701,92 @@ textarea.input {
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   min-width: 0;
+  user-select: none;
+}
+.issue-row.dragging {
+  opacity: 0.4;
+}
+
+/* drop target while dragging list rows between groups */
+.drop-group.drag-over {
+  background: var(--bg-selected);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.drop-group.drag-over .group-header {
+  background: transparent;
+}
+
+.drag-hint {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-popover);
+  font-size: 12.5px;
+  color: var(--text-2);
+  pointer-events: none;
+  animation: toast-in 0.12s ease-out;
+}
+.drag-hint strong {
+  color: var(--text-1);
+}
+
+.drag-handle {
+  cursor: grab;
+  color: var(--text-4);
+  font-size: 11px;
+  letter-spacing: -2px;
+  user-select: none;
+  padding: 0 2px;
+}
+.drag-handle:hover {
+  color: var(--text-2);
+}
+
+/* drag-reorder insertion indicator */
+.reorder-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.reorder-dragging {
+  opacity: 0.4;
+}
+
+/* floating multi-select actions */
+.bulk-bar {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 750;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg-overlay);
+  box-shadow: var(--shadow-popover);
+  animation: toast-in 0.12s ease-out;
+}
+.bulk-bar .chip {
+  cursor: pointer;
+}
+.bulk-bar .chip:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.bulk-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-text);
+  padding: 0 6px 0 4px;
+  white-space: nowrap;
 }
 .issue-row:hover {
   background: var(--bg-hover);

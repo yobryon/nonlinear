@@ -9,6 +9,7 @@ import {
 import { createPortal } from 'react-dom';
 import { create } from 'zustand';
 import type { User } from '@nonlinear/shared';
+import { keyBetween } from '@nonlinear/shared';
 import { userInitials } from './store.js';
 import { CheckIcon, SearchIcon } from './icons.js';
 
@@ -261,6 +262,68 @@ export function Switch({ on, onChange }: { on: boolean; onChange: (on: boolean) 
       onClick={() => onChange(!on)}
     />
   );
+}
+
+/* ---------- Drag reorder ----------
+
+Vertical list reordering: spread rowProps(item, index) onto each row element;
+an insertion line is drawn via the `insertBefore` index (style rows with a
+top border when insertBefore === index). onMove fires with the dragged item
+and the index it should be inserted at (in the pre-drag array). */
+
+export function useDragReorder<T extends { id: string }>(
+  items: T[],
+  onMove: (dragged: T, insertAt: number) => void,
+) {
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [insertBefore, setInsertBefore] = useState<number | null>(null);
+
+  const rowProps = (item: T, index: number) => ({
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      e.dataTransfer.effectAllowed = 'move';
+      setDragId(item.id);
+    },
+    onDragEnd: () => {
+      setDragId(null);
+      setInsertBefore(null);
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragId || dragId === item.id) return;
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      setInsertBefore(before ? index : index + 1);
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      if (dragId === null || insertBefore === null) return;
+      const dragged = items.find((i) => i.id === dragId);
+      if (dragged) onMove(dragged, insertBefore);
+      setDragId(null);
+      setInsertBefore(null);
+    },
+  });
+
+  return { dragId, insertBefore, rowProps };
+}
+
+/** New fractional sort key for dropping `dragged` at `insertAt` (pre-drag index space). */
+export function sortKeyForInsert<T extends { id: string; sortOrder: string }>(
+  items: T[],
+  dragged: T,
+  insertAt: number,
+): string | null {
+  const from = items.findIndex((i) => i.id === dragged.id);
+  const filtered = items.filter((i) => i.id !== dragged.id);
+  const pos = from !== -1 && from < insertAt ? insertAt - 1 : insertAt;
+  const before = filtered[pos - 1]?.sortOrder ?? null;
+  const after = filtered[pos]?.sortOrder ?? null;
+  try {
+    return keyBetween(before, after);
+  } catch {
+    return null;
+  }
 }
 
 /* ---------- Toasts ---------- */

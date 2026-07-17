@@ -243,6 +243,13 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     await domain.favorites.remove(req.user.id, (req.params as { id: string }).id);
     return { ok: true };
   });
+  app.patch('/api/favorites/:id', authed, async (req) =>
+    domain.favorites.reorder(
+      req.user.id,
+      (req.params as { id: string }).id,
+      (req.body as { sortOrder: string }).sortOrder,
+    ),
+  );
 
   // ---- notifications ----
   app.post('/api/notifications/read-all', authed, async (req) => {

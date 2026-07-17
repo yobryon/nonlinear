@@ -4,7 +4,16 @@ import type { StateCategory, Team, WorkflowState } from '@nonlinear/shared';
 import { STATE_CATEGORIES } from '@nonlinear/shared';
 import { api } from '../api.js';
 import { useStore } from '../store.js';
-import { anchorFromEvent, Avatar, Picker, Switch, toast, toastError, type Anchor } from '../ui.js';
+import {
+  anchorFromEvent,
+  Avatar,
+  Picker,
+  Switch,
+  toast,
+  toastError,
+  useDragReorder,
+  type Anchor,
+} from '../ui.js';
 import { ArrowLeftIcon, PlusIcon, StateIcon, TrashIcon } from '../icons.js';
 
 const SWATCHES = [
@@ -424,6 +433,25 @@ function TeamSettingsInner({ team }: { team: Team }) {
   const teamMembers = Object.values(memberships).filter((m) => m.teamId === team.id);
   const memberIds = new Set(teamMembers.map((m) => m.userId));
 
+  // Reorder workflow states by dragging; moves stay within the state's category.
+  const stateReorder = useDragReorder(teamStates, (dragged, insertAt) => {
+    const siblings = teamStates.filter((s) => s.category === dragged.category);
+    const fromSib = siblings.findIndex((s) => s.id === dragged.id);
+    let toSib = teamStates.slice(0, insertAt).filter((s) => s.category === dragged.category).length;
+    const without = siblings.filter((s) => s.id !== dragged.id);
+    if (fromSib < toSib) toSib -= 1;
+    toSib = Math.max(0, Math.min(without.length, toSib));
+    without.splice(toSib, 0, dragged);
+    without.forEach((state, position) => {
+      if (state.position === position) return;
+      useStore.getState().putEntity('workflowState', { ...state, position });
+      void api
+        .updateState(state.id, { position })
+        .then((s) => useStore.getState().putEntity('workflowState', s))
+        .catch(toastError);
+    });
+  });
+
   const patchTeam = (patch: Record<string, unknown>) => {
     void api
       .updateTeam(team.id, patch)
@@ -548,9 +576,34 @@ function TeamSettingsInner({ team }: { team: Team }) {
 
       <div className="settings-section">
         <h2>Workflow states</h2>
-        {teamStates.map((state) => (
-          <WorkflowStateRow key={state.id} state={state} />
-        ))}
+        {teamStates.map((state, index) => {
+          const props = stateReorder.rowProps(state, index);
+          return (
+            <div
+              key={state.id}
+              className={`${stateReorder.insertBefore === index ? 'reorder-before' : ''} ${
+                stateReorder.dragId === state.id ? 'reorder-dragging' : ''
+              }`.trim()}
+              onDragOver={props.onDragOver}
+              onDrop={props.onDrop}
+            >
+              <WorkflowStateRow
+                state={state}
+                dragHandle={
+                  <span
+                    className="drag-handle"
+                    title="Drag to reorder"
+                    draggable
+                    onDragStart={props.onDragStart}
+                    onDragEnd={props.onDragEnd}
+                  >
+                    ⋮⋮
+                  </span>
+                }
+              />
+            </div>
+          );
+        })}
         <div className="row" style={{ gap: 8, marginTop: 10, maxWidth: 480 }}>
           <input
             className="input"
@@ -696,10 +749,17 @@ function SlaHoursInput({
   );
 }
 
-function WorkflowStateRow({ state }: { state: WorkflowState }) {
+function WorkflowStateRow({
+  state,
+  dragHandle,
+}: {
+  state: WorkflowState;
+  dragHandle?: React.ReactNode;
+}) {
   const [name, setName] = useState(state.name);
   return (
     <div className="member-row">
+      {dragHandle}
       <StateIcon category={state.category} color={state.color} />
       <input
         className="input"

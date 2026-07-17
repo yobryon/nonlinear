@@ -4,7 +4,17 @@ import type { Project, ProjectStatus } from '@nonlinear/shared';
 import { PROJECT_STATUSES } from '@nonlinear/shared';
 import { api } from '../api.js';
 import { formatDate, useStore } from '../store.js';
-import { anchorFromEvent, Avatar, Modal, Picker, Popover, toastError, type Anchor } from '../ui.js';
+import {
+  anchorFromEvent,
+  Avatar,
+  Modal,
+  Picker,
+  Popover,
+  sortKeyForInsert,
+  toastError,
+  useDragReorder,
+  type Anchor,
+} from '../ui.js';
 import {
   CalendarIcon,
   DotsIcon,
@@ -280,6 +290,16 @@ function ProjectDetail({ project }: { project: Project }) {
     (f) => f.userId === userId && f.type === 'project' && f.targetId === project.id,
   );
 
+  const milestoneReorder = useDragReorder(projectMilestones, (dragged, insertAt) => {
+    const sortOrder = sortKeyForInsert(projectMilestones, dragged, insertAt);
+    if (!sortOrder) return;
+    useStore.getState().putEntity('projectMilestone', { ...dragged, sortOrder });
+    void api
+      .updateMilestone(dragged.id, { sortOrder })
+      .then((m) => useStore.getState().putEntity('projectMilestone', m))
+      .catch(toastError);
+  });
+
   return (
     <>
       <div className="topbar">
@@ -316,11 +336,18 @@ function ProjectDetail({ project }: { project: Project }) {
           {project.description && <Markdown source={project.description} />}
           {projectMilestones.length > 0 && (
             <div style={{ marginTop: project.description ? 12 : 0 }}>
-              {projectMilestones.map((m) => {
+              {projectMilestones.map((m, index) => {
                 const milestoneIssues = projectIssues.filter((i) => i.milestoneId === m.id);
                 const done = milestoneIssues.filter((i) => i.completedAt).length;
                 return (
-                  <div key={m.id} className="row" style={{ padding: '3px 0', gap: 8 }}>
+                  <div
+                    key={m.id}
+                    className={`row ${milestoneReorder.insertBefore === index ? 'reorder-before' : ''} ${
+                      milestoneReorder.dragId === m.id ? 'reorder-dragging' : ''
+                    }`.trim()}
+                    style={{ padding: '3px 0', gap: 8, cursor: 'grab' }}
+                    {...milestoneReorder.rowProps(m, index)}
+                  >
                     <ProjectIcon size={13} />
                     <span style={{ fontWeight: 500 }}>{m.name}</span>
                     {m.targetDate && <span className="dim">{formatDate(m.targetDate)}</span>}
@@ -390,7 +417,7 @@ function ProjectDetail({ project }: { project: Project }) {
         }
       />
       <div className="content">
-        <GroupedIssueList groups={grouped} />
+        <GroupedIssueList groups={grouped} grouping="state" />
       </div>
 
       {statusAnchor && (

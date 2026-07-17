@@ -173,7 +173,7 @@ export function CycleDetailPage() {
       </div>
       <ViewControls filters={filters} onFilters={setFilters} teamId={team.id} />
       <div className="content">
-        <GroupedIssueList groups={grouped} />
+        <GroupedIssueList groups={grouped} grouping="state" />
       </div>
     </>
   );
