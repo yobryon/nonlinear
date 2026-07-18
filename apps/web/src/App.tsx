@@ -20,6 +20,7 @@ import { SettingsPage } from './pages/Settings.js';
 import { TriagePage } from './pages/Triage.js';
 import { InitiativeDetailPage, InitiativesPage } from './pages/Initiatives.js';
 import { DocumentDetailPage, DocumentsPage } from './pages/Documents.js';
+import { DesignDocsPage } from './pages/DesignDocs.js';
 import { InsightsPage } from './pages/Insights.js';
 import { SearchPage } from './pages/Search.js';
 import { TimelinePage } from './pages/Timeline.js';
@@ -150,6 +151,8 @@ function AppShell() {
             <Route path="/initiative/:initiativeId" element={<InitiativeDetailPage />} />
             <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/document/:documentId" element={<DocumentDetailPage />} />
+            <Route path="/design" element={<DesignDocsPage />} />
+            <Route path="/design/:slug" element={<DesignDocsPage />} />
             <Route path="*" element={<DefaultRedirect />} />
           </Routes>
         </main>

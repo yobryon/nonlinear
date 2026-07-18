@@ -10,6 +10,7 @@ import {
   type Anchor,
 } from './ui.js';
 import {
+  BookIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CycleIcon,
@@ -321,6 +322,13 @@ export function Sidebar() {
           >
             <TeamIcon size={14} />
             <span className="grow">Customers</span>
+          </NavLink>
+          <NavLink
+            to="/design"
+            className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+          >
+            <BookIcon size={14} />
+            <span className="grow">Design docs</span>
           </NavLink>
         </div>
 

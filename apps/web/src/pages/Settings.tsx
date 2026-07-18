@@ -100,7 +100,10 @@ function PreferencesSettings() {
   if (!me) return null;
   const prefs = me.preferences;
   const set = (patch: Partial<typeof prefs>) => {
-    const next = { ...prefs, ...patch };
+    // Merge over the latest stored prefs (not the render closure) so rapid,
+    // successive changes can't clobber each other.
+    const live = useStore.getState().users[me.id]?.preferences ?? prefs;
+    const next = { ...live, ...patch };
     useStore.getState().putEntity('user', { ...me, preferences: next });
     applyPreferences(next);
     void api.updateProfile({ preferences: patch }).catch(toastError);

@@ -1021,6 +1021,54 @@ body.drag-active * {
   background: var(--bg-surface);
 }
 
+/* Design docs reader: left nav (border on the right), rendered doc on the right. */
+.design-docs-nav {
+  width: 300px;
+  border-left: none;
+  border-right: 1px solid var(--border);
+  padding: 22px 14px;
+}
+.design-docs-nav-head {
+  padding: 0 8px 14px;
+}
+.design-docs-nav-head h2 {
+  font-size: 15px;
+  font-weight: 650;
+  margin: 0 0 4px;
+}
+.design-docs-nav-head p {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.45;
+  margin: 0;
+}
+.design-docs-link {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 7px;
+  text-decoration: none;
+  color: inherit;
+}
+.design-docs-link:hover {
+  background: var(--bg-hover);
+}
+.design-docs-link.active {
+  background: var(--bg-active, var(--bg-hover));
+}
+.design-docs-link-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--text-1);
+}
+.design-docs-link-blurb {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-3);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
 .detail-title {
   width: 100%;
   font-size: 21px;
@@ -1145,6 +1193,25 @@ body.drag-active * {
   border: none;
   border-top: 1px solid var(--border);
   margin: 16px 0;
+}
+.md table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 12.5px;
+  display: block;
+  overflow-x: auto;
+}
+.md th,
+.md td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+.md th {
+  background: var(--bg-surface);
+  font-weight: 600;
 }
 
 /* activity & comments */

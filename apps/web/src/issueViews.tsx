@@ -627,11 +627,14 @@ export function GroupedIssueList({
       onActivate: () => setDragIssue(issue),
       onHover: (target, ev) => setDrop(hitTest(target, ev)),
       onDrop: (target, ev) => {
-        const hit = hitTest(target, ev) ?? drop;
+        const hit = hitTest(target, ev);
         if (!hit) return;
         const group = groupsRef.current.find((g) => g.key === hit.group);
-        if (!group || !droppable(group)) return;
-        const patch: Record<string, unknown> = { ...(groupPatch(grouping, group) ?? {}) };
+        // Read the group patch directly rather than droppable(), which closes
+        // over the drag-start `dragIssue` (still null here) and would bail.
+        const groupChange = group ? groupPatch(grouping, group) : null;
+        if (!group || !groupChange) return;
+        const patch: Record<string, unknown> = { ...groupChange };
 
         // Position within the target group by fractional index between neighbors,
         // excluding the dragged issue itself.

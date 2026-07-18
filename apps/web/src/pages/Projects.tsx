@@ -741,6 +741,7 @@ function ProjectDetail({ project }: { project: Project }) {
               onMemberPicker={(e) => memberPicker.open(anchorFromEvent(e))}
             />
             <ProjectUpdatesSection projectId={project.id} inline />
+            <ProjectDocuments projectId={project.id} />
             <div className="milestones-block" style={{ marginTop: 22 }}>
               <div className="side-heading">Milestones</div>
               {projectMilestones.length === 0 && (

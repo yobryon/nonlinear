@@ -15,6 +15,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 5. **Modular storage** — all persistence goes through the interfaces in `packages/core/src/storage.ts`. No package outside `storage-*` may import a database driver. `STORAGE=memory|postgres` selects the engine at API startup.
 6. **Front-end served like Azure SWA** — nginx (`infra/web/nginx.conf`) serves the built SPA and proxies `/api` + `/api/ws`, mirroring `staticwebapp.config.json`.
 
+## Design docs
+
+`docs/design/` holds the product-design reasoning behind nonlinear — *why* the major choices were made, with alternatives and honestly-accepted trade-offs. Where this file is the map of the territory (how to build and run it), those docs are the reasoning about it, each claim grounded in real code. Start with `docs/design/README.md`. When you make a consequential design change, append to `docs/design/09-decision-log.md`.
+
 ## Commands
 
 ```bash
