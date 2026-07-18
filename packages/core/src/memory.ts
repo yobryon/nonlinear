@@ -31,11 +31,13 @@ import type {
 } from '@nonlinear/shared';
 import type {
   ActivityStore,
+  ApiTokenStore,
   EntityStore,
   IssueStore,
   Session,
   SessionStore,
   Storage,
+  StoredApiToken,
   SyncLogStore,
   TeamStore,
   UserStore,
@@ -154,6 +156,37 @@ class MemorySessionStore implements SessionStore {
   }
 }
 
+class MemoryApiTokenStore implements ApiTokenStore {
+  private tokens = new Map<string, StoredApiToken>();
+
+  async create(token: StoredApiToken): Promise<void> {
+    this.tokens.set(token.id, clone(token));
+  }
+
+  async getByHash(hash: string): Promise<StoredApiToken | null> {
+    for (const t of this.tokens.values()) if (t.hash === hash) return clone(t);
+    return null;
+  }
+
+  async listByUser(userId: string): Promise<StoredApiToken[]> {
+    return [...this.tokens.values()].filter((t) => t.userId === userId).map(clone);
+  }
+
+  async delete(id: string, userId: string): Promise<void> {
+    const t = this.tokens.get(id);
+    if (t && t.userId === userId) this.tokens.delete(id);
+  }
+
+  async touchLastUsed(id: string, at: string): Promise<void> {
+    const t = this.tokens.get(id);
+    if (t) t.lastUsedAt = at;
+  }
+
+  async deleteForUser(userId: string): Promise<void> {
+    for (const [id, t] of this.tokens) if (t.userId === userId) this.tokens.delete(id);
+  }
+}
+
 class MemorySyncLog implements SyncLogStore {
   private log: SyncDelta[] = [];
   private nextId = 1;
@@ -206,6 +239,7 @@ export function createMemoryStorage(): Storage {
     triageRules: new MemoryEntityStore<TriageRule>(),
     activities: new MemoryActivityStore(),
     sessions: new MemorySessionStore(),
+    apiTokens: new MemoryApiTokenStore(),
     syncLog: new MemorySyncLog(),
     close: async () => {},
   };

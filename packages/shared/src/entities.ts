@@ -35,6 +35,9 @@ export interface User {
   avatarColor: string;
   role: UserRole;
   active: boolean;
+  /** Agent users are non-human teammates driven by an API token; they can be
+   *  assigned issues and @mentioned like anyone else. */
+  isAgent: boolean;
   /** Notification types this user has muted (in-app and digest). */
   mutedNotificationTypes: NotificationType[];
   /** Opt-in daily email digest of unread notifications (needs SMTP on the server). */
@@ -269,9 +272,28 @@ export interface Webhook {
   secret: string;
   /** 'json' posts sync deltas; 'slack' posts Slack-compatible message payloads. */
   format: WebhookFormat;
+  /** When set, this webhook only receives events where the agent user is the
+   *  assignee or is @mentioned — the trigger half of the agent-teammate loop. */
+  agentUserId: string | null;
   enabled: boolean;
   creatorId: string;
   createdAt: string;
+}
+
+/**
+ * Personal API token for programmatic access (REST + MCP). Never synced — a
+ * bearer credential, like sessions. The secret is shown once on creation and
+ * only its hash is stored.
+ */
+export interface ApiToken {
+  id: string;
+  userId: string;
+  name: string;
+  /** First chars of the token for display ("nl_abc…"). */
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
 }
 
 /** Saved issue view: a named filter/group/display configuration. */

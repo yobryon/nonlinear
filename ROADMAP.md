@@ -33,11 +33,18 @@ webhooks · CSV import (incl. Jira columns) + export · per-user notification
 preferences + daily email digest (SMTP) · configurable estimate scales
 (exponential/fibonacci/linear/t-shirt) + velocity chart + per-cycle burn-up.
 
+**Agents (shipped):** personal API tokens (Bearer auth for REST + MCP) · a
+hosted **MCP server** at `/mcp` (Streamable HTTP, in the API container) with 13
+tools · **agent users** — non-human teammates you assign issues to and @mention
+· agent-scoped webhooks that fire only on the agent's assignments/mentions · a
+runnable reference agent (`examples/agent`). This is the direct answer to
+"can an agent use nonlinear the way it uses Linear."
+
 ## P3 — Platform & scale
 
 | Feature                                                        | Linear area  | Notes                                                                                                                                          |
 | -------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Public API tokens + REST/GraphQL**                           | Platform     | Personal access tokens over the existing REST surface; GraphQL layer if demand.                                                                |
+| **GraphQL API**                                                | Platform     | Personal API tokens + REST are shipped; add a GraphQL layer if demand (Linear's is GraphQL).                                                   |
 | **Custom dashboards**                                          | Monitor      | Composable insight tiles (our chart components are already modular).                                                                           |
 | **Pulse (activity digest)**                                    | Monitor      | Cross-workspace feed of project updates and status changes; optional AI summaries.                                                             |
 | **AI features (agents, triage intelligence, Pulse summaries)** | Build/Intake | Linear's 2025-26 direction: assignable agents, suggested assignees/labels, duplicate AI. Self-host analog: bring-your-own-key LLM integration. |

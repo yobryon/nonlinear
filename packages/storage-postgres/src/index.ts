@@ -2,11 +2,13 @@ import pg from 'pg';
 import type { Issue, IssueActivity, SyncDelta, Team, User } from '@nonlinear/shared';
 import type {
   ActivityStore,
+  ApiTokenStore,
   EntityStore,
   IssueStore,
   Session,
   SessionStore,
   Storage,
+  StoredApiToken,
   SyncLogStore,
   TeamStore,
   UserStore,
@@ -173,6 +175,71 @@ class PgSessionStore implements SessionStore {
   }
 }
 
+class PgApiTokenStore implements ApiTokenStore {
+  constructor(private pool: pg.Pool) {}
+
+  private map(row: {
+    id: string;
+    user_id: string;
+    name: string;
+    prefix: string;
+    hash: string;
+    created_at: Date;
+    last_used_at: Date | null;
+    expires_at: Date | null;
+  }): StoredApiToken {
+    return {
+      id: row.id,
+      userId: row.user_id,
+      name: row.name,
+      prefix: row.prefix,
+      hash: row.hash,
+      createdAt: row.created_at.toISOString(),
+      lastUsedAt: row.last_used_at ? row.last_used_at.toISOString() : null,
+      expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
+    };
+  }
+
+  async create(token: StoredApiToken): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO api_tokens (id, user_id, name, prefix, hash, created_at, last_used_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        token.id,
+        token.userId,
+        token.name,
+        token.prefix,
+        token.hash,
+        token.createdAt,
+        token.lastUsedAt,
+        token.expiresAt,
+      ],
+    );
+  }
+
+  async getByHash(hash: string): Promise<StoredApiToken | null> {
+    const { rows } = await this.pool.query('SELECT * FROM api_tokens WHERE hash = $1', [hash]);
+    return rows[0] ? this.map(rows[0]) : null;
+  }
+
+  async listByUser(userId: string): Promise<StoredApiToken[]> {
+    const { rows } = await this.pool.query('SELECT * FROM api_tokens WHERE user_id = $1', [userId]);
+    return rows.map((r) => this.map(r));
+  }
+
+  async delete(id: string, userId: string): Promise<void> {
+    await this.pool.query('DELETE FROM api_tokens WHERE id = $1 AND user_id = $2', [id, userId]);
+  }
+
+  async touchLastUsed(id: string, at: string): Promise<void> {
+    await this.pool.query('UPDATE api_tokens SET last_used_at = $2 WHERE id = $1', [id, at]);
+  }
+
+  async deleteForUser(userId: string): Promise<void> {
+    await this.pool.query('DELETE FROM api_tokens WHERE user_id = $1', [userId]);
+  }
+}
+
 class PgSyncLog implements SyncLogStore {
   constructor(private pool: pg.Pool) {}
 
@@ -264,6 +331,7 @@ export async function createPostgresStorage(options: PostgresStorageOptions): Pr
     triageRules: new PgEntityStore(pool, 'triage_rules'),
     activities: new PgActivityStore(pool, 'issue_activities'),
     sessions: new PgSessionStore(pool),
+    apiTokens: new PgApiTokenStore(pool),
     syncLog: new PgSyncLog(pool),
     close: () => pool.end(),
   };

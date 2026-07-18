@@ -8,6 +8,7 @@ import type { Config } from './config.js';
 import { SyncHub } from './hub.js';
 import { registerGithubWebhook } from './github.js';
 import { registerIntake } from './intake.js';
+import { registerMcp } from './mcp.js';
 
 const SESSION_COOKIE = 'nl_session';
 
@@ -24,6 +25,7 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
   await registerGithubWebhook(app, domain, config.githubWebhookSecret);
   registerIntake(app, domain);
+  registerMcp(app, domain, (bearer) => domain.tokens.authenticate(bearer));
 
   const hub = new SyncHub(domain);
 
@@ -53,9 +55,19 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     });
   }
 
+  // Two ways to authenticate: the browser session cookie, or a personal API
+  // token as `Authorization: Bearer <token>` (used by scripts, agents, and MCP).
+  async function resolveUser(req: FastifyRequest): Promise<User | null> {
+    const auth = req.headers.authorization;
+    if (auth?.startsWith('Bearer ')) {
+      return domain.tokens.authenticate(auth.slice(7).trim());
+    }
+    const cookie = req.cookies[SESSION_COOKIE];
+    return cookie ? domain.auth.authenticate(cookie) : null;
+  }
+
   async function requireUser(req: FastifyRequest, reply: FastifyReply): Promise<void> {
-    const token = req.cookies[SESSION_COOKIE];
-    const user = token ? await domain.auth.authenticate(token) : null;
+    const user = await resolveUser(req);
     if (!user) {
       reply.status(401).send({ error: { code: 'unauthorized', message: 'Sign in required' } });
       return;
@@ -330,8 +342,17 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   };
   app.post('/api/webhooks', authed, async (req) => {
     requireAdmin(req);
-    const body = req.body as { url: string; format?: 'json' | 'slack' };
-    return domain.webhooks.create(req.user.id, body.url, body.format ?? 'json');
+    const body = req.body as {
+      url: string;
+      format?: 'json' | 'slack';
+      agentUserId?: string | null;
+    };
+    return domain.webhooks.create(
+      req.user.id,
+      body.url,
+      body.format ?? 'json',
+      body.agentUserId ?? null,
+    );
   });
   app.patch('/api/webhooks/:id', authed, async (req) => {
     requireAdmin(req);
@@ -457,6 +478,42 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     reply.header('Content-Type', 'text/csv; charset=utf-8');
     reply.header('Content-Disposition', 'attachment; filename="issues.csv"');
     return reply.send(csv);
+  });
+
+  // ---- API tokens (bearer credentials for REST + MCP) ----
+  app.get('/api/tokens', authed, async (req) => domain.tokens.list(req.user.id));
+  app.post('/api/tokens', authed, async (req) =>
+    domain.tokens.create(req.user.id, req.body as never),
+  );
+  app.delete('/api/tokens/:id', authed, async (req) => {
+    await domain.tokens.revoke(req.user.id, (req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- agents (admin) ----
+  app.post('/api/agents', authed, async (req) => {
+    if (req.user.role !== 'admin') {
+      throw new DomainError('forbidden', 'Only admins can create agents', 403);
+    }
+    return domain.auth.createAgent(req.body as never);
+  });
+  // Agents can't log in, so an admin mints their bootstrap token for them.
+  app.post('/api/agents/:id/tokens', authed, async (req) => {
+    if (req.user.role !== 'admin') {
+      throw new DomainError('forbidden', 'Only admins can manage agent tokens', 403);
+    }
+    const agentId = (req.params as { id: string }).id;
+    const agent = await domain.ctx.storage.users.get(agentId);
+    if (!agent || !agent.isAgent) {
+      throw new DomainError('not_found', 'Agent not found', 404);
+    }
+    return domain.tokens.create(agentId, req.body as never);
+  });
+  app.get('/api/agents/:id/tokens', authed, async (req) => {
+    if (req.user.role !== 'admin') {
+      throw new DomainError('forbidden', 'Only admins can manage agent tokens', 403);
+    }
+    return domain.tokens.list((req.params as { id: string }).id);
   });
 
   // ---- profile, users, workspace ----

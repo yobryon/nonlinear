@@ -14,11 +14,13 @@
     "@fastify/cookie": "^11.0.1",
     "@fastify/multipart": "^9",
     "@fastify/websocket": "^11.0.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@nonlinear/core": "workspace:*",
     "@nonlinear/shared": "workspace:*",
     "@nonlinear/storage-postgres": "workspace:*",
     "fastify": "^5.1.0",
-    "nodemailer": "^6"
+    "nodemailer": "^6",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22",

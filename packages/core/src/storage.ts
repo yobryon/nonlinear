@@ -82,6 +82,27 @@ export interface SessionStore {
   deleteForUser(userId: string): Promise<void>;
 }
 
+/** Stored API token: the raw secret is never persisted, only its sha256 hash. */
+export interface StoredApiToken {
+  id: string;
+  userId: string;
+  name: string;
+  prefix: string;
+  hash: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface ApiTokenStore {
+  create(token: StoredApiToken): Promise<void>;
+  getByHash(hash: string): Promise<StoredApiToken | null>;
+  listByUser(userId: string): Promise<StoredApiToken[]>;
+  delete(id: string, userId: string): Promise<void>;
+  touchLastUsed(id: string, at: string): Promise<void>;
+  deleteForUser(userId: string): Promise<void>;
+}
+
 export interface SyncLogStore {
   /**
    * Append deltas, assigning consecutive syncIds atomically.
@@ -126,6 +147,7 @@ export interface Storage {
   triageRules: EntityStore<TriageRule>;
   activities: ActivityStore;
   sessions: SessionStore;
+  apiTokens: ApiTokenStore;
   syncLog: SyncLogStore;
   /** Close pools/handles. */
   close(): Promise<void>;

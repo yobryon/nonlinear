@@ -67,6 +67,7 @@ export class AuthService {
       avatarColor: colorFor(email),
       role: isFirst ? 'admin' : 'member',
       active: true,
+      isAgent: false,
       mutedNotificationTypes: [],
       emailDigest: false,
       digestLastSentAt: null,
@@ -95,6 +96,49 @@ export class AuthService {
     }
 
     return { user, workspace };
+  }
+
+  /**
+   * Create an agent user — a non-human teammate that can be assigned issues
+   * and @mentioned. Agents have no password (they authenticate with an API
+   * token) and join every non-private team. Admin-gated by the caller.
+   */
+  async createAgent(input: { name: string; displayName?: string }): Promise<User> {
+    const { storage, bus } = this.ctx;
+    const name = input.name.trim();
+    if (!name) throw new DomainError('invalid_name', 'Agent name is required');
+    const workspace = (await storage.workspaces.all())[0];
+    if (!workspace) throw new DomainError('no_workspace', 'Workspace missing', 409);
+
+    const now = nowIso();
+    const base = (input.displayName?.trim() || slugify(name)).replace(/-/g, '.').toLowerCase();
+    const displayName = await this.uniqueDisplayName(base);
+    // Agents get a synthetic, non-login email in a reserved domain.
+    const email = `${displayName}@agents.nonlinear.local`;
+    const user: User = {
+      id: newId(),
+      email,
+      name,
+      displayName,
+      avatarColor: colorFor(name),
+      role: 'member',
+      active: true,
+      isAgent: true,
+      mutedNotificationTypes: [],
+      emailDigest: false,
+      digestLastSentAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    // Insert without a password hash so login is impossible.
+    await storage.users.insert(user);
+    await bus.publish([created('user', user)]);
+
+    const teams = new TeamService(this.ctx);
+    for (const team of await storage.teams.all()) {
+      if (!team.private) await teams.addMember(team.id, user.id);
+    }
+    return user;
   }
 
   private async uniqueDisplayName(base: string): Promise<string> {

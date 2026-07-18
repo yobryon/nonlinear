@@ -12,6 +12,8 @@ import type {
   CreateIssueTemplateInput,
   CreateProjectUpdateInput,
   CreateTriageRuleInput,
+  ApiToken,
+  CreatedApiToken,
   Customer,
   CustomerRequest,
   CustomView,
@@ -187,7 +189,17 @@ export const api = {
     req<Document>('PATCH', `/api/documents/${id}`, input),
   deleteDocument: (id: string) => req<{ ok: true }>('DELETE', `/api/documents/${id}`),
 
-  createWebhook: (url: string) => req<Webhook>('POST', '/api/webhooks', { url }),
+  listTokens: () => req<ApiToken[]>('GET', '/api/tokens'),
+  createToken: (name: string, expiresInDays?: number) =>
+    req<CreatedApiToken>('POST', '/api/tokens', { name, expiresInDays }),
+  deleteToken: (id: string) => req<{ ok: true }>('DELETE', `/api/tokens/${id}`),
+  createAgent: (name: string, displayName?: string) =>
+    req<User>('POST', '/api/agents', { name, displayName }),
+  createAgentToken: (agentId: string, name: string) =>
+    req<CreatedApiToken>('POST', `/api/agents/${agentId}/tokens`, { name }),
+
+  createWebhook: (url: string, format?: 'json' | 'slack', agentUserId?: string | null) =>
+    req<Webhook>('POST', '/api/webhooks', { url, format, agentUserId }),
   setWebhookEnabled: (id: string, enabled: boolean) =>
     req<Webhook>('PATCH', `/api/webhooks/${id}`, { enabled }),
   deleteWebhook: (id: string) => req<{ ok: true }>('DELETE', `/api/webhooks/${id}`),

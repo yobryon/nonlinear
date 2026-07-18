@@ -50,11 +50,9 @@ export function registerIntake(app: FastifyInstance, domain: Domain): void {
   app.post('/api/public/intake/:teamKey', async (req, reply) => {
     const team = await teamByKey((req.params as { teamKey: string }).teamKey);
     if (!team || !team.intakeEnabled) {
-      return reply
-        .status(404)
-        .send({
-          error: { code: 'intake_disabled', message: 'This form is not accepting requests' },
-        });
+      return reply.status(404).send({
+        error: { code: 'intake_disabled', message: 'This form is not accepting requests' },
+      });
     }
 
     const body = (req.body ?? {}) as Record<string, unknown>;
@@ -64,11 +62,9 @@ export function registerIntake(app: FastifyInstance, domain: Domain): void {
       (typeof body.token === 'string' ? body.token : undefined);
     const trusted = providedToken !== undefined && providedToken === team.intakeToken;
     if (!trusted && !allowAnonymous(req.ip)) {
-      return reply
-        .status(429)
-        .send({
-          error: { code: 'rate_limited', message: 'Too many requests — try again shortly' },
-        });
+      return reply.status(429).send({
+        error: { code: 'rate_limited', message: 'Too many requests — try again shortly' },
+      });
     }
 
     // Slack slash commands post form-encoded with the message in `text`.

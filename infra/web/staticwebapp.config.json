@@ -2,7 +2,7 @@
   "$comment": "Azure Static Web Apps config for a future SWA deploy of apps/web. Locally, infra/web/nginx.conf mirrors this routing. /api/* is expected to be a linked backend (container app running apps/api).",
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/assets/*", "/api/*"]
+    "exclude": ["/assets/*", "/api/*", "/mcp"]
   },
   "routes": [
     {

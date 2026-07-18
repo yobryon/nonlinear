@@ -13,7 +13,7 @@ import type {
   ViewDisplay,
   WebhookFormat,
 } from './enums.js';
-import type { ViewFilters } from './entities.js';
+import type { ApiToken, ViewFilters } from './entities.js';
 
 export interface RegisterInput {
   email: string;
@@ -189,6 +189,27 @@ export interface UpdateDocumentInput {
 export interface CreateWebhookInput {
   url: string;
   format?: WebhookFormat;
+  /** Scope this webhook to an agent user's assignments and mentions. */
+  agentUserId?: string | null;
+}
+
+export interface CreateApiTokenInput {
+  name: string;
+  /** Days until expiry; omitted = never. */
+  expiresInDays?: number;
+}
+
+/** Returned once on creation — carries the plaintext secret. */
+export interface CreatedApiToken {
+  token: ApiToken;
+  /** The full bearer token; shown once, never retrievable again. */
+  secret: string;
+}
+
+export interface CreateAgentInput {
+  name: string;
+  /** Handle for @mentions; defaults from name. */
+  displayName?: string;
 }
 
 export interface CreateCustomViewInput {

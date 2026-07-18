@@ -34,6 +34,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Lets outbound webhooks reach services on the host (e.g. a local agent).
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     restart: unless-stopped
 
   mailhog:

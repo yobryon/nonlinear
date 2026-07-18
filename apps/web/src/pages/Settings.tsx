@@ -7,6 +7,7 @@ import { TriageRulesSettings } from '../components/TriageRulesSettings.js';
 import { NotificationPrefs } from '../components/NotificationPrefs.js';
 import { IntakeSettings } from '../components/IntakeSettings.js';
 import { ImportExport } from '../components/ImportExport.js';
+import { ApiTokens } from '../components/ApiTokens.js';
 import { api } from '../api.js';
 import { useStore } from '../store.js';
 import {
@@ -147,11 +148,14 @@ function WorkspaceSettings() {
 
 function WebhooksSection() {
   const webhooks = useStore((s) => s.webhooks);
+  const users = useStore((s) => s.users);
   const me = useStore((s) => (s.userId ? s.users[s.userId] : null));
   const [url, setUrl] = useState('');
+  const [agentUserId, setAgentUserId] = useState('');
   const [revealed, setRevealed] = useState<string | null>(null);
   if (me?.role !== 'admin') return null;
   const rows = Object.values(webhooks).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const agents = Object.values(users).filter((u) => u.isAgent && u.active);
 
   return (
     <div className="settings-section">
@@ -163,8 +167,16 @@ function WebhooksSection() {
       {rows.map((webhook) => (
         <div key={webhook.id} className="member-row">
           <div className="info">
-            <div className="truncate">{webhook.url}</div>
+            <div className="truncate">
+              {webhook.url}
+              {webhook.agentUserId && (
+                <span className="chip" style={{ marginLeft: 6, height: 18 }}>
+                  agent: {users[webhook.agentUserId]?.displayName ?? '?'}
+                </span>
+              )}
+            </div>
             <div className="email">
+              {webhook.format === 'slack' ? 'Slack format' : 'JSON'} ·{' '}
               {webhook.enabled ? 'enabled' : 'disabled'} · secret:{' '}
               {revealed === webhook.id ? (
                 <code>{webhook.secret}</code>
@@ -205,22 +217,40 @@ function WebhooksSection() {
           </button>
         </div>
       ))}
-      <div className="row" style={{ gap: 8, marginTop: 10, maxWidth: 480 }}>
+      <div className="row" style={{ gap: 8, marginTop: 10, maxWidth: 560, flexWrap: 'wrap' }}>
         <input
           className="input"
+          style={{ minWidth: 220, flex: 1 }}
           placeholder="https://example.com/webhook"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
+        {agents.length > 0 && (
+          <select
+            className="input"
+            style={{ width: 170 }}
+            value={agentUserId}
+            onChange={(e) => setAgentUserId(e.target.value)}
+            title="Scope to an agent's assignments and mentions"
+          >
+            <option value="">All events</option>
+            {agents.map((a) => (
+              <option key={a.id} value={a.id}>
+                For {a.displayName}
+              </option>
+            ))}
+          </select>
+        )}
         <button
           className="btn"
           disabled={!url.trim()}
           onClick={() => {
             void api
-              .createWebhook(url.trim())
+              .createWebhook(url.trim(), 'json', agentUserId || null)
               .then((w) => {
                 useStore.getState().putEntity('webhook', w);
                 setUrl('');
+                setAgentUserId('');
               })
               .catch(toastError);
           }}
@@ -239,6 +269,8 @@ function MembersSettings() {
   const isAdmin = me?.role === 'admin';
   const rows = Object.values(users).sort((a, b) => a.name.localeCompare(b.name));
 
+  const [agentName, setAgentName] = useState('');
+
   return (
     <>
       <h1>Members</h1>
@@ -253,10 +285,18 @@ function MembersSettings() {
             <div className="info">
               <div>
                 {user.name}
+                {user.isAgent && (
+                  <span
+                    className="chip"
+                    style={{ marginLeft: 6, height: 18, color: 'var(--accent-text)' }}
+                  >
+                    agent
+                  </span>
+                )}
                 {!user.active && <span className="dim"> (deactivated)</span>}
               </div>
               <div className="email">
-                {user.email} · @{user.displayName}
+                {user.isAgent ? 'API-driven teammate' : user.email} · @{user.displayName}
               </div>
             </div>
             {isAdmin && user.id !== me?.id ? (
@@ -285,6 +325,40 @@ function MembersSettings() {
           </div>
         ))}
       </div>
+      {isAdmin && (
+        <div className="settings-section">
+          <h2>Agents</h2>
+          <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+            Agents are non-human teammates you can assign issues to and @mention. They act through
+            an API token (mint one in Profile → API tokens) over REST or the MCP server. See{' '}
+            <code>examples/agent</code> for a runnable reference.
+          </p>
+          <div className="row" style={{ gap: 8, maxWidth: 420 }}>
+            <input
+              className="input"
+              placeholder="Agent name (e.g. Fixer Bot)"
+              value={agentName}
+              onChange={(e) => setAgentName(e.target.value)}
+            />
+            <button
+              className="btn primary"
+              disabled={!agentName.trim()}
+              onClick={() => {
+                void api
+                  .createAgent(agentName.trim())
+                  .then((u) => {
+                    useStore.getState().putEntity('user', u);
+                    toast(`Agent ${u.name} created`, 'success');
+                    setAgentName('');
+                  })
+                  .catch(toastError);
+              }}
+            >
+              <PlusIcon size={13} /> Add agent
+            </button>
+          </div>
+        </div>
+      )}
       {roleAnchor && (
         <Picker
           anchor={roleAnchor.anchor}
@@ -1008,6 +1082,10 @@ function ProfileSettings() {
       <div className="settings-section">
         <h2>Notifications</h2>
         <NotificationPrefs />
+      </div>
+      <div className="settings-section">
+        <h2>API tokens</h2>
+        <ApiTokens />
       </div>
     </>
   );
