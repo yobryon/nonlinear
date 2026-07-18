@@ -86,6 +86,22 @@ export type WebhookFormat = (typeof WEBHOOK_FORMATS)[number];
 export const CUSTOMER_REQUEST_SOURCES = ['manual', 'intake'] as const;
 export type CustomerRequestSource = (typeof CUSTOMER_REQUEST_SOURCES)[number];
 
+export const THEMES = ['system', 'dark', 'light'] as const;
+export type ThemePreference = (typeof THEMES)[number];
+
+export const FONT_SIZES = ['small', 'default', 'large'] as const;
+export type FontSize = (typeof FONT_SIZES)[number];
+
+/** Where the app lands on load. */
+export const HOME_VIEWS = ['inbox', 'my-issues', 'active-team'] as const;
+export type HomeView = (typeof HOME_VIEWS)[number];
+
+export const DISPLAY_NAME_FORMATS = ['full', 'display'] as const;
+export type DisplayNameFormat = (typeof DISPLAY_NAME_FORMATS)[number];
+
+export const FIRST_DAYS = ['sunday', 'monday'] as const;
+export type FirstDayOfWeek = (typeof FIRST_DAYS)[number];
+
 export const FAVORITE_TYPES = ['issue', 'project', 'cycle', 'label'] as const;
 export type FavoriteType = (typeof FAVORITE_TYPES)[number];
 

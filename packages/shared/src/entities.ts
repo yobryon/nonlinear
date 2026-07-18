@@ -1,9 +1,13 @@
 import type {
   ActivityType,
   CustomerRequestSource,
+  DisplayNameFormat,
   EstimateScale,
   FavoriteType,
+  FirstDayOfWeek,
+  FontSize,
   Grouping,
+  HomeView,
   InitiativeStatus,
   IssueRelationType,
   NotificationType,
@@ -11,10 +15,30 @@ import type {
   ProjectHealth,
   ProjectStatus,
   StateCategory,
+  ThemePreference,
   UserRole,
   ViewDisplay,
   WebhookFormat,
 } from './enums.js';
+
+/** Per-user interface preferences (synced across devices). */
+export interface UserPreferences {
+  theme: ThemePreference;
+  fontSize: FontSize;
+  /** Which screen the app opens to. */
+  home: HomeView;
+  /** Show full names or @handles in lists and pickers. */
+  displayNames: DisplayNameFormat;
+  firstDayOfWeek: FirstDayOfWeek;
+}
+
+export const DEFAULT_PREFERENCES: UserPreferences = {
+  theme: 'system',
+  fontSize: 'default',
+  home: 'my-issues',
+  displayNames: 'full',
+  firstDayOfWeek: 'monday',
+};
 
 /** All timestamps are ISO 8601 strings. All ids are opaque strings. */
 
@@ -44,6 +68,7 @@ export interface User {
   emailDigest: boolean;
   /** Server-managed: when the last digest email was sent. */
   digestLastSentAt: string | null;
+  preferences: UserPreferences;
   createdAt: string;
   updatedAt: string;
 }

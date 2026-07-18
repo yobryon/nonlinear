@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import type { Project, ProjectStatus } from '@nonlinear/shared';
+import type { Project, ProjectStatus, User } from '@nonlinear/shared';
 import { PROJECT_STATUSES } from '@nonlinear/shared';
 import { api } from '../api.js';
 import { formatDate, relativeTime, useStore } from '../store.js';
@@ -85,7 +85,13 @@ function HealthChip({ projectId }: { projectId: string }) {
 }
 
 /** Post project health updates and show the update feed. */
-function ProjectUpdatesSection({ projectId }: { projectId: string }) {
+function ProjectUpdatesSection({
+  projectId,
+  inline = false,
+}: {
+  projectId: string;
+  inline?: boolean;
+}) {
   const projectUpdates = useStore((s) => s.projectUpdates);
   const users = useStore((s) => s.users);
   const userId = useStore((s) => s.userId);
@@ -109,7 +115,14 @@ function ProjectUpdatesSection({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div style={{ padding: '10px 20px', borderBottom: '1px solid var(--border)' }}>
+    <div
+      style={
+        inline
+          ? { marginTop: 22 }
+          : { padding: '10px 20px', borderBottom: '1px solid var(--border)' }
+      }
+    >
+      {inline && <div className="side-heading">Updates</div>}
       {!expanded ? (
         <button className="btn ghost" style={{ marginLeft: -8 }} onClick={() => setExpanded(true)}>
           <PlusIcon size={13} /> Post project update
@@ -209,6 +222,212 @@ function ProjectUpdatesSection({ projectId }: { projectId: string }) {
   );
 }
 
+/** The context around a project: outcome/description, teams, lead, members, dates. */
+function ProjectOverview({
+  project,
+  onMemberPicker,
+}: {
+  project: Project;
+  onMemberPicker: (e: React.MouseEvent) => void;
+}) {
+  const teams = useStore((s) => s.teams);
+  const users = useStore((s) => s.users);
+  const issues = useStore((s) => s.issues);
+  const workflowStates = useStore((s) => s.workflowStates);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(project.description);
+
+  const lead = project.leadId ? users[project.leadId] : null;
+  const members = project.memberIds.map((id) => users[id]).filter(Boolean) as User[];
+  const projectTeams = project.teamIds.map((id) => teams[id]).filter(Boolean);
+  const projectIssues = Object.values(issues).filter(
+    (i) => i.projectId === project.id && !i.archivedAt,
+  );
+  const done = projectIssues.filter((i) => {
+    const c = workflowStates[i.stateId]?.category;
+    return c === 'completed' || c === 'canceled';
+  }).length;
+  const pct = projectIssues.length ? Math.round((done / projectIssues.length) * 100) : 0;
+
+  const saveDescription = () => {
+    setEditing(false);
+    if (draft !== project.description) {
+      void api
+        .updateProject(project.id, { description: draft })
+        .then((p) => useStore.getState().putEntity('project', p))
+        .catch(toastError);
+    }
+  };
+
+  return (
+    <div>
+      {/* description / outcome */}
+      {editing ? (
+        <div>
+          <textarea
+            className="input"
+            autoFocus
+            rows={Math.max(4, draft.split('\n').length + 1)}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="What's the outcome? Describe the goal, scope, and context…"
+          />
+          <div className="row" style={{ justifyContent: 'flex-end', gap: 6, marginTop: 8 }}>
+            <button
+              className="btn ghost"
+              onClick={() => {
+                setDraft(project.description);
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </button>
+            <button className="btn primary" onClick={saveDescription}>
+              Save
+            </button>
+          </div>
+        </div>
+      ) : project.description.trim() ? (
+        <div onDoubleClick={() => setEditing(true)} style={{ cursor: 'text' }}>
+          <Markdown source={project.description} />
+          <button className="btn ghost" style={{ marginTop: 6 }} onClick={() => setEditing(true)}>
+            Edit overview
+          </button>
+        </div>
+      ) : (
+        <button
+          className="btn ghost"
+          style={{ color: 'var(--text-4)', marginLeft: -8 }}
+          onClick={() => setEditing(true)}
+        >
+          Describe the outcome and context…
+        </button>
+      )}
+
+      {/* progress */}
+      {projectIssues.length > 0 && (
+        <div className="row" style={{ gap: 10, marginTop: 16 }}>
+          <div className="progress-bar" style={{ maxWidth: 240 }}>
+            <div style={{ width: `${pct}%` }} />
+          </div>
+          <span className="dim">
+            {done}/{projectIssues.length} issues done
+          </span>
+        </div>
+      )}
+
+      {/* properties: teams, lead, dates, members */}
+      <div style={{ marginTop: 18, display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+        <div>
+          <div className="side-heading">Teams</div>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {projectTeams.map((t) => (
+              <span key={t!.id} className="chip">
+                <span className="team-icon" style={{ background: t!.color }}>
+                  {t!.key.slice(0, 2)}
+                </span>
+                {t!.name}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="side-heading">Lead</div>
+          {lead ? (
+            <span className="chip">
+              <Avatar user={lead} size={16} /> {lead.name}
+            </span>
+          ) : (
+            <span className="muted">Unassigned</span>
+          )}
+        </div>
+        {(project.startDate || project.targetDate) && (
+          <div>
+            <div className="side-heading">Dates</div>
+            <span className="dim row" style={{ gap: 4 }}>
+              <CalendarIcon size={12} />
+              {project.startDate ? formatDate(project.startDate) : '—'} →{' '}
+              {project.targetDate ? formatDate(project.targetDate) : '—'}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 18 }}>
+        <div className="side-heading">Members</div>
+        <div className="row" style={{ gap: 4 }}>
+          {members.map((m) => (
+            <Avatar key={m.id} user={m} size={24} />
+          ))}
+          <button
+            className="icon-btn"
+            style={{ width: 24, height: 24 }}
+            title="Add member"
+            onClick={onMemberPicker}
+          >
+            <PlusIcon size={13} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Documents owned by this project, creatable in-context. */
+function ProjectDocuments({ projectId }: { projectId: string }) {
+  const documents = useStore((s) => s.documents);
+  const navigate = useNavigate();
+  const [title, setTitle] = useState('');
+  const docs = Object.values(documents)
+    .filter((d) => d.projectId === projectId)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+  const create = () => {
+    if (!title.trim()) return;
+    void api
+      .createDocument({ title, projectId })
+      .then((doc) => {
+        useStore.getState().putEntity('document', doc);
+        setTitle('');
+        navigate(`/document/${doc.id}`);
+      })
+      .catch(toastError);
+  };
+
+  return (
+    <div style={{ marginTop: 22 }}>
+      <div className="side-heading">Documents</div>
+      {docs.map((doc) => (
+        <div
+          key={doc.id}
+          className="row"
+          style={{ padding: '4px 0', gap: 8, cursor: 'pointer' }}
+          onClick={() => navigate(`/document/${doc.id}`)}
+        >
+          <ProjectIcon size={13} />
+          <span style={{ fontWeight: 500 }}>{doc.title}</span>
+          <span className="dim">edited {relativeTime(doc.updatedAt)} ago</span>
+        </div>
+      ))}
+      <div className="row" style={{ gap: 6, marginTop: 6 }}>
+        <input
+          className="input"
+          style={{ width: 240, height: 26 }}
+          placeholder="New document in this project…"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') create();
+          }}
+        />
+        <button className="btn" disabled={!title.trim()} onClick={create}>
+          <PlusIcon size={13} /> Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function projectProgress(projectId: string): { done: number; total: number } {
   const { issues, workflowStates } = useStore.getState();
   const rows = Object.values(issues).filter((i) => i.projectId === projectId && !i.archivedAt);
@@ -254,7 +473,10 @@ export function ProjectsPage() {
           <div className="empty-state">
             <ProjectIcon size={28} style={{ color: 'var(--text-4)' }} />
             <h3>No projects yet</h3>
-            <p>Projects group issues across teams toward a goal.</p>
+            <p>
+              Projects are larger units of work with a clear outcome, like a feature you want to
+              ship. They span multiple teams and are made of issues and their own documents.
+            </p>
             <button className="btn primary" onClick={() => setCreating(true)}>
               Create your first project
             </button>
@@ -430,11 +652,13 @@ function ProjectDetail({ project }: { project: Project }) {
   const userId = useStore((s) => s.userId);
   const teams = useStore((s) => s.teams);
   const navigate = useNavigate();
+  const [tab, setTab] = useState<'overview' | 'issues'>('overview');
   const [filters, setFilters] = useState<IssueFilters>(EMPTY_FILTERS);
   const [statusAnchor, setStatusAnchor] = useState<Anchor | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<Anchor | null>(null);
   const [milestoneName, setMilestoneName] = useState('');
   const leadPicker = usePicker();
+  const memberPicker = usePicker();
 
   const projectIssues = useMemo(
     () =>
@@ -474,6 +698,20 @@ function ProjectDetail({ project }: { project: Project }) {
           <ProjectStatusIcon status={project.status} />
           {project.name}
         </div>
+        <div className="row" style={{ gap: 2, marginLeft: 12 }}>
+          {(['overview', 'issues'] as const).map((t) => (
+            <button
+              key={t}
+              className="btn ghost"
+              style={
+                tab === t ? { background: 'var(--bg-active)', color: 'var(--text-1)' } : undefined
+              }
+              onClick={() => setTab(t)}
+            >
+              {t === 'overview' ? 'Overview' : 'Issues'}
+            </button>
+          ))}
+        </div>
         <span className="spacer" />
         <button className="chip" onClick={(e) => setStatusAnchor(anchorFromEvent(e))}>
           <ProjectStatusIcon status={project.status} size={12} />
@@ -495,97 +733,113 @@ function ProjectDetail({ project }: { project: Project }) {
         </button>
       </div>
 
-      <ProjectUpdatesSection projectId={project.id} />
-
-      {(project.description || projectMilestones.length > 0) && (
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
-          {project.description && <Markdown source={project.description} />}
-          {projectMilestones.length > 0 && (
-            <div style={{ marginTop: project.description ? 12 : 0 }}>
-              {projectMilestones.map((m, index) => {
-                const milestoneIssues = projectIssues.filter((i) => i.milestoneId === m.id);
-                const done = milestoneIssues.filter((i) => i.completedAt).length;
-                return (
-                  <div
-                    key={m.id}
-                    className={`row ${milestoneReorder.insertBefore === index ? 'reorder-before' : ''} ${
-                      milestoneReorder.dragId === m.id ? 'reorder-dragging' : ''
-                    }`.trim()}
-                    style={{ padding: '3px 0', gap: 8, cursor: 'grab' }}
-                    {...milestoneReorder.itemProps(index)}
-                    {...milestoneReorder.dragProps(m, m.name)}
-                  >
-                    <ProjectIcon size={13} />
-                    <span style={{ fontWeight: 500 }}>{m.name}</span>
-                    {m.targetDate && <span className="dim">{formatDate(m.targetDate)}</span>}
-                    <span className="dim">
-                      {done}/{milestoneIssues.length}
-                    </span>
-                    <button
-                      className="icon-btn"
-                      style={{ width: 20, height: 20 }}
-                      title="Delete milestone"
-                      onClick={() => {
-                        void api
-                          .deleteMilestone(m.id)
-                          .then(() => {
-                            const next = { ...useStore.getState().projectMilestones };
-                            delete next[m.id];
-                            useStore.setState({ projectMilestones: next });
-                          })
-                          .catch(toastError);
-                      }}
-                    >
-                      <TrashIcon size={11} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div className="row" style={{ marginTop: 8, gap: 6 }}>
-            <input
-              className="input"
-              style={{ width: 220, height: 26 }}
-              placeholder="Add milestone…"
-              value={milestoneName}
-              onChange={(e) => setMilestoneName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && milestoneName.trim()) {
-                  void api
-                    .createMilestone({ projectId: project.id, name: milestoneName })
-                    .then((m) => {
-                      useStore.getState().putEntity('projectMilestone', m);
-                      setMilestoneName('');
-                    })
-                    .catch(toastError);
-                }
-              }}
+      {tab === 'overview' && (
+        <div className="content">
+          <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 24px 60px' }}>
+            <ProjectOverview
+              project={project}
+              onMemberPicker={(e) => memberPicker.open(anchorFromEvent(e))}
             />
+            <ProjectUpdatesSection projectId={project.id} inline />
+            <div className="milestones-block" style={{ marginTop: 22 }}>
+              <div className="side-heading">Milestones</div>
+              {projectMilestones.length === 0 && (
+                <div className="muted" style={{ fontSize: 12.5 }}>
+                  No milestones yet.
+                </div>
+              )}
+              {projectMilestones.length > 0 && (
+                <div style={{ marginTop: project.description ? 12 : 0 }}>
+                  {projectMilestones.map((m, index) => {
+                    const milestoneIssues = projectIssues.filter((i) => i.milestoneId === m.id);
+                    const done = milestoneIssues.filter((i) => i.completedAt).length;
+                    return (
+                      <div
+                        key={m.id}
+                        className={`row ${milestoneReorder.insertBefore === index ? 'reorder-before' : ''} ${
+                          milestoneReorder.dragId === m.id ? 'reorder-dragging' : ''
+                        }`.trim()}
+                        style={{ padding: '3px 0', gap: 8, cursor: 'grab' }}
+                        {...milestoneReorder.itemProps(index)}
+                        {...milestoneReorder.dragProps(m, m.name)}
+                      >
+                        <ProjectIcon size={13} />
+                        <span style={{ fontWeight: 500 }}>{m.name}</span>
+                        {m.targetDate && <span className="dim">{formatDate(m.targetDate)}</span>}
+                        <span className="dim">
+                          {done}/{milestoneIssues.length}
+                        </span>
+                        <button
+                          className="icon-btn"
+                          style={{ width: 20, height: 20 }}
+                          title="Delete milestone"
+                          onClick={() => {
+                            void api
+                              .deleteMilestone(m.id)
+                              .then(() => {
+                                const next = { ...useStore.getState().projectMilestones };
+                                delete next[m.id];
+                                useStore.setState({ projectMilestones: next });
+                              })
+                              .catch(toastError);
+                          }}
+                        >
+                          <TrashIcon size={11} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="row" style={{ marginTop: 8, gap: 6 }}>
+                <input
+                  className="input"
+                  style={{ width: 220, height: 26 }}
+                  placeholder="Add milestone…"
+                  value={milestoneName}
+                  onChange={(e) => setMilestoneName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && milestoneName.trim()) {
+                      void api
+                        .createMilestone({ projectId: project.id, name: milestoneName })
+                        .then((m) => {
+                          useStore.getState().putEntity('projectMilestone', m);
+                          setMilestoneName('');
+                        })
+                        .catch(toastError);
+                    }
+                  }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      <ViewControls
-        filters={filters}
-        onFilters={setFilters}
-        extra={
-          <button
-            className="btn ghost"
-            onClick={() =>
-              openNewIssue({
-                teamId: project.teamIds[0],
-                projectId: project.id,
-              })
+      {tab === 'issues' && (
+        <>
+          <ViewControls
+            filters={filters}
+            onFilters={setFilters}
+            extra={
+              <button
+                className="btn ghost"
+                onClick={() =>
+                  openNewIssue({
+                    teamId: project.teamIds[0],
+                    projectId: project.id,
+                  })
+                }
+              >
+                <PlusIcon size={13} /> Add issue
+              </button>
             }
-          >
-            <PlusIcon size={13} /> Add issue
-          </button>
-        }
-      />
-      <div className="content">
-        <GroupedIssueList groups={grouped} grouping="state" />
-      </div>
+          />
+          <div className="content">
+            <GroupedIssueList groups={grouped} grouping="state" />
+          </div>
+        </>
+      )}
 
       {statusAnchor && (
         <Picker
@@ -615,6 +869,26 @@ function ProjectDetail({ project }: { project: Project }) {
           onPick={(id) => {
             void api
               .updateProject(project.id, { leadId: id })
+              .then((p) => useStore.getState().putEntity('project', p))
+              .catch(toastError);
+          }}
+        />
+      )}
+      {memberPicker.anchor && (
+        <Picker
+          anchor={memberPicker.anchor}
+          onClose={memberPicker.close}
+          placeholder="Add member…"
+          items={Object.values(users)
+            .filter((u) => u.active && !u.isAgent)
+            .map((u) => ({ id: u.id, label: u.name }))}
+          selectedIds={new Set(project.memberIds)}
+          onPick={(id) => {
+            const memberIds = project.memberIds.includes(id)
+              ? project.memberIds.filter((m) => m !== id)
+              : [...project.memberIds, id];
+            void api
+              .updateProject(project.id, { memberIds })
               .then((p) => useStore.getState().putEntity('project', p))
               .catch(toastError);
           }}

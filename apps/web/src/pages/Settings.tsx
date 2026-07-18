@@ -8,6 +8,7 @@ import { NotificationPrefs } from '../components/NotificationPrefs.js';
 import { IntakeSettings } from '../components/IntakeSettings.js';
 import { ImportExport } from '../components/ImportExport.js';
 import { ApiTokens } from '../components/ApiTokens.js';
+import { applyPreferences } from '../preferences.js';
 import { api } from '../api.js';
 import { useStore } from '../store.js';
 import {
@@ -20,7 +21,7 @@ import {
   useDragReorder,
   type Anchor,
 } from '../ui.js';
-import { ArrowLeftIcon, PlusIcon, StateIcon, TrashIcon } from '../icons.js';
+import { ArrowLeftIcon, MenuIcon, PlusIcon, StateIcon, TrashIcon } from '../icons.js';
 
 const SWATCHES = [
   '#5e6ad2',
@@ -36,62 +37,175 @@ const SWATCHES = [
 ];
 
 export function SettingsPage() {
+  const [navOpen, setNavOpen] = useState(false);
+  const link = (to: string, label: string) => (
+    <NavLink
+      to={to}
+      onClick={() => setNavOpen(false)}
+      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+    >
+      <span className="grow">{label}</span>
+    </NavLink>
+  );
   return (
     <div className="settings-layout">
-      <div className="settings-nav">
-        <NavLink to="/" className="side-item" style={{ marginBottom: 14 }}>
+      <div className={`settings-nav${navOpen ? ' open' : ''}`}>
+        <NavLink
+          to="/"
+          className="side-item"
+          style={{ marginBottom: 14 }}
+          onClick={() => setNavOpen(false)}
+        >
           <ArrowLeftIcon size={14} />
           <span className="grow">Back to app</span>
         </NavLink>
-        <div className="side-section-header">Workspace</div>
-        <NavLink
-          to="/settings/workspace"
-          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-        >
-          <span className="grow">General</span>
-        </NavLink>
-        <NavLink
-          to="/settings/members"
-          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-        >
-          <span className="grow">Members</span>
-        </NavLink>
-        <NavLink
-          to="/settings/teams"
-          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-        >
-          <span className="grow">Teams</span>
-        </NavLink>
-        <NavLink
-          to="/settings/labels"
-          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-        >
-          <span className="grow">Labels</span>
-        </NavLink>
+        <div className="side-section-header">Personal</div>
+        {link('/settings/preferences', 'Preferences')}
+        {link('/settings/profile', 'Profile')}
+        {link('/settings/notifications', 'Notifications')}
+        {link('/settings/tokens', 'API tokens')}
         <div className="side-section-header" style={{ marginTop: 14 }}>
-          Account
+          Workspace
         </div>
-        <NavLink
-          to="/settings/profile"
-          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-        >
-          <span className="grow">Profile</span>
-        </NavLink>
+        {link('/settings/workspace', 'General')}
+        {link('/settings/members', 'Members')}
+        {link('/settings/teams', 'Teams')}
+        {link('/settings/labels', 'Labels')}
       </div>
       <div className="settings-content">
+        <button className="btn ghost settings-nav-toggle" onClick={() => setNavOpen((v) => !v)}>
+          <MenuIcon size={16} /> Settings menu
+        </button>
         <div className="container">
           <Routes>
+            <Route path="preferences" element={<PreferencesSettings />} />
+            <Route path="profile" element={<ProfileSettings />} />
+            <Route path="notifications" element={<NotificationsSettings />} />
+            <Route path="tokens" element={<TokensSettings />} />
             <Route path="workspace" element={<WorkspaceSettings />} />
             <Route path="members" element={<MembersSettings />} />
             <Route path="teams" element={<TeamsSettings />} />
             <Route path="team/:teamKey" element={<TeamSettings />} />
             <Route path="labels" element={<LabelsSettings />} />
-            <Route path="profile" element={<ProfileSettings />} />
-            <Route path="*" element={<Navigate to="/settings/workspace" replace />} />
+            <Route path="*" element={<Navigate to="/settings/preferences" replace />} />
           </Routes>
         </div>
       </div>
     </div>
+  );
+}
+
+function PreferencesSettings() {
+  const me = useStore((s) => (s.userId ? s.users[s.userId] : null));
+  if (!me) return null;
+  const prefs = me.preferences;
+  const set = (patch: Partial<typeof prefs>) => {
+    const next = { ...prefs, ...patch };
+    useStore.getState().putEntity('user', { ...me, preferences: next });
+    applyPreferences(next);
+    void api.updateProfile({ preferences: patch }).catch(toastError);
+  };
+  const row = (label: string, desc: string, control: React.ReactNode) => (
+    <div className="setting-row">
+      <div className="info">
+        <div className="label">{label}</div>
+        <div className="desc">{desc}</div>
+      </div>
+      {control}
+    </div>
+  );
+  const select = <T extends string>(
+    value: T,
+    options: Array<{ value: T; label: string }>,
+    onChange: (v: T) => void,
+  ) => (
+    <select
+      className="input"
+      style={{ width: 170 }}
+      value={value}
+      onChange={(e) => onChange(e.target.value as T)}
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+  return (
+    <>
+      <h1>Preferences</h1>
+      <p className="subtitle">Personal settings that follow you across devices.</p>
+      <div className="settings-section">
+        <h2>General</h2>
+        {row(
+          'Default home view',
+          'Which screen opens when you launch nonlinear.',
+          select(
+            prefs.home,
+            [
+              { value: 'my-issues', label: 'My Issues' },
+              { value: 'inbox', label: 'Inbox' },
+              { value: 'active-team', label: 'Team issues' },
+            ],
+            (home) => set({ home }),
+          ),
+        )}
+        {row(
+          'Display names',
+          'How teammates are named across the interface.',
+          select(
+            prefs.displayNames,
+            [
+              { value: 'full', label: 'Full name' },
+              { value: 'display', label: '@handle' },
+            ],
+            (displayNames) => set({ displayNames }),
+          ),
+        )}
+        {row(
+          'First day of the week',
+          'Used for week grouping in insights and date pickers.',
+          select(
+            prefs.firstDayOfWeek,
+            [
+              { value: 'monday', label: 'Monday' },
+              { value: 'sunday', label: 'Sunday' },
+            ],
+            (firstDayOfWeek) => set({ firstDayOfWeek }),
+          ),
+        )}
+      </div>
+      <div className="settings-section">
+        <h2>Interface</h2>
+        {row(
+          'Theme',
+          'Follow your system, or pick light or dark.',
+          select(
+            prefs.theme,
+            [
+              { value: 'system', label: 'System' },
+              { value: 'dark', label: 'Dark' },
+              { value: 'light', label: 'Light' },
+            ],
+            (theme) => set({ theme }),
+          ),
+        )}
+        {row(
+          'Font size',
+          'Scale text across the whole app.',
+          select(
+            prefs.fontSize,
+            [
+              { value: 'small', label: 'Small' },
+              { value: 'default', label: 'Default' },
+              { value: 'large', label: 'Large' },
+            ],
+            (fontSize) => set({ fontSize }),
+          ),
+        )}
+      </div>
+    </>
   );
 }
 
@@ -1079,12 +1193,28 @@ function ProfileSettings() {
           </button>
         </div>
       </div>
+    </>
+  );
+}
+
+function NotificationsSettings() {
+  return (
+    <>
+      <h1>Notifications</h1>
+      <p className="subtitle">Choose what reaches your inbox and email.</p>
       <div className="settings-section">
-        <h2>Notifications</h2>
         <NotificationPrefs />
       </div>
+    </>
+  );
+}
+
+function TokensSettings() {
+  return (
+    <>
+      <h1>API tokens</h1>
+      <p className="subtitle">Programmatic access for scripts, agents, and MCP clients.</p>
       <div className="settings-section">
-        <h2>API tokens</h2>
         <ApiTokens />
       </div>
     </>

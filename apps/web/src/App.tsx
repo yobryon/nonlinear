@@ -1,12 +1,13 @@
-import { useEffect } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useStore } from './store.js';
 import { startSync } from './sync.js';
 import { Sidebar } from './Sidebar.js';
-import { CommandPalette, usePalette } from './CommandPalette.js';
+import { CommandPalette, openPalette, usePalette } from './CommandPalette.js';
 import { NewIssueDialog, openNewIssue, useNewIssue } from './NewIssueDialog.js';
 import { Toasts } from './ui.js';
-import { SpinnerIcon } from './icons.js';
+import { MenuIcon, PencilIcon, SearchIcon, SpinnerIcon } from './icons.js';
+import { applyPreferences, applyStoredPreferences } from './preferences.js';
 import { BulkBar } from './issueViews.js';
 import { AuthPage } from './pages/Auth.js';
 import { TeamIssuesPage } from './pages/TeamIssues.js';
@@ -59,6 +60,7 @@ function Shortcuts() {
         if (key === 'i') navigate('/inbox');
         else if (key === 'm') navigate('/my-issues');
         else if (key === 'p') navigate('/projects');
+        else if (key === 's') navigate('/settings/preferences');
         return;
       }
       if (key === 'c') {
@@ -82,19 +84,48 @@ function Shortcuts() {
 
 function DefaultRedirect() {
   const teams = useStore((s) => s.teams);
+  const home = useStore((s) => (s.userId ? s.users[s.userId]?.preferences.home : undefined));
   const first = Object.values(teams).sort((a, b) => a.name.localeCompare(b.name))[0];
+  if (home === 'inbox') return <Navigate to="/inbox" replace />;
+  if (home === 'my-issues') return <Navigate to="/my-issues" replace />;
   if (first) return <Navigate to={`/team/${first.key}/issues`} replace />;
   return <Navigate to="/settings/teams" replace />;
 }
 
 function AppShell() {
   const connection = useStore((s) => s.connection);
+  const workspace = useStore((s) => s.workspace);
+  const [mobileNav, setMobileNav] = useState(false);
+  const location = useLocation();
+
+  // Close the drawer on navigation.
+  useEffect(() => {
+    setMobileNav(false);
+  }, [location.pathname]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {connection === 'offline' && (
         <div className="offline-banner">Connection lost — reconnecting…</div>
       )}
-      <div className="app" style={{ flex: 1, minHeight: 0 }}>
+      <div className="mobile-header">
+        <button className="icon-btn" onClick={() => setMobileNav(true)} aria-label="Open menu">
+          <MenuIcon size={18} />
+        </button>
+        <span className="ws-logo">{(workspace?.name ?? 'N')[0]?.toUpperCase()}</span>
+        <span className="truncate" style={{ fontWeight: 600 }}>
+          {workspace?.name ?? 'nonlinear'}
+        </span>
+        <span className="grow" />
+        <button className="icon-btn" onClick={openPalette} aria-label="Search">
+          <SearchIcon size={17} />
+        </button>
+        <button className="icon-btn" onClick={() => openNewIssue()} aria-label="New issue">
+          <PencilIcon size={17} />
+        </button>
+      </div>
+      <div className={`app${mobileNav ? ' nav-open' : ''}`} style={{ flex: 1, minHeight: 0 }}>
+        {mobileNav && <div className="nav-backdrop" onClick={() => setMobileNav(false)} />}
         <Sidebar />
         <main className="main">
           <Routes>
@@ -129,12 +160,19 @@ function AppShell() {
 
 export function App() {
   const phase = useStore((s) => s.phase);
+  const myPrefs = useStore((s) => (s.userId ? s.users[s.userId]?.preferences : undefined));
 
   useEffect(() => {
+    applyStoredPreferences();
     void startSync().catch(() => {
       useStore.getState().setPhase('anonymous');
     });
   }, []);
+
+  // Apply live preferences whenever they change (also across-device via sync).
+  useEffect(() => {
+    if (myPrefs) applyPreferences(myPrefs);
+  }, [myPrefs]);
 
   const isPublicIntake = location.pathname.startsWith('/intake/');
   if (isPublicIntake) {

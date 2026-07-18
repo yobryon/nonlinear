@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import type { Issue, WorkflowState } from '@nonlinear/shared';
 import { PRIORITY_LABELS, type Priority } from '@nonlinear/shared';
 import { sortedStates, useStore } from '../store.js';
+import { firstDayOfWeek } from '../preferences.js';
 import { PriorityIcon, StateIcon } from '../icons.js';
 import { VelocityChart } from '../components/VelocityChart.js';
 
@@ -18,7 +19,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 function startOfWeek(ts: number): number {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
-  const day = (d.getDay() + 6) % 7; // Monday start
+  const day = (d.getDay() - firstDayOfWeek() + 7) % 7;
   return d.getTime() - day * 24 * 60 * 60 * 1000;
 }
 

@@ -433,19 +433,26 @@ export function Sidebar() {
       </div>
 
       {wsMenu && (
-        <Popover anchor={wsMenu} onClose={() => setWsMenu(null)} width={230}>
-          <div className="menu-heading">
-            {me?.name} · {me?.email}
+        <Popover anchor={wsMenu} onClose={() => setWsMenu(null)} width={236}>
+          <div className="menu-heading" style={{ textTransform: 'none', letterSpacing: 0 }}>
+            <div style={{ fontWeight: 600, color: 'var(--text-2)' }}>{workspace?.name}</div>
+            <div className="dim" style={{ fontSize: 11 }}>
+              {me?.name} · {me?.email}
+            </div>
           </div>
           <button
             className="menu-item"
             onClick={() => {
-              navigate('/settings/workspace');
+              navigate('/settings/preferences');
               setWsMenu(null);
             }}
           >
             <SettingsIcon size={14} />
-            <span className="grow">Workspace settings</span>
+            <span className="grow">Settings</span>
+            <span className="hint" style={{ display: 'flex', gap: 3 }}>
+              <span className="kbd">G</span>
+              <span className="kbd">S</span>
+            </span>
           </button>
           <button
             className="menu-item"
@@ -455,17 +462,7 @@ export function Sidebar() {
             }}
           >
             <TeamIcon size={14} />
-            <span className="grow">Members</span>
-          </button>
-          <button
-            className="menu-item"
-            onClick={() => {
-              navigate('/settings/profile');
-              setWsMenu(null);
-            }}
-          >
-            <UserIcon size={14} />
-            <span className="grow">My profile</span>
+            <span className="grow">Invite &amp; manage members</span>
           </button>
           <div className="menu-separator" />
           <button

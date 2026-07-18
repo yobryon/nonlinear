@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Priority } from '@nonlinear/shared';
 import { ESTIMATE_SCALE_VALUES, PRIORITY_LABELS } from '@nonlinear/shared';
 import { useStore, sortedStates, issueKey } from './store.js';
+import { personName } from './preferences.js';
 import { Picker, Popover, type Anchor } from './ui.js';
 import { PriorityIcon, StateIcon, ProjectStatusIcon, CycleIcon } from './icons.js';
 
@@ -104,7 +105,7 @@ export function AssigneePicker({
         { id: '__none', label: 'No assignee' },
         ...active.map((u) => ({
           id: u.id,
-          label: u.name,
+          label: personName(u),
           icon: (
             <span
               className="avatar"

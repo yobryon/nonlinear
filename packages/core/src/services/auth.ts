@@ -1,5 +1,6 @@
 import type { LoginInput, RegisterInput, User, Workspace } from '@nonlinear/shared';
 import { DomainError, created, type Ctx } from '../domain.js';
+import { DEFAULT_PREFERENCES } from '@nonlinear/shared';
 import { newId, newToken } from '../util/ids.js';
 import { nowIso } from '../util/time.js';
 import { hashPassword, verifyPassword } from '../util/passwords.js';
@@ -71,6 +72,7 @@ export class AuthService {
       mutedNotificationTypes: [],
       emailDigest: false,
       digestLastSentAt: null,
+      preferences: { ...DEFAULT_PREFERENCES },
       createdAt: now,
       updatedAt: now,
     };
@@ -127,6 +129,7 @@ export class AuthService {
       mutedNotificationTypes: [],
       emailDigest: false,
       digestLastSentAt: null,
+      preferences: { ...DEFAULT_PREFERENCES },
       createdAt: now,
       updatedAt: now,
     };

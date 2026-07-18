@@ -13,7 +13,7 @@ import type {
   ViewDisplay,
   WebhookFormat,
 } from './enums.js';
-import type { ApiToken, ViewFilters } from './entities.js';
+import type { ApiToken, UserPreferences, ViewFilters } from './entities.js';
 
 export interface RegisterInput {
   email: string;
@@ -371,6 +371,8 @@ export interface UpdateProfileInput {
   avatarColor?: string;
   mutedNotificationTypes?: NotificationType[];
   emailDigest?: boolean;
+  /** Partial merge over the user's current preferences. */
+  preferences?: Partial<UserPreferences>;
 }
 
 export interface CreateReactionInput {

@@ -6,9 +6,18 @@
     <meta name="color-scheme" content="dark light" />
     <title>nonlinear</title>
     <script>
+      // Pre-paint: honor the stored theme/font preference so there's no flash.
       try {
-        const t = localStorage.getItem('nl-theme');
-        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        var pref = localStorage.getItem('nl-theme-pref') || localStorage.getItem('nl-theme');
+        var resolved =
+          pref === 'system' || !pref
+            ? window.matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark'
+            : pref;
+        document.documentElement.dataset.theme = resolved;
+        var f = localStorage.getItem('nl-font-size');
+        if (f) document.documentElement.dataset.fontSize = f;
       } catch {}
     </script>
   </head>

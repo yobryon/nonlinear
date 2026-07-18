@@ -262,11 +262,16 @@ export function IssueRow({
   showState = true,
   onRowPointerDown,
   isDragging = false,
+  rowIndex,
+  rowGroup,
 }: {
   issue: Issue;
   showState?: boolean;
   onRowPointerDown?: (e: React.PointerEvent, issue: Issue) => void;
   isDragging?: boolean;
+  /** Position within its group, for drop hit-testing. */
+  rowIndex?: number;
+  rowGroup?: string;
 }) {
   const teams = useStore((s) => s.teams);
   const states = useStore((s) => s.workflowStates);
@@ -288,6 +293,8 @@ export function IssueRow({
     <>
       <div
         className={`issue-row${selected ? ' selected' : ''}${isDragging ? ' dragging' : ''}`}
+        data-issue-index={rowIndex}
+        data-row-group={rowGroup}
         onPointerDown={onRowPointerDown ? (e) => onRowPointerDown(e, issue) : undefined}
         onClick={(e) => {
           if (e.metaKey || e.ctrlKey) {
@@ -549,18 +556,32 @@ export function GroupedIssueList({
 }) {
   const teams = useStore((s) => s.teams);
   const [dragIssue, setDragIssue] = useState<Issue | null>(null);
-  const [overGroup, setOverGroup] = useState<string | null>(null);
-  const groupsRef = useRef(groups);
-  groupsRef.current = groups;
+  // Where the dragged row will land: a group and an insertion index (0..len).
+  const [drop, setDrop] = useState<{ group: string; index: number } | null>(null);
 
-  const flatIds = groups.flatMap((g) => g.issues.map((i) => i.id));
+  // When drag is enabled, present each group in manual (sortOrder) order so
+  // reordering is stable and remembered.
+  const orderedGroups = useMemo(
+    () =>
+      grouping
+        ? groups.map((g) => ({
+            ...g,
+            issues: [...g.issues].sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1)),
+          }))
+        : groups,
+    [groups, grouping],
+  );
+  const groupsRef = useRef(orderedGroups);
+  groupsRef.current = orderedGroups;
+
+  const flatIds = orderedGroups.flatMap((g) => g.issues.map((i) => i.id));
   const orderKey = flatIds.join(',');
   useEffect(() => {
     useSelection.getState().setOrder(flatIds);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderKey]);
 
-  const total = groups.reduce((n, g) => n + g.issues.length, 0);
+  const total = orderedGroups.reduce((n, g) => n + g.issues.length, 0);
   if (total === 0) {
     return (
       <div className="empty-state">
@@ -575,8 +596,27 @@ export function GroupedIssueList({
   const droppable = (group: IssueGroup): boolean =>
     grouping !== undefined && dragIssue !== null && groupPatch(grouping, group) !== null;
 
-  const groupKeyAt = (target: Element | null): string | null =>
-    (target?.closest('[data-group-key]') as HTMLElement | null)?.dataset.groupKey ?? null;
+  /** Group + insertion index under the cursor (before/after by row half). */
+  const hitTest = (
+    target: Element | null,
+    e: PointerEvent,
+  ): { group: string; index: number } | null => {
+    const row = target?.closest('[data-issue-index]') as HTMLElement | null;
+    if (row) {
+      const groupKey = row.dataset.rowGroup!;
+      const idx = Number(row.dataset.issueIndex);
+      const rect = row.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      return { group: groupKey, index: before ? idx : idx + 1 };
+    }
+    const groupEl = target?.closest('[data-group-key]') as HTMLElement | null;
+    if (groupEl) {
+      const key = groupEl.dataset.groupKey!;
+      const g = groupsRef.current.find((x) => x.key === key);
+      return { group: key, index: g?.issues.length ?? 0 };
+    }
+    return null;
+  };
 
   const startRowDrag = (e: React.PointerEvent, issue: Issue) => {
     if (!grouping) return;
@@ -585,34 +625,45 @@ export function GroupedIssueList({
       event: e,
       ghostText: `${issueKey(issue, teams)}  ${issue.title}`,
       onActivate: () => setDragIssue(issue),
-      onHover: (target) => setOverGroup(groupKeyAt(target)),
-      onDrop: (target) => {
-        const key = groupKeyAt(target);
-        const group = groupsRef.current.find((g) => g.key === key);
-        if (!group) return;
-        const patch = groupPatch(grouping, group);
-        if (!patch) return;
-        // Dragging a selected row moves the whole selection.
-        const selection = useSelection.getState().ids;
-        const targets = selection.has(issue.id) ? [...selection] : [issue.id];
-        for (const id of targets) void patchIssue(id, patch);
+      onHover: (target, ev) => setDrop(hitTest(target, ev)),
+      onDrop: (target, ev) => {
+        const hit = hitTest(target, ev) ?? drop;
+        if (!hit) return;
+        const group = groupsRef.current.find((g) => g.key === hit.group);
+        if (!group || !droppable(group)) return;
+        const patch: Record<string, unknown> = { ...(groupPatch(grouping, group) ?? {}) };
+
+        // Position within the target group by fractional index between neighbors,
+        // excluding the dragged issue itself.
+        const siblings = group.issues.filter((i) => i.id !== issue.id);
+        const before = siblings[hit.index - 1]?.sortOrder ?? null;
+        const after = siblings[hit.index]?.sortOrder ?? null;
+        try {
+          patch.sortOrder = keyBetween(before, after);
+        } catch {
+          /* neighbors out of order — keep existing order */
+        }
+        void patchIssue(issue.id, patch);
       },
       onEnd: () => {
         setDragIssue(null);
-        setOverGroup(null);
+        setDrop(null);
       },
     });
   };
 
-  const hoveredGroup = groups.find((g) => g.key === overGroup);
+  const line = (groupKey: string, index: number) =>
+    dragIssue && drop && drop.group === groupKey && drop.index === index ? (
+      <div className="insert-line" />
+    ) : null;
 
   return (
     <div>
-      {groups.map((group) => (
+      {orderedGroups.map((group) => (
         <Fragment key={group.key}>
           {group.issues.length > 0 && (
             <div
-              className={`drop-group${overGroup === group.key && droppable(group) ? ' drag-over' : ''}`}
+              className={`drop-group${drop?.group === group.key && droppable(group) ? ' drag-over' : ''}`}
               data-group-key={group.key}
             >
               <div className="group-header">
@@ -625,30 +676,24 @@ export function GroupedIssueList({
                   </button>
                 )}
               </div>
-              {group.issues.map((issue) => (
-                <IssueRow
-                  key={issue.id}
-                  issue={issue}
-                  showState={showState}
-                  isDragging={dragIssue?.id === issue.id}
-                  onRowPointerDown={grouping ? startRowDrag : undefined}
-                />
+              {group.issues.map((issue, index) => (
+                <Fragment key={issue.id}>
+                  {line(group.key, index)}
+                  <IssueRow
+                    issue={issue}
+                    showState={showState}
+                    isDragging={dragIssue?.id === issue.id}
+                    onRowPointerDown={grouping ? startRowDrag : undefined}
+                    rowIndex={index}
+                    rowGroup={group.key}
+                  />
+                </Fragment>
               ))}
+              {line(group.key, group.issues.length)}
             </div>
           )}
         </Fragment>
       ))}
-      {dragIssue && (
-        <div className="drag-hint">
-          {hoveredGroup && droppable(hoveredGroup) ? (
-            <>
-              Drop to move to <strong>{hoveredGroup.label}</strong>
-            </>
-          ) : (
-            'Drag over a group to move this issue'
-          )}
-        </div>
-      )}
     </div>
   );
 }

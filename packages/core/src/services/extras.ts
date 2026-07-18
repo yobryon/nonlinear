@@ -177,6 +177,9 @@ export class UserService {
       user.mutedNotificationTypes = [...new Set(input.mutedNotificationTypes)];
     }
     if (input.emailDigest !== undefined) user.emailDigest = input.emailDigest;
+    if (input.preferences !== undefined) {
+      user.preferences = { ...user.preferences, ...input.preferences };
+    }
     user.updatedAt = nowIso();
     await storage.users.update(user);
     await bus.publish([updated('user', user)]);
