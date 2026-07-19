@@ -1,5 +1,6 @@
 import type {
   ActivityType,
+  AuditAction,
   CustomerRequestSource,
   DisplayNameFormat,
   EstimateScale,
@@ -71,6 +72,28 @@ export interface User {
   preferences: UserPreferences;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A workspace-level security/admin event. Not synced to clients (it can grow
+ * large and is admin-only); read through the paged `GET /api/audit` endpoint.
+ * `actorId` is null for system/IdP-initiated events (e.g. SCIM provisioning).
+ */
+export interface AuditEvent {
+  id: string;
+  action: AuditAction;
+  actorId: string | null;
+  /** Human-readable actor label captured at event time (survives user deletion). */
+  actorLabel: string;
+  /** What the event acted on, e.g. 'user', 'team', 'token'. */
+  targetType: string | null;
+  targetId: string | null;
+  /** Short human-readable description of the target, captured at event time. */
+  targetLabel: string | null;
+  /** Free-form structured context (old/new role, ip, provider, etc.). */
+  metadata: Record<string, unknown>;
+  ip: string | null;
+  createdAt: string;
 }
 
 export interface Team {

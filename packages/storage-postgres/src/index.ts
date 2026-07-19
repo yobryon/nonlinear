@@ -1,8 +1,10 @@
 import pg from 'pg';
-import type { Issue, IssueActivity, SyncDelta, Team, User } from '@nonlinear/shared';
+import type { AuditEvent, Issue, IssueActivity, SyncDelta, Team, User } from '@nonlinear/shared';
 import type {
   ActivityStore,
   ApiTokenStore,
+  AuditPage,
+  AuditStore,
   EntityStore,
   IssueStore,
   Session,
@@ -100,6 +102,24 @@ class PgUserStore extends PgEntityStore<User> implements UserStore {
   async count(): Promise<number> {
     const { rows } = await this.pool.query('SELECT count(*)::int AS n FROM users');
     return rows[0].n;
+  }
+
+  async getBySsoSubject(subject: string): Promise<User | null> {
+    const { rows } = await this.pool.query(
+      `SELECT u.data FROM users u
+       JOIN sso_identities s ON s.user_id = u.id
+       WHERE s.subject = $1`,
+      [subject],
+    );
+    return rows[0]?.data ?? null;
+  }
+
+  async linkSsoSubject(userId: string, subject: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO sso_identities (subject, user_id) VALUES ($1, $2)
+       ON CONFLICT (subject) DO UPDATE SET user_id = EXCLUDED.user_id`,
+      [subject, userId],
+    );
   }
 }
 
@@ -289,6 +309,48 @@ class PgSyncLog implements SyncLogStore {
   }
 }
 
+class PgAuditStore implements AuditStore {
+  constructor(private pool: pg.Pool) {}
+
+  async append(event: AuditEvent): Promise<void> {
+    await this.pool.query('INSERT INTO audit_log (id, created_at, data) VALUES ($1, $2, $3)', [
+      event.id,
+      event.createdAt,
+      JSON.stringify(event),
+    ]);
+  }
+
+  async list(opts: { limit: number; cursor?: string | null }): Promise<AuditPage> {
+    // Order by (created_at, id) descending; the cursor is "<createdAt> <id>".
+    const [curCreated, curId] = opts.cursor ? splitAuditCursor(opts.cursor) : [null, null];
+    const { rows } =
+      curCreated !== null
+        ? await this.pool.query(
+            `SELECT id, created_at, data FROM audit_log
+             WHERE (created_at, id) < ($1::timestamptz, $2)
+             ORDER BY created_at DESC, id DESC LIMIT $3`,
+            [curCreated, curId, opts.limit],
+          )
+        : await this.pool.query(
+            `SELECT id, created_at, data FROM audit_log
+             ORDER BY created_at DESC, id DESC LIMIT $1`,
+            [opts.limit],
+          );
+    const events = rows.map((r) => r.data as AuditEvent);
+    const last = rows[rows.length - 1];
+    const nextCursor =
+      rows.length === opts.limit && last
+        ? `${(last.data as AuditEvent).createdAt} ${last.id}`
+        : null;
+    return { events, nextCursor };
+  }
+}
+
+function splitAuditCursor(cursor: string): [string, string] {
+  const i = cursor.indexOf(' ');
+  return i === -1 ? [cursor, ''] : [cursor.slice(0, i), cursor.slice(i + 1)];
+}
+
 export interface PostgresStorageOptions {
   connectionString: string;
   /** Pool size; keep small — this app is a single low-resource container. */
@@ -332,6 +394,7 @@ export async function createPostgresStorage(options: PostgresStorageOptions): Pr
     activities: new PgActivityStore(pool, 'issue_activities'),
     sessions: new PgSessionStore(pool),
     apiTokens: new PgApiTokenStore(pool),
+    auditLog: new PgAuditStore(pool),
     syncLog: new PgSyncLog(pool),
     close: () => pool.end(),
   };

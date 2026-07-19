@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import type { StateCategory, Team, WorkflowState } from '@nonlinear/shared';
+import type { AuditEvent, StateCategory, Team, WorkflowState } from '@nonlinear/shared';
 import { ESTIMATE_SCALES, STATE_CATEGORIES } from '@nonlinear/shared';
 import { TemplatesSettings } from '../components/TemplatesSettings.js';
 import { TriageRulesSettings } from '../components/TriageRulesSettings.js';
@@ -10,7 +10,7 @@ import { ImportExport } from '../components/ImportExport.js';
 import { ApiTokens } from '../components/ApiTokens.js';
 import { applyPreferences } from '../preferences.js';
 import { api } from '../api.js';
-import { useStore } from '../store.js';
+import { relativeTime, useStore } from '../store.js';
 import {
   anchorFromEvent,
   Avatar,
@@ -38,6 +38,7 @@ const SWATCHES = [
 
 export function SettingsPage() {
   const [navOpen, setNavOpen] = useState(false);
+  const isAdmin = useStore((s) => (s.userId ? s.users[s.userId]?.role === 'admin' : false));
   const link = (to: string, label: string) => (
     <NavLink
       to={to}
@@ -71,6 +72,7 @@ export function SettingsPage() {
         {link('/settings/members', 'Members')}
         {link('/settings/teams', 'Teams')}
         {link('/settings/labels', 'Labels')}
+        {isAdmin && link('/settings/audit', 'Audit log')}
       </div>
       <div className="settings-content">
         <button className="btn ghost settings-nav-toggle" onClick={() => setNavOpen((v) => !v)}>
@@ -87,6 +89,7 @@ export function SettingsPage() {
             <Route path="teams" element={<TeamsSettings />} />
             <Route path="team/:teamKey" element={<TeamSettings />} />
             <Route path="labels" element={<LabelsSettings />} />
+            <Route path="audit" element={<AuditSettings />} />
             <Route path="*" element={<Navigate to="/settings/preferences" replace />} />
           </Routes>
         </div>
@@ -1219,6 +1222,120 @@ function TokensSettings() {
       <p className="subtitle">Programmatic access for scripts, agents, and MCP clients.</p>
       <div className="settings-section">
         <ApiTokens />
+      </div>
+    </>
+  );
+}
+
+const AUDIT_LABELS: Record<string, string> = {
+  'user.login': 'signed in',
+  'user.login_failed': 'failed sign-in',
+  'user.logout': 'signed out',
+  'user.register': 'registered',
+  'user.provisioned': 'provisioned',
+  'user.deactivated': 'deactivated',
+  'user.reactivated': 'reactivated',
+  'user.role_changed': 'changed role',
+  'user.sso_linked': 'linked SSO',
+  'member.added': 'added member',
+  'member.removed': 'removed member',
+  'token.created': 'created API token',
+  'token.revoked': 'revoked API token',
+  'agent.created': 'created agent',
+  'webhook.created': 'created webhook',
+  'webhook.deleted': 'deleted webhook',
+  'team.created': 'created team',
+  'team.deleted': 'deleted team',
+};
+
+function auditDetail(e: AuditEvent): string {
+  const parts: string[] = [];
+  if (e.targetLabel) parts.push(e.targetLabel);
+  const m = e.metadata ?? {};
+  if (e.action === 'user.role_changed' && m.from && m.to) parts.push(`${m.from} → ${m.to}`);
+  if (typeof m.method === 'string') parts.push(m.method);
+  if (typeof m.via === 'string') parts.push(m.via);
+  if (typeof m.format === 'string') parts.push(m.format);
+  return parts.join(' · ');
+}
+
+function AuditSettings() {
+  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = (next?: string | null) => {
+    setLoading(true);
+    void api
+      .audit(next)
+      .then((res) => {
+        setEvents((prev) => (next ? [...prev, ...res.events] : res.events));
+        setCursor(res.nextCursor);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load audit log'))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <>
+      <h1>Audit log</h1>
+      <p className="subtitle">
+        Security and administrative events across the workspace. Newest first.
+      </p>
+      <div className="settings-section">
+        {error && <div className="auth-error">{error}</div>}
+        {!error && events.length === 0 && !loading && (
+          <div className="empty-state">
+            <h3>No events yet</h3>
+            <p>Sign-ins, role changes, and provisioning will appear here.</p>
+          </div>
+        )}
+        {events.length > 0 && (
+          <table className="audit-table">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Actor</th>
+                <th>Action</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((e) => (
+                <tr key={e.id}>
+                  <td className="audit-when" title={e.createdAt}>
+                    {relativeTime(e.createdAt)}
+                  </td>
+                  <td>{e.actorLabel}</td>
+                  <td>
+                    <span
+                      className={`audit-action${e.action === 'user.login_failed' ? ' fail' : ''}`}
+                    >
+                      {AUDIT_LABELS[e.action] ?? e.action}
+                    </span>
+                  </td>
+                  <td className="audit-detail">{auditDetail(e)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {cursor && events.length > 0 && (
+          <button
+            className="btn ghost"
+            style={{ marginTop: 12 }}
+            disabled={loading}
+            onClick={() => load(cursor)}
+          >
+            {loading ? 'Loading…' : 'Load more'}
+          </button>
+        )}
       </div>
     </>
   );

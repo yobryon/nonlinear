@@ -39,8 +39,8 @@ package's dependencies, and a grep for `from 'pg'` or `import pg` outside
 
 ## Why a storage seam at all
 
-Linear is a hosted product with one backend. nonlinear is a *self-hostable
-clone* whose owner wants it to run three ways that pull in opposite directions:
+Linear is a hosted product with one backend. nonlinear is a _self-hostable
+clone_ whose owner wants it to run three ways that pull in opposite directions:
 
 - **Zero-dependency dev / test.** `STORAGE=memory pnpm --filter @nonlinear/api dev`
   boots the entire product with no database at all. The test suite
@@ -57,7 +57,7 @@ A storage seam is the cheapest way to serve all three from one codebase. The
 alternative — writing the domain directly against Postgres and mocking the
 database in tests — would have made the in-memory path a lie (mocks drift from
 real behavior) and coupled every service to SQL. Instead the in-memory store is
-a *first-class implementation of the same contract*, so "does this work on
+a _first-class implementation of the same contract_, so "does this work on
 memory?" and "does this work on Postgres?" are the same question asked of two
 conforming objects.
 
@@ -76,7 +76,7 @@ export interface EntityStore<T extends { id: string }> {
   get(id: string): Promise<T | null>;
   all(): Promise<T[]>;
   insert(entity: T): Promise<void>;
-  update(entity: T): Promise<void>;   // full-row replace by id
+  update(entity: T): Promise<void>; // full-row replace by id
   delete(id: string): Promise<void>;
 }
 ```
@@ -95,7 +95,7 @@ lookup other than by id:
 - `TeamStore.nextIssueNumber` — the atomic issue-number reservation, discussed
   below.
 
-Three interfaces intentionally do *not* fit the `EntityStore` mold because they
+Three interfaces intentionally do _not_ fit the `EntityStore` mold because they
 are not synced entities: `SessionStore`, `ApiTokenStore`, and `SyncLogStore`.
 They model non-document, engine-sensitive concerns — bearer-secret lookup,
 ordered append — and each exposes only the operations its consumers actually
@@ -120,11 +120,21 @@ types:
 
 ```ts
 class PgEntityStore<T extends { id: string }> {
-  async get(id)      { return (await q(`SELECT data FROM ${t} WHERE id=$1`,[id])).rows[0]?.data ?? null; }
-  async all()        { return (await q(`SELECT data FROM ${t}`)).rows.map(r => r.data); }
-  async insert(e)    { await q(`INSERT INTO ${t} (id,data) VALUES ($1,$2)`, [e.id, JSON.stringify(e)]); }
-  async update(e)    { await q(`UPDATE ${t} SET data=$2 WHERE id=$1`, [e.id, JSON.stringify(e)]); }
-  async delete(id)   { await q(`DELETE FROM ${t} WHERE id=$1`, [id]); }
+  async get(id) {
+    return (await q(`SELECT data FROM ${t} WHERE id=$1`, [id])).rows[0]?.data ?? null;
+  }
+  async all() {
+    return (await q(`SELECT data FROM ${t}`)).rows.map((r) => r.data);
+  }
+  async insert(e) {
+    await q(`INSERT INTO ${t} (id,data) VALUES ($1,$2)`, [e.id, JSON.stringify(e)]);
+  }
+  async update(e) {
+    await q(`UPDATE ${t} SET data=$2 WHERE id=$1`, [e.id, JSON.stringify(e)]);
+  }
+  async delete(id) {
+    await q(`DELETE FROM ${t} WHERE id=$1`, [id]);
+  }
 }
 ```
 
@@ -153,7 +163,7 @@ documents for concrete reasons tied to the constraints:
 
 2. **The domain, not the database, owns invariants.** All business rules live in
    `packages/core` — issue numbering, category timestamps, sub-issue cycle
-   prevention, cascade deletes, notification fan-out. We deliberately did *not*
+   prevention, cascade deletes, notification fan-out. We deliberately did _not_
    want a second copy of the schema's meaning encoded as foreign keys and
    triggers, because then every rule lives in two places and the memory engine
    (which has no FKs) would silently allow things Postgres forbids. Keeping
@@ -229,7 +239,7 @@ be either wrong or slow. They are the exceptions that define the rule.
   hashes is the same idea from `001_init.sql`.)
 
 - **`team_counters`** — `team_id PRIMARY KEY, counter bigint`. This is the one
-  that would be a *correctness bug* as a document. Issue numbers (`ENG-42`) must
+  that would be a _correctness bug_ as a document. Issue numbers (`ENG-42`) must
   be gapless and unique per team under concurrency. `PgTeamStore.nextIssueNumber`
   reserves the next number with a single atomic statement:
 
@@ -240,7 +250,7 @@ be either wrong or slow. They are the exceptions that define the rule.
   ```
 
   A read-modify-write on a `Team` document (`SELECT data; data.counter++;
-  UPDATE`) would race: two issues created at the same instant would both read
+UPDATE`) would race: two issues created at the same instant would both read
   the same counter and collide. The atomic upsert makes number reservation a
   single serialized operation in the database. (The memory engine gets the same
   behavior for free by being single-process — `MemoryTeamStore` keeps a
@@ -252,7 +262,7 @@ be either wrong or slow. They are the exceptions that define the rule.
   (`03-real-time-sync.md`). `bigserial` is doing the load-bearing work: it hands
   out consecutive, gap-tolerant ids atomically, which is exactly the "assign
   consecutive syncIds atomically" promise in `SyncLogStore.append`. The `data`
-  column is jsonb (deltas carry full entities), but the *ordering* is
+  column is jsonb (deltas carry full entities), but the _ordering_ is
   relational and could not be a document.
 
 The pattern across all four: **use a document unless the semantics demand
@@ -283,7 +293,7 @@ Two properties are worth calling out:
 - **Backfills are part of migrations, not a separate step.** Because entities
   are documents, "add a field" is really "existing rows lack a key." Migrations
   handle this inline with `UPDATE ... SET data = data || jsonb_build_object(...)
-  WHERE NOT data ? 'newField'`. See `002`'s `triageEnabled`/`slaUrgentHours`
+WHERE NOT data ? 'newField'`. See `002`'s `triageEnabled`/`slaUrgentHours`
   backfill on teams, or `005`'s whole `preferences` object added to every user.
   The `WHERE NOT data ? 'field'` guard makes them idempotent-in-spirit and cheap
   to reason about.
@@ -295,7 +305,7 @@ would need rethinking if we ever supported automated rollbacks.
 
 ## The `BlobStore` seam: attachments live outside the entity store
 
-Attachment *payloads* (the actual file bytes) don't belong in the entity store —
+Attachment _payloads_ (the actual file bytes) don't belong in the entity store —
 you don't want megabytes of binary in a jsonb column replayed through the sync
 log. So they get their own, separate seam: `BlobStore` in
 `packages/core/src/blob.ts`, deliberately shaped like `Storage` and swapped the
@@ -309,7 +319,7 @@ export interface BlobStore {
 }
 ```
 
-The `Attachment` *entity* (metadata: filename, content type, size, the blob key)
+The `Attachment` _entity_ (metadata: filename, content type, size, the blob key)
 is a normal synced document in the `attachments` table and rides the sync log
 like everything else. The bytes live in the `BlobStore` under that key. This
 split is what keeps binary out of the real-time path while still letting the UI
@@ -351,7 +361,7 @@ behavior. Everything above it is an adapter that translates some protocol into
 `Domain` method calls and translates the results back:
 
 - **REST** (`apps/api/src/server.ts`) — Fastify routes that authenticate a
-  request (session cookie *or* `Bearer` token, both resolving to a `User`) and
+  request (session cookie _or_ `Bearer` token, both resolving to a `User`) and
   delegate straight to a service. The route layer does auth, validation, and
   HTTP status mapping (`DomainError.status` → HTTP code) and nothing else. It
   holds no business rules.
@@ -364,14 +374,14 @@ behavior. Everything above it is an adapter that translates some protocol into
   `IssueService` / `CommentService` to comment and move issues. Pure adapter:
   GitHub's payload in, `Domain` calls out.
 - **Public intake** (`apps/api/src/intake.ts`) — an unauthenticated per-team
-  endpoint (form posts *and* Slack slash commands) that rate-limits anonymous
+  endpoint (form posts _and_ Slack slash commands) that rate-limits anonymous
   submissions and calls `IssueService.create`. It reaches the same domain the
   authenticated UI does, just through a public, throttled door.
 - **MCP** (`apps/api/src/mcp.ts`) — an HTTP MCP server (Streamable HTTP) mounted
   in-process at `/mcp`, Bearer-authenticated, exposing 13 tools that name-resolve
   teams/issues/users and call `Domain` methods. Its header comment says it
   outright: "a protocol adapter over the same `Domain` the REST routes use." It
-  is deliberately *not* a separate container — see `06-agent-platform.md` for
+  is deliberately _not_ a separate container — see `06-agent-platform.md` for
   that decision.
 
 The payoff of this shape is concrete: **a mutation made over MCP, over REST, or
@@ -402,8 +412,8 @@ Putting both seams together, a single "create issue via MCP" call flows:
 3. `SyncBus.publish` appends to `storage.syncLog.append` (the `sync_log` table)
    and fans out to live listeners.
 4. The Postgres adapter turns `storage.issues.insert(issue)` into `INSERT INTO
-   issues (id, data) VALUES ($1, $2)` and `syncLog.append` into an `INSERT ...
-   RETURNING sync_id`.
+issues (id, data) VALUES ($1, $2)` and `syncLog.append` into an `INSERT ...
+RETURNING sync_id`.
 5. `apps/api/src/hub.ts`, subscribed to the bus, streams the new deltas to every
    connected browser whose visibility rules allow them.
 
@@ -419,7 +429,7 @@ checklist rather than a design exercise (also in `CLAUDE.md`):
 1. Add the entity type and register it in `SyncModelMap` / `SYNC_MODEL_NAMES` in
    `packages/shared`.
 2. Add an `EntityStore<T>` field to `Storage` in `packages/core/src/storage.ts`.
-3. Implement it in *both* engines: a `new MemoryEntityStore<T>()` in
+3. Implement it in _both_ engines: a `new MemoryEntityStore<T>()` in
    `memory.ts`, and a `new PgEntityStore(pool, 'table_name')` plus a
    `CREATE TABLE (id text PRIMARY KEY, data jsonb NOT NULL)` migration (with an
    expression index if any store method filters on a field).
@@ -465,7 +475,7 @@ the domain layer ever learning where its data lives. The document design is what
 keeps the Postgres adapter small and the two engines behaviorally identical,
 which is the only way the memory path can be a trustworthy stand-in rather than a
 divergent mock. The transport seam is what lets an agent (MCP), a browser (REST +
-WebSocket), a repo (GitHub), and the public (intake) all drive the *same*
+WebSocket), a repo (GitHub), and the public (intake) all drive the _same_
 product with the same rules and the same real-time propagation.
 
 The through-line: **`packages/core` is the product, and it is bracketed by two

@@ -1,5 +1,6 @@
 import type {
   Attachment,
+  AuditEvent,
   BootstrapPayload,
   Comment,
   CreateCommentInput,
@@ -87,7 +88,17 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
 }
 
 export const api = {
-  meta: () => req<{ setupRequired: boolean; workspaceName: string | null }>('GET', '/api/meta'),
+  meta: () =>
+    req<{
+      setupRequired: boolean;
+      workspaceName: string | null;
+      sso: { enabled: boolean; label: string } | null;
+    }>('GET', '/api/meta'),
+  audit: (cursor?: string | null) =>
+    req<{ events: AuditEvent[]; nextCursor: string | null }>(
+      'GET',
+      `/api/audit${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
+    ),
   register: (input: { email: string; password: string; name: string; workspaceName?: string }) =>
     req<SessionResponse>('POST', '/api/auth/register', input),
   login: (input: { email: string; password: string }) =>

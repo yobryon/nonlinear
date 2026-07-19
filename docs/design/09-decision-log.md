@@ -3,7 +3,7 @@
 This is the institutional-memory doc for **nonlinear**, the self-hostable Linear
 clone. It records the load-bearing decisions — the ones that shaped the code and
 would be expensive to reverse — with enough context that a new teammate can
-understand not just *what* we built but *why*, and what we gave up.
+understand not just _what_ we built but _why_, and what we gave up.
 
 Each entry follows the same shape: **Decision / Context / Alternatives
 considered / Why / Consequences**. Entries are grouped by theme rather than
@@ -33,7 +33,7 @@ runtime-only bugs.
 or an OpenAPI/GraphQL schema generating client types. (b) A polyglot stack
 (e.g. a Go or Python API with a TypeScript front end) sharing types via codegen.
 
-**Why.** Sharing *the actual TypeScript types* — not a generated approximation —
+**Why.** Sharing _the actual TypeScript types_ — not a generated approximation —
 means a change to an entity is a compile error on every side that hasn't caught
 up, caught by `pnpm typecheck` before it ships. `packages/shared` deliberately
 has no runtime dependencies and no database driver, so it is safe for the
@@ -44,7 +44,7 @@ browser bundle to import wholesale. Linear's own priority scheme
 **Consequences.** Everything is TypeScript, which constrains hiring and rules
 out a faster runtime for the hot path — an acceptable trade for a low-traffic
 self-hosted tool. One subtlety bites newcomers: tests resolve workspace
-siblings from *source* via vitest aliases, but `tsc` and Docker resolve them
+siblings from _source_ via vitest aliases, but `tsc` and Docker resolve them
 from each package's built `dist/`. If types look stale, rebuild the upstream
 package (documented in `CLAUDE.md`). ESM `.js` import specifiers are required
 everywhere except `apps/web`, which uses bundler resolution.
@@ -97,7 +97,7 @@ and every test can run with `STORAGE=memory` and zero external dependencies.
 
 **Decision.** Real-time sync is a **monotonic append-only log of full-entity
 deltas**. Every mutation appends `{ syncId, model, action, data }` records
-(`SyncDelta` in `packages/shared/src/sync.ts`); `data` is the *entire* entity
+(`SyncDelta` in `packages/shared/src/sync.ts`); `data` is the _entire_ entity
 for create/update and just `{ id }` for delete. Clients bootstrap a full
 snapshot tagged with the current `syncId`, then stream newer deltas over
 `/api/ws`. On reconnect a client sends `hello { lastSyncId }` and the server
@@ -118,7 +118,7 @@ domain events as the source of truth and fold them into state. (c) Field-level
 multi-master editing to reconcile, so a CRDT's core benefit is cost we do not
 need — and its complexity (per-field metadata, garbage collection, opaque
 merge semantics) is real. Event sourcing was rejected for the same reason: our
-source of truth is *current entity state* in jsonb, and we did not want to carry
+source of truth is _current entity state_ in jsonb, and we did not want to carry
 a separate event store and projection layer. Shipping **full entities** in each
 delta (rather than field patches) makes the client merge trivially idempotent —
 applying the same delta twice, or applying it out of order relative to an
@@ -165,7 +165,7 @@ framework with the domain coupled to HTTP request/response objects.
 bus), never a `Request`. `createDomain(storage, options)` wires every service
 once and returns a `Domain` object (`index.ts` lines 104–145); cross-service
 cascades that would otherwise create import cycles — issue delete →
-reminders/customer-requests cleanup — are injected as *optional* dependencies
+reminders/customer-requests cleanup — are injected as _optional_ dependencies
 (`new IssueService(ctx, attachments, { reminders, customerRequests })`). The
 payoff is that `apps/api/src/mcp.ts` is genuinely just a protocol adapter over
 "the same Domain the REST routes use" (its own header comment), and the whole
@@ -178,7 +178,7 @@ must register there and be exported from `index.ts`. The optional-dependency
 pattern for cascades is slightly indirect, but it is the price of keeping the
 services in one package without circular imports. The discipline is enforced
 socially and by the storage boundary, not by a module system — a determined
-route handler *could* embed logic; code review is the guardrail.
+route handler _could_ embed logic; code review is the guardrail.
 
 ---
 
@@ -210,7 +210,7 @@ cleanly with our sync: reorders are just updates.
 **Consequences.** Keys grow by roughly one character per adversarial "always
 insert in the same gap" sequence; in practice human reordering keeps them short,
 and there is no global renumber event to coordinate across clients. Two clients
-that drop into the *exact* same gap concurrently can produce equal keys; the
+that drop into the _exact_ same gap concurrently can produce equal keys; the
 server-authoritative last-write-by-syncId model resolves the tie deterministically
 (one entity's key wins), so at worst a user re-drags. The util lives in `shared`
 so client and server compute keys identically.
@@ -232,7 +232,7 @@ reordering that feels instant and looks like the rest of the design system.
 **Why.** The file's own header records the reason bluntly: HTML5 DnD "proved
 unreliable — Chrome aborts native drags when the DOM changes near dragstart,
 ghosts are uncustomizable, events are flaky." Because our lists re-render
-optimistically the instant an item moves, the DOM *does* change near dragstart,
+optimistically the instant an item moves, the DOM _does_ change near dragstart,
 which is exactly what breaks native drags. Pointer events give us full control:
 a travel threshold (default 5px) so a click stays a click, a custom floating
 ghost pill, hit-testing via `document.elementFromPoint`, edge auto-scroll, and
@@ -253,7 +253,7 @@ free, which was the goal.
 **Decision.** The MCP server is mounted **in the API process** at `/mcp`
 (Streamable HTTP, `@modelcontextprotocol/sdk`), constructed as a protocol
 adapter over the same in-process `Domain` (`apps/api/src/mcp.ts`). It is
-deliberately *not* a separate container or a separate service.
+deliberately _not_ a separate container or a separate service.
 
 **Context.** Agents should be able to drive nonlinear the way they drive Linear's
 hosted MCP — create issues, comment, reassign — with the same rules as the REST
@@ -304,14 +304,14 @@ a `timingSafeEqual` confirm, checks expiry, and requires an `active` user
 (`authenticate`, lines 70–84). Keeping tokens **out of the sync log** is a
 deliberate security boundary: bearer secrets must never ride the real-time
 delta stream to every connected client. A stored `prefix` (first few chars)
-lets the UI show *which* token without revealing it, and `lastUsedAt` is touched
+lets the UI show _which_ token without revealing it, and `lastUsedAt` is touched
 on each use for auditing. JWTs were overkill for a self-hosted tool and would
 make server-side revocation harder.
 
 **Consequences.** A token, once shown, is unrecoverable — lose it and you mint a
 new one. Because they are non-synced, token management is a REST-only surface
 (list/create/revoke), not something that appears in the live client store. Note
-this is distinct from Linear-style *public API tokens* / OAuth apps, which are
+this is distinct from Linear-style _public API tokens_ / OAuth apps, which are
 **not yet** built — the roadmap lists a public API + GraphQL under P3.
 
 ---
@@ -319,7 +319,7 @@ this is distinct from Linear-style *public API tokens* / OAuth apps, which are
 ## 9. Dual authentication at the transport edge
 
 **Decision.** Every authenticated request resolves a user one of two ways: the
-browser **session cookie** (`nl_session`, scrypt-hashed) *or* an
+browser **session cookie** (`nl_session`, scrypt-hashed) _or_ an
 `Authorization: Bearer <token>` header. A single `resolveUser` helper in
 `apps/api/src/server.ts` (lines 58–66) tries the bearer token first, then falls
 back to the cookie.
@@ -359,7 +359,7 @@ fires **only** on events where that agent is the assignee or is `@mentioned`
 
 **Context.** Linear's 2025–26 direction is assignable agents that behave like
 teammates. We wanted the self-hosted analog: an agent you interact with using
-the *same* primitives as a human — assignment, mention, comment — not a bolt-on
+the _same_ primitives as a human — assignment, mention, comment — not a bolt-on
 bot API.
 
 **Alternatives considered.** (a) A dedicated bot/automation API distinct from
@@ -406,7 +406,7 @@ zero server work). (b) A separate per-device settings store.
 change your theme on your laptop and your phone agrees, because it arrives as an
 ordinary sync delta on the `user` model. The `localStorage` copy is a
 first-paint optimization only: `applyStoredPreferences` reads the last-known
-theme/font *before* bootstrap completes so the first frame isn't wrong, then
+theme/font _before_ bootstrap completes so the first frame isn't wrong, then
 `applyPreferences` takes over from the synced value (`preferences.ts` lines
 25–58). `personName` and `firstDayOfWeek` read straight from the synced
 preferences, so name-display and calendar behavior are consistent everywhere.
@@ -441,7 +441,7 @@ app and a lesser mobile one. The drawer pattern (fixed, translate-off-canvas,
 backdrop to dismiss) is the standard way to reclaim horizontal space on a phone
 without hiding navigation. It costs a bounded amount of CSS and no new bundle.
 
-**Consequences.** This is a responsive *web* experience, not an installable app:
+**Consequences.** This is a responsive _web_ experience, not an installable app:
 a **PWA manifest and offline support are not yet built** — they sit under P3 in
 `ROADMAP.md` ("ship a PWA manifest + responsive layout pass first"). Pointer-
 event drag (§6) works with touch pointers, so reordering functions on mobile,
@@ -472,19 +472,76 @@ search, templates, health updates, timeline, snooze/reminders, duplicate
 detection, archive) and P2 (customers + requests, public intake + Slack,
 inline doc comments, triage rules, Slack webhooks, CSV import/export,
 notification prefs + email digest, configurable estimates + velocity/burn-up)
-are the features that make the tool *feel* like Linear in daily use, so they
+are the features that make the tool _feel_ like Linear in daily use, so they
 shipped. P3 items are either genuinely large (GraphQL API, SSO/SCIM, Diffs/code
 review) or hang off ecosystems a self-hosted install doesn't sit in — those are
 explicitly deferred, and the marketplace/CRM connectors are declared non-goals
 "for now."
 
-**Consequences.** Some real gaps are known and *chosen*: no public API tokens or
-GraphQL yet (REST + personal tokens only), no custom dashboards, no Pulse
-activity digest, no BYO-key AI features, PWA/mobile-native, Azure Blob adapter
+**Consequences.** Some real gaps are known and _chosen_: no GraphQL API yet
+(REST + personal Bearer tokens only), no custom dashboards, no Pulse activity
+digest, no BYO-key AI features, PWA/mobile-native, and the Azure Blob adapter
 (the `BlobStore` interface in `packages/core/src/blob.ts` is the seam; fs volume
-is today's attachment store), SSO, and audit log. "Continue toward parity" has a
-defined meaning: pick from the top of P3. This keeps scope honest — the doc set
-never claims a feature the code doesn't have.
+is today's attachment store). SSO, SCIM, and the audit log have since shipped
+(see entry 14). "Continue toward parity" has a defined meaning: pick from the top
+of P3. This keeps scope honest — the doc set never claims a feature the code
+doesn't have.
+
+---
+
+## 14. Enterprise auth as config-gated transport adapters
+
+**Decision.** Add OIDC single sign-on, SCIM 2.0 user provisioning, and a
+workspace audit log — but keep every piece a thin adapter over the existing
+`Domain`, gated by configuration, so a small self-hosted install pays nothing
+for capabilities it doesn't use. SSO (`apps/api/src/sso.ts`) and SCIM
+(`apps/api/src/scim.ts`) sit beside `github.ts` and `mcp.ts`; the domain gains
+only `AuthService.findOrProvisionSso`, `AuthService.provisionMember`,
+`UserService.setActive`, and an `AuditService`. The OIDC subject↔user link is
+stored in the auth layer (`sso_identities`), never on the synced `User`.
+
+**Context.** SSO/SCIM/audit are the checklist items that gate adoption by any
+organization with an IdP, and they were the top of P3's platform tier. But they
+are also the classic place a clone bloats: an always-on identity subsystem, a
+new session model, IdP-specific branches. The founding constraints (low
+cost/resource, containerized, modular) argue against any of that being
+mandatory.
+
+**Alternatives considered.** (a) A dedicated auth service/container (Keycloak,
+Ory) fronting the app — heavy, a second moving part, against the
+single-small-process constraint. (b) A generic auth library abstracting many
+providers — more surface than "verify one OIDC provider" needs. (c) Put the
+OIDC HTTP handshake inside `packages/core` — but discovery, token exchange, and
+JWKS are transport I/O; core stays pure domain, so the handshake belongs in an
+API adapter that hands _normalized claims_ to the domain. (d) Model the SSO
+subject as a field on `User` — but `User` syncs to every client, and the IdP
+subject is a security identifier that shouldn't cross the sync boundary. (e)
+Record audit events inside each service — but actor and IP live at the transport
+edge, and threading them through every domain call is invasive; the audit write
+is a cross-cutting concern recorded at the route/adapter layer.
+
+**Why.** OIDC verification is security-sensitive, so we use `jose` (zero-
+dependency, well-audited) for JWKS + ID-token verification rather than hand-
+rolling JWT crypto — the one place "write it ourselves" would be reckless. The
+account-resolution policy (match by stable subject → link an existing account by
+email → JIT-provision a member if allowed) lives in the domain and is unit-
+tested independently of the HTTP flow, so the risky wire protocol and the risky
+business logic are separable and separately verifiable. Audit events are
+**not** synced: they are admin-only and can grow without bound, so they are read
+through a paged `GET /api/audit` with a stable `(createdAt, id)` cursor — a plain
+`createdAt` cursor would silently drop or duplicate rows when a bulk operation
+(e.g. SCIM syncing hundreds of users) writes many same-millisecond events.
+
+**Consequences.** With `OIDC_ISSUER`/`SCIM_TOKEN` unset, none of this registers —
+the login page shows only the password form and `/scim/*` 404s, so the default
+install is unchanged. SCIM covers Users, not Groups: team membership in
+nonlinear is a product decision, not an IdP-driven one. Deactivation (SCIM
+DELETE/PATCH `active:false`, or an admin) revokes sessions and is guarded so the
+last active admin can't be locked out. Verified end-to-end in Docker against a
+mock OIDC provider (discovery → PKCE → code exchange → ID-token verification →
+JIT provision → session), plus the SCIM lifecycle over HTTP and the audit log in
+the UI. The seam means a future SAML or LDAP provider is another adapter, not a
+rewrite.
 
 ---
 
@@ -493,7 +550,7 @@ never claims a feature the code doesn't have.
 When you make a decision that would be expensive to reverse — a new storage
 engine, a change to the sync protocol, a new auth surface, a departure from any
 choice above — add an entry here in the same five-part shape. The value of this
-doc is entirely in recording the *alternatives you rejected and why*, because
+doc is entirely in recording the _alternatives you rejected and why_, because
 that is the context a future teammate (or a future you) cannot reconstruct from
 the code alone. Keep entries tight; depth on the load-bearing calls beats
 breadth across trivia.

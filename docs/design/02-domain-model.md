@@ -2,7 +2,7 @@
 
 This document walks the entity graph that defines nonlinear — what the objects
 are, how they relate, and the invariants the domain layer guarantees. It is a
-map for understanding *what we built and why*, not an API reference. The single
+map for understanding _what we built and why_, not an API reference. The single
 source of truth for the shapes is `packages/shared/src/entities.ts` (the
 interfaces) and `packages/shared/src/enums.ts` (the closed value sets); the rules
 that keep those shapes coherent live in `packages/core/src/services/*` and are
@@ -47,7 +47,7 @@ A team carries:
   When set, creating an Urgent or High issue auto-assigns a `dueDate` that many
   hours out.
 - **Estimation** — `estimateScale`, one of `exponential | fibonacci | linear |
-  tshirt` (`enums.ts:57`). The scale is just a *display and input* concern: the
+tshirt` (`enums.ts:57`). The scale is just a _display and input_ concern: the
   stored `estimate` on an issue is always a plain number. The scale picks which
   numbers are offered and, for t-shirt, what labels (`XS…XL`) to render them as
   — see `ESTIMATE_SCALE_VALUES` in `enums.ts`. We chose to store the raw number
@@ -97,7 +97,7 @@ nullable foreign keys, and each one encodes a real relationship discussed below.
 ### Priority is a number, not a string
 
 `priority` is Linear's numeric scheme (`enums.ts:2`): `0 None, 1 Urgent, 2 High,
-3 Medium, 4 Low`. The counterintuitive part — urgent is the *low* number — is a
+3 Medium, 4 Low`. The counterintuitive part — urgent is the _low_ number — is a
 direct copy of Linear, and it is deliberate: sorting ascending by the raw number
 puts the most urgent work first, and "No priority" (0) sorts alongside it at the
 top the same way Linear does. `PRIORITY_LABELS` maps the numbers to display
@@ -112,15 +112,15 @@ that is **sequential within its team**, and the human identifier is derived:
 `storage.teams.nextIssueNumber(teamId)`, called from `IssueService.create`
 (`services/issues.ts:104`).
 
-The invariant we must hold is *no two issues in a team ever share a number, even
-under concurrent creates.* This is the one place the model needs true atomicity,
+The invariant we must hold is _no two issues in a team ever share a number, even
+under concurrent creates._ This is the one place the model needs true atomicity,
 and it is why the Postgres storage keeps a dedicated relational table,
 `team_counters`, rather than a jsonb document. The allocation is a single
 `INSERT … ON CONFLICT (team_id) DO UPDATE SET counter = counter + 1 RETURNING`
 (`packages/storage-postgres/src/index.ts:115`) — atomic under Postgres row
 locking, and there is a test that fires 20 concurrent allocations and asserts
 they come back distinct (`postgres.test.ts:60`). The `Team.issueCounter` field is
-a *mirror* of this counter, kept only so the client can display the next number;
+a _mirror_ of this counter, kept only so the client can display the next number;
 its comment in `entities.ts:100` says exactly that ("server-side concern, synced
 for display only"). The authoritative counter is `team_counters`, never the
 synced team document.
@@ -140,7 +140,7 @@ the issue's current state, not set directly.** On create (`services/issues.ts:13
 and on every state change (`services/issues.ts:195`) the service does, in effect:
 
 - `startedAt` is stamped the first time the issue enters a `started`-category
-  state and then *preserved* (`issue.startedAt ?? now`) — it records first-start,
+  state and then _preserved_ (`issue.startedAt ?? now`) — it records first-start,
   not most-recent-start.
 - `completedAt` is set to now when entering a `completed` state and cleared to
   `null` otherwise, so reopening a done issue clears its completion time.
@@ -225,7 +225,7 @@ issues, states, and cycles are. Issues point at a project via `projectId`; the
 project does not enumerate its issues. A project optionally rolls up into an
 initiative via `initiativeId`.
 
-**`ProjectMilestone`** (`entities.ts:203`) is a checkpoint *within* a project
+**`ProjectMilestone`** (`entities.ts:203`) is a checkpoint _within_ a project
 (name, description, `targetDate`, `sortOrder`). An issue's `milestoneId` is
 subordinate to its `projectId`: the update path clears `milestoneId` whenever the
 issue is removed from its project (`services/issues.ts:264`), so you can never
@@ -239,13 +239,13 @@ the health of its most recent update. We modeled health as a stream of updates
 rather than a mutable field so the project carries a narrative history ("was
 at-risk in May, on-track now"), which is what the health/update timeline shows.
 
-**`Initiative`** (`entities.ts:267`) sits *above* projects: it is the
+**`Initiative`** (`entities.ts:267`) sits _above_ projects: it is the
 roadmap-level grouping, with its own `status` (`planned | active | completed`,
 `enums.ts:111`), `ownerId`, and `targetDate`. Projects opt into an initiative;
 initiatives don't list their projects. This gives the two-level hierarchy Linear
 uses for its timeline/roadmap view.
 
-**`Cycle`** (`entities.ts:214`) is the time-boxed sprint, and it *is* team-owned
+**`Cycle`** (`entities.ts:214`) is the time-boxed sprint, and it _is_ team-owned
 (`teamId`, plus a per-team sequential `number`, `startsAt`, `endsAt`). Issues
 join a cycle via `cycleId`. Cycles are generated lazily: `CycleService` only
 materializes upcoming cycles when a team has `cyclesEnabled`, walking forward from
@@ -277,7 +277,7 @@ an issue and/or project with a body and a `source` (`manual | intake`,
 intake path (`apps/api/src/intake.ts:107`) looks up a customer by matching the
 submitter's email domain (`domain.customers.findByEmailDomain`) and, on a hit,
 files a `CustomerRequest` automatically — the link between inbound support volume
-and the backlog. When an issue is deleted, its customer requests are *detached*
+and the backlog. When an issue is deleted, its customer requests are _detached_
 (issue link nulled), not deleted, via the cascade injected into `IssueService`
 (`services/issues.ts:402`).
 
@@ -286,7 +286,7 @@ and the backlog. When an issue is deleted, its customer requests are *detached*
 **`TriageRule`** (`entities.ts:422`) is per-team automation: an ordered
 (`position`), toggleable rule with a list of case-insensitive `keywords` and a set
 of fields to apply (`setPriority`, `setAssigneeId`, `setLabelIds`,
-`setProjectId`) when *any* keyword appears in a new issue's title or description.
+`setProjectId`) when _any_ keyword appears in a new issue's title or description.
 Rules run inside `IssueService.create` (via `applyTriageRules`,
 `services/issues.ts:88`) and only fill fields the caller left unset — so an
 explicit assignee always beats a rule. Running at create time, in the domain
@@ -305,7 +305,7 @@ validated and executed on both storage backends identically.
 (`titlePrefix`, description, priority, labels, estimate). **`Favorite`**
 (`entities.ts:246`) is a per-user pin to an issue/project/cycle/label
 (`FavoriteType`, `enums.ts:105`) with its own `sortOrder`. **`Attachment`**
-(`entities.ts:255`) is metadata about an uploaded file on an issue — the *bytes*
+(`entities.ts:255`) is metadata about an uploaded file on an issue — the _bytes_
 live in a `BlobStore` (the seam in `packages/core/src/blob.ts`), never in the
 synced entity; only filename, content type, size, and uploader sync.
 
@@ -317,7 +317,7 @@ synced entity; only filename, content type, size, and uploader sync.
 
 - **Preferences** are a nested `UserPreferences` struct (`entities.ts:25`) —
   theme, font size, home view, display-name format, first day of week — with a
-  `DEFAULT_PREFERENCES` constant. They are *synced across devices* because they
+  `DEFAULT_PREFERENCES` constant. They are _synced across devices_ because they
   live on the user entity, so changing your theme on one machine follows you.
   Notification muting is adjacent: `mutedNotificationTypes` (an array of
   `NotificationType`) suppresses both in-app and digest notifications, and
@@ -335,7 +335,7 @@ synced entity; only filename, content type, size, and uploader sync.
 **`Notification`** (`entities.ts:233`) is per-user, typed (`NotificationType`,
 `enums.ts:43`), and points at an issue (and optionally a comment). It carries
 `readAt` and `snoozedUntil` (hidden from the inbox until that time). Notifications
-sync, but a client only ever receives its *own* — the WebSocket hub filters
+sync, but a client only ever receives its _own_ — the WebSocket hub filters
 notification and favorite deltas to their owner (CLAUDE.md, apps/api hub note), so
 the fan-out that generated a notification for someone else never leaks to you.
 
@@ -364,7 +364,7 @@ The reasoning is a security boundary, not an oversight. Sync ships full entity
 snapshots to every client; a credential that appeared in a delta would be handed
 to every connected device and replayed from the durable log forever. Secrets are
 validated server-side (`domain.tokens.authenticate`) and never enter the client's
-normalized store. This is why `IssueReminder` (`entities.ts:375`) — which *is*
+normalized store. This is why `IssueReminder` (`entities.ts:375`) — which _is_
 synced — is fine (it's just a personal reminder), but tokens are not.
 
 ## Where the rules live

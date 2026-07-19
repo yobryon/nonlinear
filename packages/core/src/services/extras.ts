@@ -214,6 +214,32 @@ export class UserService {
     return user;
   }
 
+  /**
+   * Set a user's active flag without an admin actor — used by SCIM
+   * deprovisioning. Deactivating revokes sessions and keeps the last-admin
+   * guard so the workspace can't be locked out.
+   */
+  async setActive(userId: string, active: boolean): Promise<User> {
+    const { storage, bus } = this.ctx;
+    const user = await storage.users.get(userId);
+    if (!user) throw notFound('User');
+    if (user.active === active) return user;
+    if (!active) {
+      const otherAdmins = (await storage.users.all()).filter(
+        (u) => u.id !== userId && u.role === 'admin' && u.active,
+      );
+      if (user.role === 'admin' && otherAdmins.length === 0) {
+        throw new DomainError('last_admin', 'The workspace needs at least one active admin', 409);
+      }
+      await storage.sessions.deleteForUser(userId);
+    }
+    user.active = active;
+    user.updatedAt = nowIso();
+    await storage.users.update(user);
+    await bus.publish([updated('user', user)]);
+    return user;
+  }
+
   async updateWorkspace(name: string): Promise<Workspace> {
     const { storage, bus } = this.ctx;
     const workspace = (await storage.workspaces.all())[0];

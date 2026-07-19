@@ -19,7 +19,7 @@ survey that produced `ROADMAP.md`), two patterns dominated:
    turns "integrate with Linear" into "add one server to a config file."
 
 2. **Agents are becoming teammates, not just scripts.** Linear's 2025–26
-   direction is *assignable agents*: an agent is a member of the workspace you
+   direction is _assignable agents_: an agent is a member of the workspace you
    can assign an issue to or @mention, and Linear surfaces an "agent session"
    around that interaction. The agent isn't a background cron job you poll — it
    is addressed the way you address a human coworker, and the assignment/mention
@@ -31,7 +31,7 @@ needs the smallest possible diff to work here:
 
 - **The MCP server** (`/mcp`) — the tool layer, for any MCP client.
 - **The REST API + personal tokens** — the same operations for custom code.
-- **Agent-as-teammate** — agent *users* you assign and @mention, plus a scoped
+- **Agent-as-teammate** — agent _users_ you assign and @mention, plus a scoped
   webhook that is the trigger half of the loop.
 
 All three share one authentication mechanism (personal API tokens) and one
@@ -106,15 +106,15 @@ line:
 registerMcp(app, domain, (bearer) => domain.tokens.authenticate(bearer));
 ```
 
-The MCP server is, in the words of the file header, *"a protocol adapter over
-the same `Domain` the REST routes use."* Its tools call `domain.issues.create`,
+The MCP server is, in the words of the file header, _"a protocol adapter over
+the same `Domain` the REST routes use."_ Its tools call `domain.issues.create`,
 `domain.comments.create`, `domain.projects.create` — the identical service
 methods the REST handlers call. `docker-compose.yml` therefore has exactly three
 services: `postgres`, `api`, `web`. There is no `mcp` service.
 
 **The alternatives we rejected:**
 
-- *A standalone MCP server talking to the API over HTTP.* This is how you would
+- _A standalone MCP server talking to the API over HTTP._ This is how you would
   build it if MCP were a third-party integration. But it would mean a second
   deployable, a second network hop on every tool call, a second place to
   configure auth and secrets, and — most corrosively — a second implementation
@@ -123,8 +123,8 @@ services: `postgres`, `api`, `web`. There is no `mcp` service.
   application, notification fan-out, cascade deletes) would either be duplicated
   or reached only through HTTP, adding failure modes for no benefit.
 
-- *A stdio MCP server bundled with the agent.* Fine for a single-user desktop
-  tool, but nonlinear is a self-hosted *server*. The agent may run anywhere; the
+- _A stdio MCP server bundled with the agent._ Fine for a single-user desktop
+  tool, but nonlinear is a self-hosted _server_. The agent may run anywhere; the
   natural boundary is a URL, not a subprocess on the API host.
 
 Mounting in-process makes MCP a **thin protocol adapter** in exactly the sense
@@ -134,8 +134,8 @@ adapter over the domain too. All three share one composition root
 (`createDomain`), one storage layer, one set of business rules. This is the
 same reasoning that keeps `packages/core` free of any HTTP or database driver:
 put the rules in one place, and let each surface be a skin over them. It also
-honors the project's hard constraints — *one small API process*, *low cost /
-low resource* (CLAUDE.md §4): a whole agent surface that costs zero additional
+honors the project's hard constraints — _one small API process_, _low cost /
+low resource_ (CLAUDE.md §4): a whole agent surface that costs zero additional
 containers.
 
 The one genuine cost is coupling: the MCP server can only run where the API
@@ -146,12 +146,12 @@ optimized for a single small deploy, that is precisely the trade we want.
 
 Each request builds a fresh `McpServer` and `StreamableHTTPServerTransport`
 (with `sessionIdGenerator: undefined`) and tears both down on connection close.
-There is no server-side session bookkeeping — the Bearer token *is* the session,
+There is no server-side session bookkeeping — the Bearer token _is_ the session,
 resolved to a `User` on every request, and every tool closes over that user so
 its actions are correctly attributed. This keeps the server trivially
 horizontally-safe and matches the stateless nature of the underlying auth. The
-comment in the code is blunt about it: *"Stateless: one server + transport per
-request, torn down on close."*
+comment in the code is blunt about it: _"Stateless: one server + transport per
+request, torn down on close."_
 
 ---
 
@@ -205,15 +205,15 @@ tokens, and the design mirrors how sessions are stored:
   secret again.
 
 Humans mint their own tokens in **Profile → API tokens** (`POST /api/tokens`).
-The interesting case is agents, who *cannot* mint their own — which is exactly
+The interesting case is agents, who _cannot_ mint their own — which is exactly
 what the third surface is about.
 
 ---
 
 ## Surface 3 — agent-as-teammate
 
-The first two surfaces let an agent *act*. This surface lets you *address* an
-agent — assign it work, @mention it — and have it *wake up*. It is what turns a
+The first two surfaces let an agent _act_. This surface lets you _address_ an
+agent — assign it work, @mention it — and have it _wake up_. It is what turns a
 script into a teammate, and it is the closest analog to Linear's assignable
 agents.
 
@@ -224,8 +224,8 @@ agents.
 deliberate ways:
 
 - **No password hash.** It is inserted without one, so `domain.auth.authenticate`
-  (cookie login) can never succeed for it. *"Insert without a password hash so
-  login is impossible."* An agent exists only to be assigned and mentioned; it
+  (cookie login) can never succeed for it. _"Insert without a password hash so
+  login is impossible."_ An agent exists only to be assigned and mentioned; it
   should never hold a browser session.
 - **A synthetic, non-login email** in a reserved domain
   (`<handle>@agents.nonlinear.local`), so it can't collide with or impersonate a
@@ -233,8 +233,8 @@ deliberate ways:
 - Otherwise it is an ordinary member: `role: 'member'`, it joins every
   non-private team (via `TeamService.addMember`), and it shows up in
   `list_users` / member pickers with an `isAgent` flag so humans can tell it
-  apart. Because it is a real `User`, *everything that works for people works for
-  agents* — it can be an assignee, a subscriber, a comment author, an @mention
+  apart. Because it is a real `User`, _everything that works for people works for
+  agents_ — it can be an assignee, a subscriber, a comment author, an @mention
   target — with no special-casing in the issue or comment services.
 
 The `isAgent` field is a first-class part of the entity contract
@@ -248,7 +248,7 @@ its own credential. So an **admin mints it on the agent's behalf.** The two
 routes in `server.ts` are both admin-gated:
 
 - `POST /api/agents` → `domain.auth.createAgent` (403 unless `req.user.role ===
-  'admin'`).
+'admin'`).
 - `POST /api/agents/:id/tokens` → verifies the target `isAgent` and calls
   `domain.tokens.create(agentId, …)`, returning the raw secret once.
 
@@ -261,12 +261,12 @@ the agent authenticates like any other token holder.
 
 A webhook (`packages/core/src/services/webhooks.ts`) is nonlinear's outbound
 event mechanism — it subscribes to the sync bus and forwards `issue`, `comment`,
-and `project` deltas (`FORWARDED_MODELS`) to a URL. What makes it an *agent*
+and `project` deltas (`FORWARDED_MODELS`) to a URL. What makes it an _agent_
 trigger is the optional `agentUserId` field on the `Webhook` entity.
 
 A plain webhook (`agentUserId: null`) forwards **every** issue/comment/project
 event — the classic "notify my integration of all changes" firehose. But a
-webhook created with an `agentUserId` is **scoped**: it fires *only* on events
+webhook created with an `agentUserId` is **scoped**: it fires _only_ on events
 that are about that agent. `scopeDeltas` filters each batch through the private
 predicate `involvesAgent`, which encodes exactly the two ways you address a
 teammate:
@@ -311,15 +311,15 @@ It stands up a tiny HTTP server, verifies the secret, **acknowledges within the
 limitations), re-derives whether each delta is an assignment or a mention
 (mirroring `involvesAgent` on the client side as a belt-and-suspenders check),
 and calls `POST /api/comments` to reply. Its `handle()` body is a canned
-"On it — I picked this up automatically"; the README's whole point is *"Swap the
+"On it — I picked this up automatically"; the README's whole point is _"Swap the
 `handle()` body for a real model call — the rest is just the teammate
-plumbing."* That plumbing — token auth, scoped webhook, ack-then-work — is the
+plumbing."_ That plumbing — token auth, scoped webhook, ack-then-work — is the
 reusable substrate; the intelligence is yours to drop in.
 
 Note the loop is intentionally symmetric with Linear's agent-session model:
 address the agent like a coworker, it wakes, it works in the same issue thread.
 We did not build a separate "agent session" object; the issue and its comment
-thread *are* the session, which keeps the data model small and means agent work
+thread _are_ the session, which keeps the data model small and means agent work
 is visible in exactly the same place as human work.
 
 ---
@@ -331,7 +331,7 @@ places. A new teammate should know where the edges are:
 
 - **No OAuth / Dynamic Client Registration for MCP.** Auth is a static personal
   API token in the `Authorization` header. This is fine for self-hosting (you
-  mint a token and paste it into your MCP client) but it is *not* the
+  mint a token and paste it into your MCP client) but it is _not_ the
   browser-based OAuth-with-DCR flow that hosted MCP providers use to onboard
   third-party clients without a pre-shared secret. If nonlinear ever became a
   multi-tenant hosted service, this is the gap to close first. The 401 response
@@ -339,17 +339,17 @@ places. A new teammate should know where the edges are:
   extend.
 
 - **No GraphQL.** Linear's public API is GraphQL, so an agent written against
-  Linear's *API* (rather than its MCP server) will not port without rewriting
+  Linear's _API_ (rather than its MCP server) will not port without rewriting
   its queries against our REST routes. REST + personal tokens are shipped;
   GraphQL sits at the top of **P3** in `ROADMAP.md` and would be added if demand
   warrants. In practice the MCP surface absorbs most of this, since MCP-based
   agents don't touch the raw API shape.
 
 - **Webhooks are fire-and-forget.** `dispatch` POSTs with a 5-second
-  `AbortController` timeout, logs failures, and moves on — *there is no retry
-  queue and no delivery guarantee* (CLAUDE.md "Known gaps"). If the agent's
+  `AbortController` timeout, logs failures, and moves on — _there is no retry
+  queue and no delivery guarantee_ (CLAUDE.md "Known gaps"). If the agent's
   endpoint is down or slow when an issue is assigned, that trigger is simply
-  lost. This is why the reference agent acks the HTTP request *before* doing any
+  lost. This is why the reference agent acks the HTTP request _before_ doing any
   work: a slow model call must not blow the timeout. For a low-cost self-hosted
   clone this is an acceptable trade, but a production agent should treat missed
   triggers as possible and reconcile — e.g. periodically poll `list_my_issues` —
@@ -361,6 +361,6 @@ places. A new teammate should know where the edges are:
 None of these are architectural dead-ends — each has an identified seam
 (`WWW-Authenticate` for OAuth, the REST-over-domain pattern for a future
 GraphQL adapter, the bus subscription for a retrying dispatcher). They are
-scope choices consistent with the project's north star: clone Linear's *agent
-experience* as closely as practical, at the cost and footprint of a single small
+scope choices consistent with the project's north star: clone Linear's _agent
+experience_ as closely as practical, at the cost and footprint of a single small
 self-hosted process.

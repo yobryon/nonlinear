@@ -14,6 +14,20 @@ export interface Config {
   smtpFrom: string;
   /** Public base URL used in emails and intake links. */
   appUrl: string;
+  /** OIDC single sign-on. `issuer` + `clientId` empty = SSO disabled. */
+  sso: {
+    issuer: string;
+    clientId: string;
+    clientSecret: string;
+    /** Button label on the login page, e.g. "Microsoft Entra ID". */
+    label: string;
+    /** Only provision/allow accounts whose email ends with one of these (comma-sep). Empty = any. */
+    allowedDomains: string[];
+    /** Auto-create a member on first SSO login for an unknown email. */
+    autoProvision: boolean;
+  };
+  /** Bearer token guarding the SCIM 2.0 provisioning endpoints. Empty = SCIM off. */
+  scimToken: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -29,5 +43,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     smtpUrl: env.SMTP_URL ?? '',
     smtpFrom: env.SMTP_FROM ?? 'nonlinear <no-reply@nonlinear.local>',
     appUrl: (env.APP_URL ?? 'http://localhost:8080').replace(/\/$/, ''),
+    sso: {
+      issuer: (env.OIDC_ISSUER ?? '').replace(/\/$/, ''),
+      clientId: env.OIDC_CLIENT_ID ?? '',
+      clientSecret: env.OIDC_CLIENT_SECRET ?? '',
+      label: env.OIDC_LABEL ?? 'Single sign-on',
+      allowedDomains: (env.OIDC_ALLOWED_DOMAINS ?? '')
+        .split(',')
+        .map((d) => d.trim().toLowerCase())
+        .filter(Boolean),
+      autoProvision: env.OIDC_AUTO_PROVISION !== 'false',
+    },
+    scimToken: env.SCIM_TOKEN ?? '',
   };
 }

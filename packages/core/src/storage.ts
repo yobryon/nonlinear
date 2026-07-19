@@ -1,5 +1,6 @@
 import type {
   Attachment,
+  AuditEvent,
   Comment,
   Customer,
   CustomerRequest,
@@ -53,6 +54,12 @@ export interface UserStore extends EntityStore<User> {
   getPasswordHash(userId: string): Promise<string | null>;
   setPasswordHash(userId: string, passwordHash: string): Promise<void>;
   count(): Promise<number>;
+  /**
+   * SSO identity link (IdP `sub` → user). Stored in the auth layer, never on
+   * the synced User entity, so the IdP subject never crosses the sync boundary.
+   */
+  getBySsoSubject(subject: string): Promise<User | null>;
+  linkSsoSubject(userId: string, subject: string): Promise<void>;
 }
 
 export interface TeamStore extends EntityStore<Team> {
@@ -103,6 +110,22 @@ export interface ApiTokenStore {
   deleteForUser(userId: string): Promise<void>;
 }
 
+export interface AuditPage {
+  events: AuditEvent[];
+  /** Opaque cursor to fetch the next (older) page, or null when exhausted. */
+  nextCursor: string | null;
+}
+
+export interface AuditStore {
+  append(event: AuditEvent): Promise<void>;
+  /**
+   * Most-recent-first page. `cursor` is an opaque value returned as
+   * {@link AuditPage.nextCursor}; ordering is by (createdAt, id) descending so
+   * paging is stable even when many events share a millisecond.
+   */
+  list(opts: { limit: number; cursor?: string | null }): Promise<AuditPage>;
+}
+
 export interface SyncLogStore {
   /**
    * Append deltas, assigning consecutive syncIds atomically.
@@ -148,6 +171,7 @@ export interface Storage {
   activities: ActivityStore;
   sessions: SessionStore;
   apiTokens: ApiTokenStore;
+  auditLog: AuditStore;
   syncLog: SyncLogStore;
   /** Close pools/handles. */
   close(): Promise<void>;

@@ -1,7 +1,7 @@
 # Work hierarchy: issues, projects, initiatives, cycles
 
-This document explains how nonlinear models *work* — the nested vocabulary of
-issues, cycles, projects, and initiatives — and, more importantly, *why* the
+This document explains how nonlinear models _work_ — the nested vocabulary of
+issues, cycles, projects, and initiatives — and, more importantly, _why_ the
 model is shaped the way it is. If you are new here, the single most useful
 mental model to hold is this: **teams own execution, work items cross teams.**
 Almost every design decision below falls out of taking that sentence seriously.
@@ -28,20 +28,20 @@ cycle             (a team's time-boxed iteration — issues opt in)
 
 The load-bearing asymmetry: an **issue** is anchored to exactly one team and
 carries the team's identity in its number (`ENG-123`). Everything above it —
-projects, initiatives — is deliberately *not* team-scoped; a project lists the
-teams it touches (`teamIds`), and an issue optionally points *up* at a project.
+projects, initiatives — is deliberately _not_ team-scoped; a project lists the
+teams it touches (`teamIds`), and an issue optionally points _up_ at a project.
 Cycles sit off to the side: they are strictly a team's own iteration rhythm, and
 an issue references at most one.
 
-The nesting is loose on purpose. An issue can belong to a project *or not*, to a
-cycle *or not*, to a milestone *or not*, to a parent *or not*. None of these are
+The nesting is loose on purpose. An issue can belong to a project _or not_, to a
+cycle _or not_, to a milestone _or not_, to a parent _or not_. None of these are
 required. This mirrors Linear, and it matters: the hierarchy is a set of
 optional lenses over a flat pool of issues, not a containment tree you must fill
 out top-down before you can file a bug.
 
 ## Issues: the atom, and why they are team-scoped
 
-The issue is the only entity in the system that *must* exist for anything else
+The issue is the only entity in the system that _must_ exist for anything else
 to be useful. Its contract lives at `packages/shared/src/entities.ts` (`interface
 Issue`) and its behavior at `packages/core/src/services/issues.ts`
 (`IssueService`).
@@ -54,14 +54,14 @@ per-team counter (`storage.teams.nextIssueNumber`). This is the design comment
 on line 127-128 of `entities.ts`. We chose team-scoped sequential numbers over
 global UUIDs-in-the-URL because that is the identifier people actually say out
 loud ("can you look at ENG-412"), and because it makes a team's issue space feel
-like *theirs*.
+like _theirs_.
 
 The consequence of team-scoping shows up in one of the more surgical pieces of
 `IssueService.update`: **moving an issue to another team re-numbers it.** When
 `input.teamId` changes we mint a fresh number from the destination team's
 counter, reset the workflow state to that team's default, and — notably — clear
 `cycleId` to null (lines 177-188). We clear the cycle because cycles belong to
-the *old* team; carrying a foreign team's iteration reference across the move
+the _old_ team; carrying a foreign team's iteration reference across the move
 would be meaningless. This is the model defending its own invariant: a cycle
 reference on an issue must always name a cycle of that issue's current team,
 which `update` re-checks (`cycle.teamId !== issue.teamId → notFound('Cycle')`).
@@ -80,7 +80,7 @@ deliberate Linear-parity choice and it keeps the model small.
 ## Cycles: a team's iteration rhythm, generated for you
 
 Cycles (`packages/core/src/services/cycles.ts`, `CycleService`) are the one
-piece of the hierarchy that is purely a *team* concern. A cycle is a
+piece of the hierarchy that is purely a _team_ concern. A cycle is a
 time-boxed window — Linear's answer to a sprint — with a `teamId`, a
 monotonically increasing `number` within that team, and a `startsAt`/`endsAt`
 pair. Issues opt in via `cycleId`.
@@ -90,13 +90,13 @@ hand-created.** A team that wants iterations shouldn't have to remember to open
 "Cycle 15" every two weeks. So `ensureCurrentCycles(teamId)` runs lazily —
 called by the API on bootstrap — and rolls the calendar forward: starting from
 the end of the latest existing cycle (or the start of the current week for a
-brand-new team), it creates fixed-duration cycles until one covers *now* and one
+brand-new team), it creates fixed-duration cycles until one covers _now_ and one
 sits in the future (the `while (cursor < now + durationMs)` loop, lines 59-68).
 Duration comes from the team's own `cycleDurationWeeks`, and the whole mechanism
 is gated on `team.cyclesEnabled` — a team that doesn't run cycles gets none, and
 `ensureCurrentCycles` returns an empty array immediately.
 
-We chose *lazy generation on read* over a scheduled cron job for a reason
+We chose _lazy generation on read_ over a scheduled cron job for a reason
 consistent with the rest of the system: nonlinear tries to keep its background
 machinery minimal (the API has exactly one 10-minute scheduler, for due-soon and
 reminder scans — see CLAUDE.md). Generating cycles when someone actually loads
@@ -119,15 +119,15 @@ the richest entity in this document. The contract is `interface Project`
 `packages/core/src/services/projects.ts` (`ProjectService`), and the whole UI
 surface is `apps/web/src/pages/Projects.tsx`.
 
-### Framing: what a project *is*
+### Framing: what a project _is_
 
 We took Linear's framing almost verbatim, and it's worth stating because it
-drives the schema. Linear describes a project as *"a larger unit of work with a
+drives the schema. Linear describes a project as _"a larger unit of work with a
 clear outcome, shared across teams, comprised of issues and optional
-documents."* Our empty-state copy in `Projects.tsx` (the `ProjectsPage` empty
-state, lines 476-479) says the same thing in our own words: *"Projects are
+documents."_ Our empty-state copy in `Projects.tsx` (the `ProjectsPage` empty
+state, lines 476-479) says the same thing in our own words: _"Projects are
 larger units of work with a clear outcome, like a feature you want to ship. They
-span multiple teams and are made of issues and their own documents."* And the
+span multiple teams and are made of issues and their own documents."_ And the
 overview editor's placeholder literally prompts for the outcome — "What's the
 outcome? Describe the goal, scope, and context…" (`ProjectOverview`, line 273).
 
@@ -135,13 +135,13 @@ Every word in that framing is a design commitment:
 
 - **"clear outcome"** → the project's `description` is treated as the outcome
   statement, front and center on the Overview tab, editable inline.
-- **"shared across teams"** → `teamIds` is a *list*, required non-empty. A
+- **"shared across teams"** → `teamIds` is a _list_, required non-empty. A
   project with zero teams is rejected at both create and update
   (`throw new DomainError('no_teams', …)`, projects.ts lines 35-37 and 86-88).
   This is the schema-level enforcement of "a project must touch at least one
   team but is not owned by one."
 - **"comprised of issues"** → issues point up via `projectId`; the project has
-  no issue list of its own. Progress is *computed* from the issues that point at
+  no issue list of its own. Progress is _computed_ from the issues that point at
   it (see below).
 - **"optional documents"** → documents carry a nullable `projectId`, so a
   document can belong to a project or stand alone.
@@ -149,7 +149,7 @@ Every word in that framing is a design commitment:
 ### Why teamIds is a list, not an owner
 
 This is the crux. An issue has one `teamId`; a project has `teamIds: string[]`.
-The difference encodes the difference between *execution* and *coordination*.
+The difference encodes the difference between _execution_ and _coordination_.
 Execution happens inside a team — one team's workflow states, one team's cycles,
 one team's triage queue. Coordination toward an outcome spans teams — the
 "ship dark mode" project pulls issues from Design, Web, and Mobile. If we had
@@ -178,7 +178,7 @@ it's the concentrated expression of the model:
    whose workflow-state category is `completed` or `canceled`, and renders a
    percentage bar (lines 243-250). The same computation is factored out as the
    exported `projectProgress(projectId)` helper (lines 431-439) so the project
-   *list* row can show the same "3/8 done" without duplicating logic. Progress
+   _list_ row can show the same "3/8 done" without duplicating logic. Progress
    is derived so it can never drift from the issues themselves.
 3. **Properties** — teams (as chips), lead, and the start→target date range,
    plus a members avatar row with an add button.
@@ -188,17 +188,18 @@ it's the concentrated expression of the model:
    context.
 
 The **Issues tab** is just the standard grouped/filtered issue list (`ViewControls`
-+ `GroupedIssueList`) scoped to this project. Reusing the same issue-view
-machinery the rest of the app uses is deliberate: a project is not a special
-container with its own bespoke issue UI; it's a *filter* over the global issue
-pool that also happens to have a home page.
+
+- `GroupedIssueList`) scoped to this project. Reusing the same issue-view
+  machinery the rest of the app uses is deliberate: a project is not a special
+  container with its own bespoke issue UI; it's a _filter_ over the global issue
+  pool that also happens to have a home page.
 
 ### Health updates: status as a narrated feed, not a field
 
 A naive design would put a single `health` enum on the project. We didn't. Look
 at `ProjectUpdateService` (`packages/core/src/services/projectUpdates.ts`): a
 **project update** is its own entity — `{ projectId, authorId, health, body,
-createdAt }` — and a project's health is *the health of its most recent update*.
+createdAt }` — and a project's health is _the health of its most recent update_.
 `latestHealth(projectId)` (lines 87-98) computes it by scanning updates and
 picking the newest; the web side mirrors this in the `latestHealth` helper and
 `HealthChip` component (`Projects.tsx` lines 57-85), which sort updates by
@@ -209,14 +210,14 @@ The three health values are `on_track`, `at_risk`, `off_track`
 `HEALTH_META`. Why a feed instead of a field?
 
 - **A status change is a story, not a state.** "At risk — the vendor API slipped
-  a week" is worth keeping; a bare enum throws away the *why*. The `body` field
+  a week" is worth keeping; a bare enum throws away the _why_. The `body` field
   carries the narrative, and the feed becomes the project's status history.
 - **It composes with the roadmap.** The Timeline (see initiatives) reads the
   latest health per project by folding the same update stream, so a health post
   ripples straight to the roadmap with zero extra plumbing.
 - **Authorship and permissions fall out naturally.** Updates have an `authorId`,
   and the service enforces that you can only edit your own updates, but an
-  admin *or* the author can delete one (`update` is author-only, `remove` allows
+  admin _or_ the author can delete one (`update` is author-only, `remove` allows
   `actor.role === 'admin'`, projectUpdates.ts lines 48-50 and 63-66). That is
   exactly the etiquette you'd want for a status feed.
 
@@ -229,7 +230,7 @@ fine at the scale a self-hosted clone targets, but it's an honest thing to note.
 Milestones (`ProjectMilestone`, and the `createMilestone`/`updateMilestone`/
 `removeMilestone` methods on `ProjectService`) are lightweight named checkpoints
 scoped to a single project. An issue's `milestoneId` is subordinate to its
-`projectId`: setting a project clears nothing, but *clearing* a project also
+`projectId`: setting a project clears nothing, but _clearing_ a project also
 clears the milestone — see `IssueService.update` line 264 (`if (!input.projectId)
 issue.milestoneId = null`) and the project-removal cascade, which nulls both
 `projectId` and `milestoneId` on every affected issue (projects.ts lines
@@ -243,8 +244,8 @@ date, and a done/total rollup computed from the issues assigned to them.
 
 `ProjectService.remove` (projects.ts lines 105-147) is the clearest single view
 of how the project sits in the graph. Deleting a project does **not** delete its
-issues — it *detaches* them (`issue.projectId = null; issue.milestoneId = null`).
-It *does* delete the project's milestones, its favorites, and (via the injected
+issues — it _detaches_ them (`issue.projectId = null; issue.milestoneId = null`).
+It _does_ delete the project's milestones, its favorites, and (via the injected
 `projectUpdates` cascade) its update feed, and it detaches its documents
 (`document.projectId = null`). This encodes a value judgment: **issues and
 documents are first-class and outlive the project; milestones and health updates
@@ -253,8 +254,8 @@ set of sync deltas so every connected client converges atomically.
 
 ## Initiatives: the roadmap grouping above projects
 
-Initiatives (`interface Initiative`, tersely commented *"Roadmap grouping of
-projects"* at `entities.ts` line 266; service at
+Initiatives (`interface Initiative`, tersely commented _"Roadmap grouping of
+projects"_ at `entities.ts` line 266; service at
 `packages/core/src/services/initiatives.ts`) are the top of the hierarchy and
 the simplest entity of the four. An initiative has a name, description, color,
 an `ownerId`, a `targetDate`, and a `status` from `INITIATIVE_STATUSES`
@@ -295,13 +296,13 @@ them, so today they are a deliberate floor, not a ceiling.
 
 ## The issue-flow supporting cast
 
-Around the issue sit four features that shape how work *enters and is viewed*.
+Around the issue sit four features that shape how work _enters and is viewed_.
 They aren't part of the nesting, but they're the machinery that makes the atom
 usable, so a new teammate should know where they live.
 
 ### Triage: the front door for un-owned issues
 
-Triage is a *per-team* intake queue. A team with `triageEnabled` gets a workflow
+Triage is a _per-team_ intake queue. A team with `triageEnabled` gets a workflow
 state in the `triage` category, and `IssueService.defaultState` routes brand-new
 issues there when triage is on (issues.ts lines 43-47) — so anything created
 without an explicit state (public intake forms, Slack commands, automations)
@@ -319,7 +320,7 @@ SLAs are the quiet automation that ties priority to a deadline. A team can set
 raised) without an explicit due date, `IssueService.slaDueDate` derives one —
 `now + slaUrgentHours` for priority 1 (Urgent), `now + slaHighHours` for
 priority 2 (High), nothing otherwise (issues.ts lines 57-64, applied at create
-line 124 and on priority change lines 225-228). It only *fills* an empty due
+line 124 and on priority change lines 225-228). It only _fills_ an empty due
 date; it never overwrites one a human set. This is a small feature with a nice
 property: it turns "urgent" from a label into an actual clock, and it feeds the
 existing due-soon notification scan for free.
@@ -338,8 +339,8 @@ workflow they presume are the team's.
 Custom views (`CustomViewService`, `views.ts`) persist a filter + grouping +
 display (`list`/`board`) combination under a name. A view can be personal or
 `shared`, and optionally scoped to a `teamId` or left workspace-wide. This is
-the same insight as projects, generalized: much of the product is *filters over
-one flat issue pool*, and a saved view just lets you name a filter and pin it to
+the same insight as projects, generalized: much of the product is _filters over
+one flat issue pool_, and a saved view just lets you name a filter and pin it to
 the sidebar. Sharing is permission-gated (`assertCanManage`), so a shared team
 view isn't editable by everyone who can see it.
 
@@ -347,21 +348,21 @@ view isn't editable by everyone who can see it.
 
 Pulling it together, here is the ownership line the whole model draws:
 
-| Concern | Scoped to one team? | Where it lives |
-| --- | --- | --- |
-| Issue (identity, number, state) | **Yes** — `issue.teamId`, `TEAM-123` | `IssueService` |
-| Workflow states | Yes — per-team | team config |
-| Cycles | Yes — `cycle.teamId`, auto-generated | `CycleService` |
-| Triage queue | Yes — team's triage state | `Triage.tsx` |
-| SLAs, templates, triage rules | Yes — team config | respective services |
-| **Project** (outcome, lead, members) | **No** — `teamIds` is a list | `ProjectService` |
-| Milestones | Belong to a project, not a team | `ProjectService` |
-| Health updates | Belong to a project | `ProjectUpdateService` |
-| **Initiative** (roadmap grouping) | **No** — no team reference at all | `InitiativeService` |
-| Documents | Optional project link, else free | `DocumentService` |
+| Concern                              | Scoped to one team?                  | Where it lives         |
+| ------------------------------------ | ------------------------------------ | ---------------------- |
+| Issue (identity, number, state)      | **Yes** — `issue.teamId`, `TEAM-123` | `IssueService`         |
+| Workflow states                      | Yes — per-team                       | team config            |
+| Cycles                               | Yes — `cycle.teamId`, auto-generated | `CycleService`         |
+| Triage queue                         | Yes — team's triage state            | `Triage.tsx`           |
+| SLAs, templates, triage rules        | Yes — team config                    | respective services    |
+| **Project** (outcome, lead, members) | **No** — `teamIds` is a list         | `ProjectService`       |
+| Milestones                           | Belong to a project, not a team      | `ProjectService`       |
+| Health updates                       | Belong to a project                  | `ProjectUpdateService` |
+| **Initiative** (roadmap grouping)    | **No** — no team reference at all    | `InitiativeService`    |
+| Documents                            | Optional project link, else free     | `DocumentService`      |
 
-Read top to bottom, the table *is* the thesis: the things that govern how work
-gets *executed* are the team's; the things that describe what the work is *for*
+Read top to bottom, the table _is_ the thesis: the things that govern how work
+gets _executed_ are the team's; the things that describe what the work is _for_
 cross teams. An issue is the hinge — it belongs to a team but points up at
 cross-team structure.
 

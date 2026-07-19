@@ -19,6 +19,7 @@
     "@nonlinear/shared": "workspace:*",
     "@nonlinear/storage-postgres": "workspace:*",
     "fastify": "^5.1.0",
+    "jose": "^5.9.6",
     "nodemailer": "^6",
     "zod": "^4.4.3"
   },

@@ -30,6 +30,7 @@ export * from './services/docComments.js';
 export * from './services/triageRules.js';
 export * from './services/importer.js';
 export * from './services/tokens.js';
+export * from './services/audit.js';
 
 import type { Storage } from './storage.js';
 import { SyncBus, type Ctx } from './domain.js';
@@ -48,6 +49,7 @@ import { DocumentCommentService } from './services/docComments.js';
 import { TriageRuleService } from './services/triageRules.js';
 import { CsvService } from './services/importer.js';
 import { TokenService } from './services/tokens.js';
+import { AuditService } from './services/audit.js';
 import { AuthService } from './services/auth.js';
 import { TeamService } from './services/teams.js';
 import { IssueService } from './services/issues.js';
@@ -94,6 +96,7 @@ export interface Domain {
   triageRules: TriageRuleService;
   csv: CsvService;
   tokens: TokenService;
+  audit: AuditService;
 }
 
 export interface DomainOptions {
@@ -141,5 +144,6 @@ export function createDomain(storage: Storage, options: DomainOptions = {}): Dom
     triageRules: new TriageRuleService(ctx),
     csv: new CsvService(ctx, issues),
     tokens: new TokenService(ctx),
+    audit: new AuditService(ctx),
   };
 }

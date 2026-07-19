@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Design docs
 
-`docs/design/` holds the product-design reasoning behind nonlinear — *why* the major choices were made, with alternatives and honestly-accepted trade-offs. Where this file is the map of the territory (how to build and run it), those docs are the reasoning about it, each claim grounded in real code. Start with `docs/design/README.md`. When you make a consequential design change, append to `docs/design/09-decision-log.md`.
+`docs/design/` holds the product-design reasoning behind nonlinear — _why_ the major choices were made, with alternatives and honestly-accepted trade-offs. Where this file is the map of the territory (how to build and run it), those docs are the reasoning about it, each claim grounded in real code. Start with `docs/design/README.md`. When you make a consequential design change, append to `docs/design/09-decision-log.md`.
 
 ## Commands
 
@@ -48,6 +48,8 @@ pnpm monorepo, TypeScript ESM end-to-end (`.js` import specifiers everywhere exc
 
 **Auth is dual:** browser session cookie _or_ `Authorization: Bearer <personal API token>` (`domain.tokens.authenticate`). Tokens are non-synced bearer secrets (sha256-stored, like sessions) minted in Profile → API tokens; the MCP server and any scripted/agent client authenticate with them.
 
+**Enterprise auth (optional, config-gated).** OIDC single sign-on and SCIM 2.0 provisioning are protocol adapters over the same `Domain`, following the `github.ts`/`mcp.ts` pattern. `src/sso.ts` runs the OIDC authorization-code + PKCE flow (discovery, ID-token verification via `jose`) and hands normalized claims to `domain.auth.findOrProvisionSso` (match-by-subject → link-by-email → JIT-provision); enable with `OIDC_ISSUER`/`OIDC_CLIENT_ID` (+ `OIDC_CLIENT_SECRET`, `OIDC_LABEL`, `OIDC_ALLOWED_DOMAINS`, `OIDC_AUTO_PROVISION`). `src/scim.ts` serves `/scim/v2/Users` (create/list/filter/deactivate), bearer-guarded by `SCIM_TOKEN`. Both are no-ops unless configured. The SSO subject↔user link lives in the storage auth layer (`sso_identities`), never on the synced `User`. A workspace **audit log** (`AuditService`, `audit_log` table, non-synced, admin-only paged `GET /api/audit`) records logins, provisioning, role/active changes, and token/agent/webhook/team events.
+
 **Agents.** nonlinear supports agents three ways, all Bearer-authenticated: (1) the MCP server (tool layer, 13 tools name-resolved), (2) the REST API directly, (3) **agent users** — `isAgent` teammates you assign issues to / @mention, created by an admin (`POST /api/agents`, token minted via `POST /api/agents/:id/tokens` since agents can't log in). A webhook with `agentUserId` set only fires on events where that agent is the assignee or @mentioned (`WebhookService.involvesAgent`). `examples/agent/` is a runnable reference of the assign/mention → webhook → comment-back loop.
 
 - **apps/web** — React + Vite + zustand. `store.ts` holds normalized entity maps; `sync.ts` bootstraps over REST then applies WS deltas (reconnect w/ backoff, `rebootstrap` support). Mutations go through REST and merge the response optimistically (`putEntity`); the same change also arrives as a delta, which is idempotent. Styling is a hand-rolled design system in `styles.css` (CSS variables, `data-theme` dark/light on `<html>`); icons are hand-drawn SVGs in `icons.tsx` mimicking Linear's state/priority iconography.
@@ -62,12 +64,13 @@ The first register creates the workspace, an admin user, and a default team (wit
 
 ## Roadmap
 
-`ROADMAP.md` tracks feature parity against Linear's marketed product (Intake/Plan/Build/Monitor frame). P1 and P2 are shipped; **P3** (public API tokens, custom dashboards, Pulse activity digest, BYO-key AI features, PWA/mobile, Azure Blob adapter, SSO, audit log) remains. Pick from the top of P3 when asked to "continue toward parity".
+`ROADMAP.md` tracks feature parity against Linear's marketed product (Intake/Plan/Build/Monitor frame). P1 and P2 are shipped, as are public API tokens and now **SSO (OIDC) + SCIM + audit log**. Remaining **P3**: GraphQL API, custom dashboards, Pulse activity digest, BYO-key AI features, PWA/mobile, Azure Blob adapter. Pick from the top of P3 when asked to "continue toward parity".
 
 ## Known gaps / deferred
 
 - Azure Blob `BlobStore` implementation (fs volume is the current attachment store; the interface in `packages/core/src/blob.ts` is the seam).
 - Outbound webhooks are fire-and-forget (5s timeout, no retry queue).
-- No public API tokens; the REST API is session-cookie only. No GraphQL.
+- No GraphQL API (REST + Bearer tokens are shipped; Linear's own API is GraphQL).
+- SCIM covers Users, not Groups (team membership is a product concern, not IdP-driven); no SSO-enforced/session-mapping beyond first login.
 - Sync log is never compacted (rebootstrap path exists and is exercised when it is).
-- No rate limiting; auth is same-origin cookie based — put HTTPS in front and set `SECURE_COOKIES=true` in production.
+- No rate limiting; put HTTPS in front and set `SECURE_COOKIES=true` in production.

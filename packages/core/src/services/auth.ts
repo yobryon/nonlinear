@@ -1,4 +1,4 @@
-import type { LoginInput, RegisterInput, User, Workspace } from '@nonlinear/shared';
+import type { LoginInput, RegisterInput, SsoUserInfo, User, Workspace } from '@nonlinear/shared';
 import { DomainError, created, type Ctx } from '../domain.js';
 import { DEFAULT_PREFERENCES } from '@nonlinear/shared';
 import { newId, newToken } from '../util/ids.js';
@@ -142,6 +142,91 @@ export class AuthService {
       if (!team.private) await teams.addMember(team.id, user.id);
     }
     return user;
+  }
+
+  /**
+   * Provision a passwordless human member (used by SSO JIT and SCIM). Joins
+   * every non-private team so the member sees the workspace immediately.
+   * Login by password is impossible until they set one.
+   */
+  async provisionMember(input: { email: string; name?: string }): Promise<User> {
+    const { storage, bus } = this.ctx;
+    const email = input.email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      throw new DomainError('invalid_email', 'Invalid email address');
+    }
+    const existing = await storage.users.getByEmail(email);
+    if (existing) return existing;
+    if (!(await storage.workspaces.all())[0]) {
+      throw new DomainError('no_workspace', 'Workspace not set up yet', 409);
+    }
+    const now = nowIso();
+    const name = input.name?.trim() || email.split('@')[0]!;
+    const displayName = await this.uniqueDisplayName(slugify(name).replace(/-/g, '.'));
+    const user: User = {
+      id: newId(),
+      email,
+      name,
+      displayName,
+      avatarColor: colorFor(email),
+      role: 'member',
+      active: true,
+      isAgent: false,
+      mutedNotificationTypes: [],
+      emailDigest: false,
+      digestLastSentAt: null,
+      preferences: { ...DEFAULT_PREFERENCES },
+      createdAt: now,
+      updatedAt: now,
+    };
+    await storage.users.insert(user);
+    await bus.publish([created('user', user)]);
+    const teams = new TeamService(this.ctx);
+    for (const team of await storage.teams.all()) {
+      if (!team.private) await teams.addMember(team.id, user.id);
+    }
+    return user;
+  }
+
+  /**
+   * Resolve an OIDC identity to a local session. Order: match by stable IdP
+   * subject, else link an existing account by email, else JIT-provision (if
+   * allowed). Domain allow-listing is enforced by the caller before this runs.
+   */
+  async findOrProvisionSso(
+    info: SsoUserInfo,
+    opts: { autoProvision: boolean },
+  ): Promise<{ user: User; session: Session; outcome: 'matched' | 'linked' | 'provisioned' }> {
+    const { storage } = this.ctx;
+    const email = info.email.trim().toLowerCase();
+
+    let user = await storage.users.getBySsoSubject(info.subject);
+    let outcome: 'matched' | 'linked' | 'provisioned' = 'matched';
+
+    if (!user) {
+      const byEmail = await storage.users.getByEmail(email);
+      if (byEmail) {
+        if (byEmail.isAgent) {
+          throw new DomainError('sso_agent', 'That account cannot sign in via SSO', 403);
+        }
+        await storage.users.linkSsoSubject(byEmail.id, info.subject);
+        user = byEmail;
+        outcome = 'linked';
+      } else {
+        if (!opts.autoProvision) {
+          throw new DomainError('sso_no_account', 'No account for this identity', 403);
+        }
+        user = await this.provisionMember({ email, name: info.name ?? undefined });
+        await storage.users.linkSsoSubject(user.id, info.subject);
+        outcome = 'provisioned';
+      }
+    }
+
+    if (!user.active) {
+      throw new DomainError('inactive', 'This account is deactivated', 403);
+    }
+    const session = await this.createSession(user.id);
+    return { user, session, outcome };
   }
 
   private async uniqueDisplayName(base: string): Promise<string> {

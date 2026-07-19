@@ -59,7 +59,7 @@ to-mid-size workspace is nowhere near the write volume where a single Postgres s
 is a bottleneck.
 
 `SyncModelMap` and its companion array `SYNC_MODEL_NAMES` enumerate exactly which of
-the domain's entities are synced. Not everything is: issue *activities* are synced as
+the domain's entities are synced. Not everything is: issue _activities_ are synced as
 deltas (so the activity feed updates live) but things like sessions, API tokens, and
 the sync log itself are never synced — they are either secrets or infrastructure.
 
@@ -87,7 +87,7 @@ closes that window.
 Services never touch the log directly. They build deltas with the small constructors
 `created(model, entity)`, `updated(model, entity)`, and `deleted(model, id)`, and call
 `bus.publish(...)`. `IssueService.remove` in `packages/core/src/services/issues.ts` is a
-good worked example: deleting an issue publishes a *batch* — the issue delete plus
+good worked example: deleting an issue publishes a _batch_ — the issue delete plus
 deletes for its comments, reactions, relations, notifications, favorites, activities,
 and updates to any orphaned sub-issues — all in one `publish` call, so they land in the
 log contiguously and apply atomically on every client.
@@ -140,11 +140,11 @@ A client starts from nothing, so it needs a full picture before deltas mean anyt
 in `packages/core/src/services/extras.ts`) reads every synced collection in parallel and
 returns a `BootstrapPayload` tagged with `syncId: currentSyncId()`.
 
-The critical detail is *where* the syncId comes from. It is read in the same
+The critical detail is _where_ the syncId comes from. It is read in the same
 `Promise.all` as all the collections, and it is the log's current high-water mark. As
 long as the snapshot is at least as fresh as that syncId, the client is safe: any delta
 the snapshot might have missed has a syncId greater than the tag, so the reconnect
-replay will re-deliver it. We err toward the snapshot being *newer* than its tag (a
+replay will re-deliver it. We err toward the snapshot being _newer_ than its tag (a
 delta could land mid-read), which only means the client harmlessly re-applies an
 identical full entity later — the idempotency of full-entity deltas is what makes this
 tolerable rather than a race.
@@ -182,7 +182,7 @@ its constructor and holds a `Set<Connection>`. Each connection tracks its `userI
 
 The subtle part is the handshake, and it exists to solve one specific ordering hazard.
 When a client connects it sends `hello { lastSyncId }`. The server must replay the log
-from `lastSyncId` forward — but that replay is an async database read, and *during* that
+from `lastSyncId` forward — but that replay is an async database read, and _during_ that
 read, new live deltas can arrive from the bus. If we streamed those live deltas
 immediately, the client could see delta 105 (live) before delta 103 (still being
 replayed), violating the in-order guarantee the client relies on.
@@ -233,7 +233,7 @@ key," and React components select the slices they render.
 - for `delete`, removes the id; otherwise, **overwrites** the id with the full entity.
 
 Because updates carry the full entity and are keyed by id, `applyDeltas` is idempotent
-and order-tolerant *within a model*: applying the same delta twice is a no-op, and the
+and order-tolerant _within a model_: applying the same delta twice is a no-op, and the
 last write for an id wins. `issueActivity` deltas are intentionally skipped in the store
 (activity history is fetched on demand per issue), and `workspace` is special-cased
 because it's a singleton rather than a map.
@@ -243,13 +243,13 @@ because it's a singleton rather than a map.
 Mutations don't wait for the socket. The UI calls a REST endpoint, and the endpoint
 returns the mutated entity, which the client immediately merges with `putEntity(model,
 entity)` — the same "set this id in this map" operation as a delta. A beat later the
-*same* change arrives as a delta from the hub and applies again, identically. This is
+_same_ change arrives as a delta from the hub and applies again, identically. This is
 the payoff of full-entity, idempotent, id-keyed deltas: the optimistic path and the sync
 path are the same operation, so they can't diverge, and there is no reconciliation code,
 no pending-mutation queue, no rollback logic. The REST response and the delta are two
 copies of one truth.
 
-The trade-off is that a truly *stale* optimistic value (if the server transformed the
+The trade-off is that a truly _stale_ optimistic value (if the server transformed the
 input in a way the response didn't reflect) would be corrected only when the delta
 arrives — but since the REST handler returns the persisted entity, the response and the
 delta are the same bytes in practice.
@@ -273,14 +273,14 @@ half the interval on average and can't give the sub-second cross-client updates 
 make Linear feel alive. Cost: re-sending the whole world every few seconds to every
 open tab is exactly the resource profile hard constraint 4 tells us to avoid. Delta
 sync sends bytes only when something actually changed. (Bootstrap-style full fetch still
-exists — as the *initial* load and the *rebootstrap fallback* — which is the right place
+exists — as the _initial_ load and the _rebootstrap fallback_ — which is the right place
 for it: rare, and correct by construction.)
 
 **Why not CRDTs?** CRDTs (Yjs, Automerge) shine when clients edit concurrently
-*offline* and must merge without a server referee — collaborative text being the
+_offline_ and must merge without a server referee — collaborative text being the
 canonical case. nonlinear's writes are server-mediated: every mutation goes through a
 REST endpoint that runs business rules (issue numbering, cascade deletes, notification
-fan-out, triage rules) and *then* publishes. The server is the ordering authority, so we
+fan-out, triage rules) and _then_ publishes. The server is the ordering authority, so we
 get a single total order for free and don't need per-field conflict resolution. Adopting
 a CRDT would mean giving those server-side invariants a second, harder home and shipping
 a merge library into a ~100 KB SPA. The one place CRDT-style merging would genuinely help
@@ -288,14 +288,14 @@ is concurrent rich-text document editing; today document bodies are last-write-w
 everything else, which is a known, accepted limitation for a clone at this scope.
 
 **Why not full event sourcing?** Our sync log looks like an event log, but it stores
-*state deltas* (the resulting entity), not *domain events* (the intent). True event
+_state deltas_ (the resulting entity), not _domain events_ (the intent). True event
 sourcing — where the log is the source of truth and current state is a fold over events
 — would let us rebuild history and audit everything, but it also means every read
 reconstructs state, every schema change is an event-versioning problem, and the
 storage-modular jsonb-per-row model in `storage.ts` would fight it. We instead keep
 authoritative current state in the entity tables and treat the sync log as a
-*transport/catch-up* mechanism that is safe to trim. The audit-log feature on the P3
-roadmap will be built from the existing issue *activity* records, not by promoting the
+_transport/catch-up_ mechanism that is safe to trim. The audit-log feature on the P3
+roadmap will be built from the existing issue _activity_ records, not by promoting the
 sync log to a system of record.
 
 ### Why full-entity deltas specifically
@@ -326,7 +326,7 @@ a blob key, not the bytes — the `BlobStore` seam in `packages/core/src/blob.ts
 
 - **The sync log is never compacted.** Every mutation ever made accumulates in
   `sync_log` forever. The `since` → `null` → `rebootstrap` path is fully built, tested,
-  and honored by both the hub and the client — but nothing currently *triggers*
+  and honored by both the hub and the client — but nothing currently _triggers_
   trimming, so in a long-lived deployment the table grows unbounded and reconnect replay
   can get long for a client that's been away a while. This is called out in `CLAUDE.md`
   under known gaps. The fix is bounded: a periodic job that deletes rows older than some
@@ -375,4 +375,4 @@ design exercise. Say you're adding a `milestoneComment`. Touch these places:
 If you skip step 1 the TypeScript build stops you; if you skip step 5 or the bootstrap
 filter, the failure mode is a personal model leaking to other users — so those two are
 the ones to review carefully. This same six-step recipe is summarized in the "Sync
-model" section of `CLAUDE.md`; this document is the *why* behind each step.
+model" section of `CLAUDE.md`; this document is the _why_ behind each step.

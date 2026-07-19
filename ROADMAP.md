@@ -40,6 +40,15 @@ tools · **agent users** — non-human teammates you assign issues to and @menti
 runnable reference agent (`examples/agent`). This is the direct answer to
 "can an agent use nonlinear the way it uses Linear."
 
+**Enterprise auth (shipped):** OIDC **single sign-on** (authorization-code +
+PKCE, ID-token verified via `jose`; match-by-subject → link-by-email →
+JIT-provision) with a login-page button, config-gated by `OIDC_ISSUER` ·
+**SCIM 2.0** user provisioning (`/scim/v2/Users`, bearer-guarded by
+`SCIM_TOKEN`) · a workspace **audit log** (non-synced, admin-only paged
+`GET /api/audit`, surfaced in Settings) recording logins, provisioning,
+role/active changes, and token/agent/webhook/team events. Verified end-to-end
+in Docker against a mock OIDC provider.
+
 ## P3 — Platform & scale
 
 | Feature                                                        | Linear area  | Notes                                                                                                                                          |
@@ -51,8 +60,8 @@ runnable reference agent (`examples/agent`). This is the direct answer to
 | **Diffs (code review)**                                        | Diffs        | Linear now ships code review for human+agent PRs. Large scope; likely out of clone territory — revisit.                                        |
 | **Mobile apps / PWA**                                          | Mobile       | Ship a PWA manifest + responsive layout pass first; native apps out of scope.                                                                  |
 | **Azure Blob storage adapter**                                 | Platform     | Implement `BlobStore` against Azure Blob; config-select like `STORAGE`.                                                                        |
-| **SSO (Entra ID) & SCIM**                                      | Platform     | Auth boundary is pluggable; add OIDC login alongside passwords.                                                                                |
-| **Audit log**                                                  | Platform     | Admin-visible activity log (we already record issue activities; extend to admin events).                                                       |
+
+**Shipped from P3:** SSO (Entra ID / OIDC) · SCIM · audit log.
 
 ## Non-goals (for now)
 

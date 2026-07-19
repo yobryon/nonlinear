@@ -18,14 +18,14 @@ document is the "why," not an endpoint reference.
 Linear — and nonlinear after it — has three distinct kinds of configuration, and
 they differ along every axis that matters:
 
-- **Personal** — things that belong to *you* and follow you everywhere: theme,
+- **Personal** — things that belong to _you_ and follow you everywhere: theme,
   font size, which screen the app opens to, whether you want the daily email
   digest. They are yours alone; no teammate sees or is affected by them. They
   should sync to every device you log in from.
 - **Workspace** — things that describe the whole organization: its name, who its
   members are, what roles they hold, which teams exist, the shared label
   vocabulary. Changing these affects everyone, so they are admin-gated.
-- **Team** — things that describe how *one* team works: its workflow states, its
+- **Team** — things that describe how _one_ team works: its workflow states, its
   estimate scale, whether it runs cycles, its SLA thresholds, its triage rules
   and intake settings. They affect that team's members but no one else.
 
@@ -45,7 +45,7 @@ authorization beyond "you are you" (`updateProfile` acts on `req.user.id`,
 one team.
 
 Second, **the correct home for the data differs**. Personal preferences must
-travel with the user, so they live *on* the `User` entity and sync like any other
+travel with the user, so they live _on_ the `User` entity and sync like any other
 entity (see below). Team configuration lives on the `Team` entity. Workspace
 identity lives on the `Workspace` entity. Flattening them into one "settings blob"
 would have forced an awkward choice about which entity owns it and would have
@@ -65,11 +65,11 @@ model we want the user to hold.
 
 ```ts
 interface UserPreferences {
-  theme: ThemePreference;       // 'system' | 'dark' | 'light'
-  fontSize: FontSize;           // 'small' | 'default' | 'large'
-  home: HomeView;               // 'inbox' | 'my-issues' | 'active-team'
+  theme: ThemePreference; // 'system' | 'dark' | 'light'
+  fontSize: FontSize; // 'small' | 'default' | 'large'
+  home: HomeView; // 'inbox' | 'my-issues' | 'active-team'
   displayNames: DisplayNameFormat; // 'full' | 'display'
-  firstDayOfWeek: FirstDayOfWeek;  // 'sunday' | 'monday'
+  firstDayOfWeek: FirstDayOfWeek; // 'sunday' | 'monday'
 }
 ```
 
@@ -104,14 +104,14 @@ over a second synced model.
 
 ### The flash-of-wrong-theme problem, and the localStorage mirror
 
-Preferences sync, but sync happens *after* bootstrap, and bootstrap happens after
+Preferences sync, but sync happens _after_ bootstrap, and bootstrap happens after
 the first paint. If theme lived only on the synced user, every page load would
 flash the default theme for a beat before the real one arrived — the classic
 "flash of unstyled/wrong theme." So `preferences.ts` keeps a **write-through
 mirror** in `localStorage`: `applyPreferences` writes `nl-theme-pref` and
 `nl-font-size` alongside applying them (`preferences.ts:30`), and
 `applyStoredPreferences` (`preferences.ts:48`) reads them back to paint the last
-known theme *before* bootstrap completes. The synced `User` remains the source of
+known theme _before_ bootstrap completes. The synced `User` remains the source of
 truth; `localStorage` is only a first-paint cache. This is the one place we
 deliberately duplicate preference state, and the comment at the top of the file
 says why.
@@ -124,20 +124,20 @@ variables keyed off `[data-theme]` in `styles.css`, so flipping the attribute
 re-themes the whole app with no React re-render. `getTheme` (`theme.ts:9`) reads
 the painted attribute.
 
-The interesting case is `'system'`. We store the *preference* ("system"), not the
+The interesting case is `'system'`. We store the _preference_ ("system"), not the
 resolved value, and resolve it at apply time via `matchMedia('(prefers-color-scheme:
 light)')` (`resolveTheme`, `preferences.ts:18`). Crucially, we also register a
 `matchMedia` change listener (`preferences.ts:37`) so that if the OS flips from
 light to dark while you are sitting in the app, and you are in system mode, the
 app follows live. Storing the resolved value instead would have frozen you to
 whatever the OS was at the moment you picked "system" — defeating the point. The
-listener is bound once (`mediaListenerBound` guard) and re-checks the *current*
+listener is bound once (`mediaListenerBound` guard) and re-checks the _current_
 preference each time it fires, so it correctly does nothing if you have since
 switched to an explicit theme.
 
 `toggleTheme` (`theme.ts:27`) — wired to the profile-menu light/dark toggle
 (`Sidebar.tsx:471`) — flips between the two concrete themes based on what is
-*painted now*, which means toggling out of "system" lands you on the opposite of
+_painted now_, which means toggling out of "system" lands you on the opposite of
 whatever your OS currently shows. That is the intuitive behavior; the alternative
 (toggle does nothing meaningful while in system mode) would feel broken.
 
@@ -168,8 +168,8 @@ group routes to `WorkspaceSettings`, `MembersSettings`, `TeamsSettings`, and
 
 A few deliberate choices:
 
-- **Preferences vs. Profile are split.** Preferences is *how the app behaves for
-  you* (theme, home, names). Profile is *who you are to others* (full name,
+- **Preferences vs. Profile are split.** Preferences is _how the app behaves for
+  you_ (theme, home, names). Profile is _who you are to others_ (full name,
   `@handle`, avatar color — `ProfileSettings`, `Settings.tsx:1129`). They are both
   "personal," but one is private taste and the other is your public identity in
   the workspace, so they get separate pages. The `@handle` even has a uniqueness
@@ -232,7 +232,7 @@ immediately (`extras.ts:205`).
 Rather than invent a separate "bot" entity, nonlinear models agents as ordinary
 `User`s with `isAgent: true` (`entities.ts:64`). `AuthService.createAgent`
 (`auth.ts:108`) mints one with `role: 'member'`, no password (inserted via
-`storage.users.insert`, *not* `insertWithPassword`, so login is impossible —
+`storage.users.insert`, _not_ `insertWithPassword`, so login is impossible —
 `auth.ts:137`), a synthetic non-login email in a reserved
 `@agents.nonlinear.local` domain (`auth.ts:119`), and auto-membership in every
 non-private team (`auth.ts:141`). Creation is admin-only (`server.ts:495`), and
@@ -259,20 +259,44 @@ very first registrant is special — they create the workspace, become its admin
 and get a default team with Linear's default workflow states (`auth.ts:44`, `82`).
 
 This is a deliberate fit to the **self-hosted** deployment story. In a
-self-hosted tool the network boundary *is* the trust boundary: you put the app
+self-hosted tool the network boundary _is_ the trust boundary: you put the app
 behind your VPN, SSO proxy, or private network, and reachability equals
 authorization. Building an email-invite flow would have meant wiring transactional
 email, invite-token lifecycle, and expiry — real complexity — to re-implement a
 boundary the deployment already provides. So "share the app URL" is the invite
 (`Settings.tsx:245`).
 
-The honest limitations: there is no way to pre-provision a specific person, no
-way to invite someone to a *private* team without an admin adding them
-(`TeamSettingsInner` has an Add member picker, `Settings.tsx:880`), and — as
-`CLAUDE.md` notes — no rate limiting on registration, so open exposure to the
-internet is unsafe. The intended posture is "put HTTPS/SSO in front." SSO (Entra
-ID) and SCIM provisioning are on the P3 roadmap and would replace this model for
-larger deployments.
+The honest limitations: without SSO/SCIM configured there is still no
+password-invite flow, and — as `CLAUDE.md` notes — no rate limiting on
+registration, so open password exposure to the internet is unsafe. The intended
+posture is "put HTTPS/SSO in front."
+
+## SSO and SCIM: the enterprise identity path
+
+For deployments with an identity provider, the "reaching the server is the
+invite" model is replaced by two config-gated adapters (see decision log entry
+14). **OIDC single sign-on** (`apps/api/src/sso.ts`) runs the authorization-code
+
+- PKCE flow, verifies the ID token with `jose` (JWKS signature, issuer,
+  audience, nonce), and resolves the identity in the domain
+  (`AuthService.findOrProvisionSso`): match by the stable IdP subject, else link an
+  existing account by email, else just-in-time provision a member if
+  `OIDC_AUTO_PROVISION` allows it and the email domain is on the allow-list. The
+  subject↔user link lives in the storage auth layer (`sso_identities`), never on
+  the synced `User`, so the IdP identifier never crosses the sync boundary. The
+  login page shows a "Continue with …" button when `GET /api/meta` reports SSO is
+  configured. **SCIM 2.0** (`apps/api/src/scim.ts`, bearer-guarded by
+  `SCIM_TOKEN`) lets the IdP create and deactivate accounts at `/scim/v2/Users`;
+  Groups are deliberately out of scope because team membership here is a product
+  concern, not IdP-driven. Deactivation — by SCIM or an admin — revokes sessions
+  and is guarded so the last active admin can't be locked out
+  (`UserService.setActive`).
+
+Every security-relevant action (logins, provisioning, role/active changes,
+token/agent/webhook/team events) is written to a workspace **audit log**
+(`AuditService`, the non-synced `audit_log` table), surfaced admin-only under
+Settings → Audit log and paged with a stable `(createdAt, id)` cursor. It is not
+synced because it is admin-only and can grow without bound.
 
 ## Notification preferences: muting and the email digest
 
@@ -282,7 +306,7 @@ fields: `mutedNotificationTypes: NotificationType[]` and `emailDigest: boolean`
 
 - **Muting is per-type, opt-out.** `NotificationPrefs` (`NotificationPrefs.tsx`)
   renders a switch per `NotificationType` (assigned, unassigned, status changes,
-  comments, mentions, due-soon, reminders), where "on" means *not muted*. Toggling
+  comments, mentions, due-soon, reminders), where "on" means _not muted_. Toggling
   writes the full `mutedNotificationTypes` array through `updateProfile`. The mute
   is enforced at the source of the fan-out: `pushNotification` returns `null`
   early if the recipient has muted that type (`notify.ts:18`), so a muted type
@@ -324,8 +348,9 @@ than pretending parity:
 - **Connected accounts.** Linear lets a user link GitHub/Google/etc. to their
   personal profile. nonlinear's integrations are workspace/team-level (the GitHub
   PR webhook is configured in Workspace settings, `Settings.tsx:250`; intake is
-  per-team) — there is no per-user connected-accounts concept. SSO/OIDC on the P3
-  roadmap is the natural place this would land.
+  per-team) — there is no per-user connected-accounts concept. SSO/OIDC (now
+  shipped) links an identity for sign-in but not arbitrary per-user service
+  accounts.
 - **Finer interface controls.** Linear offers many more toggles (list density,
   which properties show, keyboard scheme, etc.). We ship the ones with the most
   leverage — theme, font size, home, display names, first day of week — and stop
@@ -335,5 +360,5 @@ None of these are built; when you are asked to "extend preferences," start from
 the P3 table in `ROADMAP.md` and add fields to `UserPreferences` in
 `packages/shared` (they will sync automatically), a control row in
 `PreferencesSettings`, and an application point in `preferences.ts`. Adding a
-preference is a genuinely small change *because* the scope separation and the
+preference is a genuinely small change _because_ the scope separation and the
 single write/apply path described here are already in place.

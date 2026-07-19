@@ -119,7 +119,7 @@ the reliability.
 ### Callbacks, not inheritance
 
 `beginPointerDrag` knows nothing about issues, columns, or sort order. It only
-reports *what is under the cursor* and *when the drag ends*. Every surface —
+reports _what is under the cursor_ and _when the drag ends_. Every surface —
 board, grouped list, and the generic reorder hook — supplies its own hit-testing
 and its own drop logic. That is why the same 110 lines back four different
 draggable experiences.
@@ -142,7 +142,7 @@ Two components consume the engine for issues, both in
 **Hit-testing is attribute-driven.** Rows carry `data-card-group` /
 `data-card-index` on the board and `data-issue-index` / `data-row-group` in the
 list. `hitTest` does `target.closest('[data-card-group]')` (or the list
-equivalent), and — critically — decides *before or after* the row by comparing
+equivalent), and — critically — decides _before or after_ the row by comparing
 the cursor's Y against the row's vertical midpoint
 (`e.clientY < rect.top + rect.height / 2`). Half-above means "insert before this
 index," half-below means "insert after." If the cursor is over the column but
@@ -154,13 +154,13 @@ you can drop into an empty column at all.
 line exactly where the row will land — `.insert-line` in the list (a 2 px accent
 border with a small dot on the left) and `.drop-slot.over` on the board (a 2 px
 bar rendered between every pair of cards, lit up only at the active index).
-Showing the *seam* rather than opening a gap keeps the surrounding layout stable
+Showing the _seam_ rather than opening a gap keeps the surrounding layout stable
 and makes the drop position unambiguous. The whole target column/group also gets
 a `.drag-over` outline so you always know which bucket you're aiming at.
 
 **Cross-axis drops re-assign, not just re-order.** The board and list both group
 issues by a field (status, priority, or assignee — see `groupIssues`). Dropping
-a card into a *different* group is a semantic change: `groupPatch(grouping,
+a card into a _different_ group is a semantic change: `groupPatch(grouping,
 group)` returns `{ stateId }`, `{ priority }`, or `{ assigneeId }` depending on
 what the view is grouped by. So dragging a card from "Todo" to "In Progress"
 sets its state; dragging between assignee lanes reassigns it. A drop within the
@@ -173,7 +173,7 @@ exactly Linear's behavior.
 **Ordering is manual and remembered.** Board order (and list order, when drag is
 enabled) is stored per-issue in `issue.sortOrder`, and the list re-sorts by it
 (`sortForBoard`, and the `orderedGroups` memo in `GroupedIssueList`). Contrast
-with the *default* list sort, `sortForList`, which sorts by priority then
+with the _default_ list sort, `sortForList`, which sorts by priority then
 recency and is not drag-reorderable — dragging is only wired up when a `grouping`
 prop is passed, because reordering only makes sense when there's a stable manual
 axis to reorder within.
@@ -234,7 +234,7 @@ Internally it is the same before/after-by-midpoint hit-test as the board
 (`insertionAt` compares cursor Y to row midpoint) sitting on the same
 `beginPointerDrag`. The only new piece is the companion helper `sortKeyForInsert`,
 which does the index bookkeeping the callers would otherwise get wrong: because
-`insertAt` is an index in the *pre-drag* array (which still contains the dragged
+`insertAt` is an index in the _pre-drag_ array (which still contains the dragged
 item), it removes the dragged item, adjusts the target index if the item was
 being moved downward (`from < insertAt ? insertAt - 1 : insertAt`), and then calls
 `keyBetween` on the resolved neighbors — again returning `null` on the
@@ -252,7 +252,7 @@ Three call sites, three lines each:
 The design value here is **one drag engine, one ordering scheme, many surfaces**.
 A new reorderable list is a `useDragReorder` call plus a `sortOrder` field, not a
 new subsystem. That both keeps the bundle small and guarantees that dragging
-*feels the same* everywhere — same threshold, same ghost, same insertion line,
+_feels the same_ everywhere — same threshold, same ghost, same insertion line,
 same Escape-to-cancel — which is itself a UX-consistency win.
 
 ---
@@ -263,7 +263,7 @@ same Escape-to-cancel — which is itself a UX-consistency win.
 
 `apps/web/src/CommandPalette.tsx` is the keyboard-first anchor of the whole
 product, mounted once at the App root. Cmd/Ctrl-K opens it from anywhere; the
-handler in `App.tsx`'s `Shortcuts` component intercepts the chord *before* the
+handler in `App.tsx`'s `Shortcuts` component intercepts the chord _before_ the
 typing-target guard, so it works even while you're focused in an input.
 
 Inside, it is a single search box over a fused list of two result kinds:
@@ -312,7 +312,7 @@ Two guards keep these from firing at the wrong time, and they encode real care:
 - The listener also bails if the palette or new-issue dialog is already open, so
   the modals own the keyboard while they're up.
 
-The Cmd/Ctrl-K check sits *above* the typing guard on purpose — the palette must
+The Cmd/Ctrl-K check sits _above_ the typing guard on purpose — the palette must
 open from inside a text field, the plain letters must not.
 
 ### Multi-select and the bulk bar
@@ -323,7 +323,7 @@ implements the desktop-list conventions users already know from Finder/Gmail:
 - **Cmd/Ctrl-click** toggles a row into the selection (`toggle`).
 - **Shift-click** selects the range from the anchor to the clicked row
   (`rangeTo`), using an `order: string[]` array the list keeps current so
-  "range" means *visible* order, not store order.
+  "range" means _visible_ order, not store order.
 - A plain click clears the selection and opens the issue.
 
 When anything is selected, `BulkBar` (rendered once at App root) slides up with
@@ -340,7 +340,7 @@ point: bulk-editing 30 issues shouldn't mean a wizard.
 
 The responsiveness story is a single breakpoint at **820 px**
 (`@media (max-width: 820px)` in `styles.css`) plus a handful of structural
-swaps. This is a responsive *layout pass*, honestly scoped — ROADMAP lists "Ship
+swaps. This is a responsive _layout pass_, honestly scoped — ROADMAP lists "Ship
 a PWA manifest + responsive layout pass first; native apps out of scope" under
 Mobile, and this is the layout pass; the PWA manifest is **not yet** built (it
 sits in P3, per CLAUDE.md).
@@ -361,7 +361,7 @@ Settings sub-navigation uses the same pattern independently (`.settings-nav` /
 **Detail views stack instead of sitting side-by-side.** The issue/document detail
 layout is a two-pane `.detail` (content + metadata side panel) on desktop. In the
 media query it switches to `flex-direction: column`, and `.detail-side` drops its
-left border for a top border — the side panel slides *under* the main content and
+left border for a top border — the side panel slides _under_ the main content and
 the whole thing scrolls as one column. Topbars `flex-wrap` instead of
 overflowing, the per-row updated-date column is hidden (`.issue-row .date {
 display: none }`) to reclaim width, board columns shrink to 82 vw so one column
@@ -369,7 +369,7 @@ fills the screen with the next peeking in, and the palette/modals go
 near-full-width. None of this is a separate mobile app — it's the same components
 reflowing, which keeps the bundle single and the behavior consistent.
 
-**Touch drag is best-effort.** Because the drag engine is built on *pointer*
+**Touch drag is best-effort.** Because the drag engine is built on _pointer_
 events, drag works on touch at all — a touch is a pointer, `elementFromPoint`
 works under a finger, the ghost tracks the touch point. That is a real benefit of
 having abandoned HTML5 DnD (which has no touch story). But it is honestly
@@ -399,7 +399,7 @@ Every choice above is downstream of a few decisions we'd make again:
   over the sync log. The cost is growing keys and a rebalance path we haven't
   built; acceptable at this scale.
 - **Popovers and inline pickers over modals.** The palette and new-issue dialog
-  are the *only* real modals. Status/priority/assignee/label edits, filtering,
+  are the _only_ real modals. Status/priority/assignee/label edits, filtering,
   grouping, context menus, and bulk actions all happen in transient popovers that
   don't block the view. This is the "no modal-heavy flows" value made concrete.
 - **Keyboard as a first-class path, learned once.** Cmd/Ctrl-K plus C, /, and the

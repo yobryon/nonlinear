@@ -29,6 +29,12 @@ services:
       APP_URL: http://localhost:8080
       SMTP_URL: smtp://mailhog:1025
       # GITHUB_WEBHOOK_SECRET: set to enable the GitHub integration
+      # Enterprise auth (all optional; unset = feature off):
+      #   OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
+      #   OIDC_CLIENT_ID / OIDC_CLIENT_SECRET / OIDC_LABEL: "Microsoft Entra ID"
+      #   OIDC_ALLOWED_DOMAINS: acme.com,acme.io   OIDC_AUTO_PROVISION: 'true'
+      #   SCIM_TOKEN: <bearer secret for /scim/v2/Users provisioning>
+      # See docker-compose.ssotest.yml for a mock-OIDC verification setup.
     volumes:
       - blobdata:/data/blobs
     depends_on:

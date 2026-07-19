@@ -3,6 +3,23 @@ import { api, ApiError } from '../api.js';
 import { startSync } from '../sync.js';
 import { useStore } from '../store.js';
 
+function ssoErrorMessage(code: string): string {
+  switch (code) {
+    case 'domain_not_allowed':
+      return 'Your email domain isn’t allowed to sign in here.';
+    case 'sso_no_account':
+      return 'No account exists for that identity. Ask an admin to invite you.';
+    case 'email_unverified':
+      return 'Your identity provider hasn’t verified that email address.';
+    case 'provider_unavailable':
+      return 'The single sign-on provider is unavailable. Try again shortly.';
+    case 'access_denied':
+      return 'Sign-in was cancelled.';
+    default:
+      return 'Single sign-on failed. Please try again.';
+  }
+}
+
 export function AuthPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [setupRequired, setSetupRequired] = useState(false);
@@ -12,15 +29,24 @@ export function AuthPage() {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sso, setSso] = useState<{ enabled: boolean; label: string } | null>(null);
 
   useEffect(() => {
     void api
       .meta()
       .then((meta) => {
         setSetupRequired(meta.setupRequired);
+        setSso(meta.sso);
         if (meta.setupRequired) setMode('register');
       })
       .catch(() => {});
+    // Surface an SSO failure redirected back as ?sso_error=<code>.
+    const params = new URLSearchParams(window.location.search);
+    const ssoError = params.get('sso_error');
+    if (ssoError) {
+      setError(ssoErrorMessage(ssoError));
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, []);
 
   const submit = async (e: React.FormEvent) => {
@@ -64,6 +90,16 @@ export function AuthPage() {
               ? 'Enter your credentials to continue.'
               : 'Join the workspace with your email.'}
         </p>
+        {sso?.enabled && !setupRequired && (
+          <>
+            <a className="btn lg auth-sso" href="/api/auth/sso/start">
+              Continue with {sso.label}
+            </a>
+            <div className="auth-divider">
+              <span>or</span>
+            </div>
+          </>
+        )}
         <form onSubmit={(e) => void submit(e)}>
           {error && <div className="auth-error">{error}</div>}
           {setupRequired && (

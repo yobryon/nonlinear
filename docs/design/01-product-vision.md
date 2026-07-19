@@ -27,7 +27,7 @@ themes, and **real-time delta sync** across every connected client. The scope is
 documented in `CLAUDE.md` and tracked against Linear feature-by-feature in
 `ROADMAP.md`.
 
-The load-bearing word above is *whole*. nonlinear is not a demo or a subset. The
+The load-bearing word above is _whole_. nonlinear is not a demo or a subset. The
 roadmap's P1 and P2 tiers are shipped; what remains (P3) is platform-and-scale
 work — GraphQL, SSO, custom dashboards, an Azure Blob adapter — not core product
 gaps. A team can adopt nonlinear today and get the Linear workflow, not a
@@ -43,7 +43,7 @@ sprawling into a different, worse product. nonlinear is **not**:
   worth of teams. (First register creates the workspace + admin + default team;
   later registers join. See "First-run behavior" in `CLAUDE.md`.)
 - **A superset of Linear.** We do not add features Linear lacks just because we
-  can. New surface area has to earn its place by moving us *toward* parity, not
+  can. New surface area has to earn its place by moving us _toward_ parity, not
   away from it. When Linear's behavior and our instinct disagree, Linear wins
   (see "The parity philosophy" below).
 - **A platform for arbitrary integrations.** `ROADMAP.md`'s non-goals section is
@@ -76,7 +76,7 @@ Concretely, three overlapping motivations:
    first-class from the data model up (see the agents pillar).
 
 The reader we write documentation for — including this doc — is a **new
-product/eng teammate** who needs the *why*, not just the *what*. Every design
+product/eng teammate** who needs the _why_, not just the _what_. Every design
 document in this folder should leave you able to make a decision the way the
 original authors would have.
 
@@ -91,10 +91,10 @@ obvious.
 ### 1. Clone Linear as closely as practical
 
 Data model, workflows, and UX feel (speed, keyboard-first, real-time) should
-match Linear. This is the constraint that makes nonlinear *nonlinear* and not a
+match Linear. This is the constraint that makes nonlinear _nonlinear_ and not a
 generic tracker. It shows up in concrete, checkable ways: the priority scheme is
 Linear's exact `0=None 1=Urgent 2=High 3=Medium 4=Low` (`packages/shared/src/enums.ts`);
-workflow-state *categories* are Linear's `triage/backlog/unstarted/started/completed/canceled`;
+workflow-state _categories_ are Linear's `triage/backlog/unstarted/started/completed/canceled`;
 issue identifiers are `TEAM-123` with atomically reserved numbers
 (`team_counters`); the icons in `apps/web/src/icons.tsx` are hand-drawn to mimic
 Linear's state/priority glyphs. When we are unsure how something should behave,
@@ -102,8 +102,8 @@ the answer is "how does Linear do it," and `ROADMAP.md` exists precisely to keep
 score against Linear's marketed product.
 
 The escape hatch is "as closely as **practical**." We are not cloning Linear's
-GraphQL API shape or its exact pixel measurements — we clone the *model and the
-feel*. Where practicality and fidelity trade off, we note it honestly rather than
+GraphQL API shape or its exact pixel measurements — we clone the _model and the
+feel_. Where practicality and fidelity trade off, we note it honestly rather than
 pretending.
 
 ### 2. Fully containerized
@@ -117,13 +117,13 @@ something we are willing to containerize and operate.
 
 ### 3. Azure is the eventual deploy target
 
-We prefer Azure managed services *when needed* but keep plain-container
+We prefer Azure managed services _when needed_ but keep plain-container
 portability. This is a "design for a destination without coupling to it"
 constraint. The web tier is built to move to **Azure Static Web Apps** — nginx
 in `infra/web/nginx.conf` deliberately mirrors `infra/web/staticwebapp.config.json`
 so that the local serving story and the eventual SWA story are the same routing
 rules in two dialects. The API is a single container ready for a container
-service; Postgres is ready for Flexible Server (burstable). The word *eventual*
+service; Postgres is ready for Flexible Server (burstable). The word _eventual_
 matters: none of this Azure-specific code is on the critical path today, but no
 decision may foreclose it. Attachments are the clearest example — they live on a
 filesystem volume now, but everything goes through the `BlobStore` interface in
@@ -138,7 +138,7 @@ suspiciously simple for the feature count. There is no separate worker process:
 the same API container runs the WebSocket hub, a 10-minute due-soon/reminder
 scheduler, and an hourly email-digest sender in-process (`apps/api/src/`). There
 is no search service: full-text search is Postgres. There is no cache tier and no
-message queue: the sync log *is* the event bus. Every time you are tempted to add
+message queue: the sync log _is_ the event bus. Every time you are tempted to add
 a moving part, this constraint is the thing to argue with — and it usually wins.
 
 ### 5. Modular storage
@@ -146,7 +146,7 @@ a moving part, this constraint is the thing to argue with — and it usually win
 All persistence goes through the interfaces in `packages/core/src/storage.ts`;
 no package outside `storage-*` may import a database driver; `STORAGE=memory|postgres`
 selects the engine at API startup. This is the constraint that keeps the domain
-honest. `packages/core` contains *all* business rules and knows *nothing* about
+honest. `packages/core` contains _all_ business rules and knows _nothing_ about
 Postgres — it talks to `EntityStore<T>` and friends. The in-memory
 implementation (`packages/core/src/memory.ts`) is a real, complete storage
 backend used both by the test suite and by `STORAGE=memory` for zero-dependency
@@ -167,7 +167,7 @@ Keeping those two the same shape locally and in Azure is the point.
 
 ## The product pillars
 
-Constraints say what we must not break. Pillars say what makes the product *good*.
+Constraints say what we must not break. Pillars say what makes the product _good_.
 These are the qualities that, if we lost them, would make nonlinear a different
 and worse product even if every feature checkbox stayed ticked.
 
@@ -195,7 +195,7 @@ fighting this pillar and needs a very good reason.
 ### Real-time by construction
 
 Every connected client should see the world change under them without a refresh.
-This is not a feature we added; it is the *spine* of the system, described in
+This is not a feature we added; it is the _spine_ of the system, described in
 `CLAUDE.md` as "the load-bearing design." Every mutation appends full-entity
 deltas to a monotonic **sync log** (`SyncBus.publish` → `syncLog.append` → live
 listeners). Clients bootstrap a full snapshot tagged with a `syncId`, then stay
@@ -203,7 +203,7 @@ current over `/api/ws`; on reconnect they send `lastSyncId` and the server eithe
 replays everything newer or tells them to `rebootstrap` (`apps/api/src/hub.ts`).
 
 Two things follow from making real-time structural rather than optional. First,
-adding a new synced model is a *checklist*, not an architecture decision (add it
+adding a new synced model is a _checklist_, not an architecture decision (add it
 to `SyncModelMap`/`SYNC_MODEL_NAMES` in shared, add a store/table in both storage
 impls, publish deltas from the service, map it in the web store's
 `MODEL_TO_KEY`). Second, the same event stream that powers the browser powers
@@ -216,7 +216,7 @@ tracker that trade is clearly correct.
 ### The issues → projects → initiatives hierarchy
 
 Linear's conceptual model is a nested hierarchy of work, and we clone it exactly
-because it is *the* opinionated core of the product, not a taxonomy detail:
+because it is _the_ opinionated core of the product, not a taxonomy detail:
 
 - **Issues** are the atom. They can nest into **sub-issues** via `parentId`
   (`packages/shared/src/entities.ts`), with cycle-prevention enforced in the
@@ -251,15 +251,15 @@ personal API tokens (`domain.tokens.authenticate`):
 2. **The REST API directly**, with the same token auth.
 3. **Agent users** — teammates with `isAgent` set, created by an admin
    (`POST /api/agents`, tokens minted via `POST /api/agents/:id/tokens` because
-   agents cannot log in). You *assign issues to them and @mention them* like any
+   agents cannot log in). You _assign issues to them and @mention them_ like any
    human, and an agent-scoped webhook (`WebhookService.involvesAgent`) fires only
    on events where that agent is the assignee or is @mentioned.
 
 The reason this is a pillar and not just a P-tier feature is the claim behind it,
-stated plainly in `ROADMAP.md`: this is "the direct answer to *can an agent use
-nonlinear the way it uses Linear.*" The assign/@mention → webhook → comment-back
+stated plainly in `ROADMAP.md`: this is "the direct answer to _can an agent use
+nonlinear the way it uses Linear._" The assign/@mention → webhook → comment-back
 loop is a runnable reference in `examples/agent/`. Note the honest boundary:
-what ships is the *substrate* for agents (identity, auth, tools, the event loop).
+what ships is the _substrate_ for agents (identity, auth, tools, the event loop).
 The intelligence — suggested assignees/labels, duplicate detection, Pulse
 summaries — is a bring-your-own-key P3 item, deferred, not built.
 
@@ -267,7 +267,7 @@ summaries — is a bring-your-own-key P3 item, deferred, not built.
 
 The single most important cultural decision on this project is captured in one
 phrase from the constraints: **"clone Linear as closely as practical."** We
-interpret this as *full alignment* — nonlinear is a clone, and "clone" is a
+interpret this as _full alignment_ — nonlinear is a clone, and "clone" is a
 compliment we are trying to earn, not a hedge we are apologizing for.
 
 In practice this means a specific default: **when in doubt, do what Linear does.**
@@ -279,18 +279,18 @@ scorecard. This has real benefits: it removes a whole category of bikeshedding
 (the answer is already decided), it makes the product instantly familiar to
 anyone who has used Linear, and it gives us a crisp definition of "done."
 
-The alternative we rejected was building a *Linear-inspired* tool with our own
+The alternative we rejected was building a _Linear-inspired_ tool with our own
 opinions layered in. That path is tempting — every engineer has ideas about how
 priorities or cycles "should" work — but it leads somewhere specific: a product
 that is neither Linear nor a coherent alternative, just a pile of local
 preferences. By committing to parity we trade creative latitude for coherence and
 familiarity, and for a self-hosted clone that is exactly the right trade.
 
-Parity also has a *practical* ceiling we are honest about. We do not clone
+Parity also has a _practical_ ceiling we are honest about. We do not clone
 implementation choices that would violate the founding constraints — Linear is
 GraphQL-first and cloud-hosted; we are REST + MCP and self-hostable, because a
 GraphQL layer is unbuilt (P3) and a hosted control plane is a non-goal. Parity is
-about the *product*: the model, the workflows, the feel. It is not about
+about the _product_: the model, the workflows, the feel. It is not about
 re-deriving Linear's backend.
 
 ## What is shipped vs. what is not
@@ -326,5 +326,5 @@ a founding constraint? Then it is almost certainly wrong, however good it looks.
 Does it weaken a pillar — make the app slower, add a moving part, break real-time,
 demote agents? Then the bar is very high. Does it move us toward Linear parity as
 tracked in `ROADMAP.md`? Then it is probably the right kind of work. And when the
-question is "how should this behave," the first answer to reach for is: *how does
-Linear do it.* That is the whole philosophy in one sentence.
+question is "how should this behave," the first answer to reach for is: _how does
+Linear do it._ That is the whole philosophy in one sentence.

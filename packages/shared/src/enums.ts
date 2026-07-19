@@ -129,3 +129,33 @@ export const ACTIVITY_TYPES = [
   'relation_removed',
 ] as const;
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
+
+/** How a user proved their identity for a session. */
+export const AUTH_METHODS = ['password', 'sso', 'scim'] as const;
+export type AuthMethod = (typeof AUTH_METHODS)[number];
+
+/**
+ * Workspace-level security/admin events recorded to the audit log. Distinct
+ * from per-issue ActivityType — these are for admins reviewing who did what.
+ */
+export const AUDIT_ACTIONS = [
+  'user.login',
+  'user.login_failed',
+  'user.logout',
+  'user.register',
+  'user.provisioned',
+  'user.deactivated',
+  'user.reactivated',
+  'user.role_changed',
+  'user.sso_linked',
+  'member.added',
+  'member.removed',
+  'token.created',
+  'token.revoked',
+  'agent.created',
+  'webhook.created',
+  'webhook.deleted',
+  'team.created',
+  'team.deleted',
+] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];

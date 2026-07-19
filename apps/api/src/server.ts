@@ -9,6 +9,8 @@ import { SyncHub } from './hub.js';
 import { registerGithubWebhook } from './github.js';
 import { registerIntake } from './intake.js';
 import { registerMcp } from './mcp.js';
+import { registerSso, ssoEnabled } from './sso.js';
+import { registerScim } from './scim.js';
 
 const SESSION_COOKIE = 'nl_session';
 
@@ -55,6 +57,10 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     });
   }
 
+  // Enterprise auth adapters (both no-op unless configured).
+  await registerSso(app, domain, config, setSessionCookie);
+  await registerScim(app, domain, config);
+
   // Two ways to authenticate: the browser session cookie, or a personal API
   // token as `Authorization: Bearer <token>` (used by scripts, agents, and MCP).
   async function resolveUser(req: FastifyRequest): Promise<User | null> {
@@ -84,7 +90,11 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   app.get('/api/meta', async () => {
     const userCount = await domain.ctx.storage.users.count();
     const workspace = (await domain.ctx.storage.workspaces.all())[0] ?? null;
-    return { setupRequired: userCount === 0, workspaceName: workspace?.name ?? null };
+    return {
+      setupRequired: userCount === 0,
+      workspaceName: workspace?.name ?? null,
+      sso: ssoEnabled(config) ? { enabled: true, label: config.sso.label } : null,
+    };
   });
 
   // ---- auth ----
@@ -98,21 +108,64 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     const { user, workspace } = await domain.auth.register(body);
     const session = await domain.auth.createSession(user.id);
     setSessionCookie(reply, session.token);
+    await domain.audit.record({
+      action: 'user.register',
+      actorId: user.id,
+      actorLabel: user.name,
+      targetType: 'user',
+      targetId: user.id,
+      targetLabel: user.email,
+      metadata: { role: user.role },
+      ip: req.ip,
+    });
     return { user, workspaceId: workspace.id };
   });
 
   app.post('/api/auth/login', async (req, reply) => {
     const body = req.body as { email: string; password: string };
-    const { user, session } = await domain.auth.login(body);
-    setSessionCookie(reply, session.token);
-    const workspace = (await domain.ctx.storage.workspaces.all())[0];
-    return { user, workspaceId: workspace?.id ?? '' };
+    try {
+      const { user, session } = await domain.auth.login(body);
+      setSessionCookie(reply, session.token);
+      await domain.audit.record({
+        action: 'user.login',
+        actorId: user.id,
+        actorLabel: user.name,
+        targetType: 'user',
+        targetId: user.id,
+        targetLabel: user.email,
+        metadata: { method: 'password' },
+        ip: req.ip,
+      });
+      const workspace = (await domain.ctx.storage.workspaces.all())[0];
+      return { user, workspaceId: workspace?.id ?? '' };
+    } catch (err) {
+      await domain.audit.record({
+        action: 'user.login_failed',
+        actorId: null,
+        actorLabel: (body.email ?? '').trim().toLowerCase() || 'unknown',
+        metadata: { method: 'password' },
+        ip: req.ip,
+      });
+      throw err;
+    }
   });
 
   app.post('/api/auth/logout', async (req, reply) => {
     const token = req.cookies[SESSION_COOKIE];
+    const user = token ? await domain.auth.authenticate(token) : null;
     if (token) await domain.auth.logout(token);
     reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    if (user) {
+      await domain.audit.record({
+        action: 'user.logout',
+        actorId: user.id,
+        actorLabel: user.name,
+        targetType: 'user',
+        targetId: user.id,
+        targetLabel: user.email,
+        ip: req.ip,
+      });
+    }
     return { ok: true };
   });
 
@@ -172,25 +225,68 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   });
 
   // ---- teams & workflow states ----
-  app.post('/api/teams', authed, async (req) =>
-    domain.teams.create(req.user.id, req.body as never),
-  );
+  app.post('/api/teams', authed, async (req) => {
+    const team = await domain.teams.create(req.user.id, req.body as never);
+    await domain.audit.record({
+      action: 'team.created',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'team',
+      targetId: team.id,
+      targetLabel: team.key,
+      ip: req.ip,
+    });
+    return team;
+  });
   app.patch('/api/teams/:id', authed, async (req) =>
     domain.teams.update((req.params as { id: string }).id, req.body as never),
   );
   app.delete('/api/teams/:id', authed, async (req) => {
-    await domain.teams.remove((req.params as { id: string }).id);
+    const id = (req.params as { id: string }).id;
+    const team = await domain.ctx.storage.teams.get(id);
+    await domain.teams.remove(id);
+    await domain.audit.record({
+      action: 'team.deleted',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'team',
+      targetId: id,
+      targetLabel: team?.key ?? null,
+      ip: req.ip,
+    });
     return { ok: true };
   });
-  app.post('/api/teams/:id/members', authed, async (req) =>
-    domain.teams.addMember(
-      (req.params as { id: string }).id,
-      (req.body as { userId: string }).userId,
-    ),
-  );
+  app.post('/api/teams/:id/members', authed, async (req) => {
+    const teamId = (req.params as { id: string }).id;
+    const userId = (req.body as { userId: string }).userId;
+    const result = await domain.teams.addMember(teamId, userId);
+    const member = await domain.ctx.storage.users.get(userId);
+    await domain.audit.record({
+      action: 'member.added',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'user',
+      targetId: userId,
+      targetLabel: member?.email ?? null,
+      metadata: { teamId },
+      ip: req.ip,
+    });
+    return result;
+  });
   app.delete('/api/teams/:id/members/:userId', authed, async (req) => {
     const params = req.params as { id: string; userId: string };
     await domain.teams.removeMember(params.id, params.userId);
+    const member = await domain.ctx.storage.users.get(params.userId);
+    await domain.audit.record({
+      action: 'member.removed',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'user',
+      targetId: params.userId,
+      targetLabel: member?.email ?? null,
+      metadata: { teamId: params.id },
+      ip: req.ip,
+    });
     return { ok: true };
   });
   app.post('/api/states', authed, async (req) => domain.teams.createState(req.body as never));
@@ -347,12 +443,23 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
       format?: 'json' | 'slack';
       agentUserId?: string | null;
     };
-    return domain.webhooks.create(
+    const webhook = await domain.webhooks.create(
       req.user.id,
       body.url,
       body.format ?? 'json',
       body.agentUserId ?? null,
     );
+    await domain.audit.record({
+      action: 'webhook.created',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'webhook',
+      targetId: webhook.id,
+      targetLabel: body.url,
+      metadata: { format: body.format ?? 'json', agentUserId: body.agentUserId ?? null },
+      ip: req.ip,
+    });
+    return webhook;
   });
   app.patch('/api/webhooks/:id', authed, async (req) => {
     requireAdmin(req);
@@ -363,7 +470,17 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   });
   app.delete('/api/webhooks/:id', authed, async (req) => {
     requireAdmin(req);
-    await domain.webhooks.remove((req.params as { id: string }).id);
+    const id = (req.params as { id: string }).id;
+    await domain.webhooks.remove(id);
+    await domain.audit.record({
+      action: 'webhook.deleted',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'webhook',
+      targetId: id,
+      targetLabel: null,
+      ip: req.ip,
+    });
     return { ok: true };
   });
 
@@ -482,11 +599,31 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
 
   // ---- API tokens (bearer credentials for REST + MCP) ----
   app.get('/api/tokens', authed, async (req) => domain.tokens.list(req.user.id));
-  app.post('/api/tokens', authed, async (req) =>
-    domain.tokens.create(req.user.id, req.body as never),
-  );
+  app.post('/api/tokens', authed, async (req) => {
+    const result = await domain.tokens.create(req.user.id, req.body as never);
+    await domain.audit.record({
+      action: 'token.created',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'token',
+      targetId: result.token.id,
+      targetLabel: result.token.name,
+      ip: req.ip,
+    });
+    return result;
+  });
   app.delete('/api/tokens/:id', authed, async (req) => {
-    await domain.tokens.revoke(req.user.id, (req.params as { id: string }).id);
+    const id = (req.params as { id: string }).id;
+    await domain.tokens.revoke(req.user.id, id);
+    await domain.audit.record({
+      action: 'token.revoked',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'token',
+      targetId: id,
+      targetLabel: null,
+      ip: req.ip,
+    });
     return { ok: true };
   });
 
@@ -495,7 +632,17 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     if (req.user.role !== 'admin') {
       throw new DomainError('forbidden', 'Only admins can create agents', 403);
     }
-    return domain.auth.createAgent(req.body as never);
+    const agent = await domain.auth.createAgent(req.body as never);
+    await domain.audit.record({
+      action: 'agent.created',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'user',
+      targetId: agent.id,
+      targetLabel: agent.name,
+      ip: req.ip,
+    });
+    return agent;
   });
   // Agents can't log in, so an admin mints their bootstrap token for them.
   app.post('/api/agents/:id/tokens', authed, async (req) => {
@@ -520,12 +667,49 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   app.patch('/api/profile', authed, async (req) =>
     domain.users.updateProfile(req.user.id, req.body as never),
   );
-  app.patch('/api/users/:id', authed, async (req) =>
-    domain.users.adminUpdate(req.user.id, (req.params as { id: string }).id, req.body as never),
-  );
+  app.patch('/api/users/:id', authed, async (req) => {
+    const targetId = (req.params as { id: string }).id;
+    const body = req.body as { role?: 'admin' | 'member' | 'guest'; active?: boolean };
+    const before = await domain.ctx.storage.users.get(targetId);
+    const updated = await domain.users.adminUpdate(req.user.id, targetId, body);
+    if (before && body.role !== undefined && before.role !== updated.role) {
+      await domain.audit.record({
+        action: 'user.role_changed',
+        actorId: req.user.id,
+        actorLabel: req.user.name,
+        targetType: 'user',
+        targetId,
+        targetLabel: updated.email,
+        metadata: { from: before.role, to: updated.role },
+        ip: req.ip,
+      });
+    }
+    if (before && body.active !== undefined && before.active !== updated.active) {
+      await domain.audit.record({
+        action: updated.active ? 'user.reactivated' : 'user.deactivated',
+        actorId: req.user.id,
+        actorLabel: req.user.name,
+        targetType: 'user',
+        targetId,
+        targetLabel: updated.email,
+        ip: req.ip,
+      });
+    }
+    return updated;
+  });
   app.patch('/api/workspace', authed, async (req) =>
     domain.users.updateWorkspace((req.body as { name: string }).name),
   );
+
+  // ---- audit log (admin) ----
+  app.get('/api/audit', authed, async (req) => {
+    requireAdmin(req);
+    const { cursor, limit } = req.query as { cursor?: string; limit?: string };
+    return domain.audit.list({
+      cursor: cursor ?? null,
+      limit: limit ? Number(limit) : 100,
+    });
+  });
 
   return app;
 }
