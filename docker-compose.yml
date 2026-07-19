@@ -35,6 +35,10 @@ services:
       #   OIDC_ALLOWED_DOMAINS: acme.com,acme.io   OIDC_AUTO_PROVISION: 'true'
       #   SCIM_TOKEN: <bearer secret for /scim/v2/Users provisioning>
       # See docker-compose.ssotest.yml for a mock-OIDC verification setup.
+      # Attachment storage (default: fs volume below). Set to use Azure Blob:
+      #   AZURE_BLOB_CONNECTION_STRING: <account connection string>
+      #   AZURE_BLOB_CONTAINER: attachments
+      # See docker-compose.azuretest.yml for an Azurite verification setup.
     volumes:
       - blobdata:/data/blobs
     depends_on:

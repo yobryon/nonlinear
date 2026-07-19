@@ -48,6 +48,8 @@ pnpm monorepo, TypeScript ESM end-to-end (`.js` import specifiers everywhere exc
 
 **Auth is dual:** browser session cookie _or_ `Authorization: Bearer <personal API token>` (`domain.tokens.authenticate`). Tokens are non-synced bearer secrets (sha256-stored, like sessions) minted in Profile → API tokens; the MCP server and any scripted/agent client authenticate with them.
 
+**Attachment blobs** go through the `BlobStore` seam (`packages/core/src/blob.ts`), separate from the entity `Storage`. Backend is selected at boot in `apps/api/src/index.ts`: Azure Blob when `AZURE_BLOB_CONNECTION_STRING` is set (`createAzureBlobStore` in `apps/api/src/blob-azure.ts` — the Azure SDK is confined to the API layer, like the pg driver to `storage-postgres`), else the fs volume (`BLOB_DIR`) for postgres, else in-memory. Verified against the Azurite emulator.
+
 **Enterprise auth (optional, config-gated).** OIDC single sign-on and SCIM 2.0 provisioning are protocol adapters over the same `Domain`, following the `github.ts`/`mcp.ts` pattern. `src/sso.ts` runs the OIDC authorization-code + PKCE flow (discovery, ID-token verification via `jose`) and hands normalized claims to `domain.auth.findOrProvisionSso` (match-by-subject → link-by-email → JIT-provision); enable with `OIDC_ISSUER`/`OIDC_CLIENT_ID` (+ `OIDC_CLIENT_SECRET`, `OIDC_LABEL`, `OIDC_ALLOWED_DOMAINS`, `OIDC_AUTO_PROVISION`). `src/scim.ts` serves `/scim/v2/Users` (create/list/filter/deactivate), bearer-guarded by `SCIM_TOKEN`. Both are no-ops unless configured. The SSO subject↔user link lives in the storage auth layer (`sso_identities`), never on the synced `User`. A workspace **audit log** (`AuditService`, `audit_log` table, non-synced, admin-only paged `GET /api/audit`) records logins, provisioning, role/active changes, and token/agent/webhook/team events.
 
 **Agents.** nonlinear supports agents three ways, all Bearer-authenticated: (1) the MCP server (tool layer, 13 tools name-resolved), (2) the REST API directly, (3) **agent users** — `isAgent` teammates you assign issues to / @mention, created by an admin (`POST /api/agents`, token minted via `POST /api/agents/:id/tokens` since agents can't log in). A webhook with `agentUserId` set only fires on events where that agent is the assignee or @mentioned (`WebhookService.involvesAgent`). `examples/agent/` is a runnable reference of the assign/mention → webhook → comment-back loop.
@@ -68,7 +70,6 @@ The first register creates the workspace, an admin user, and a default team (wit
 
 ## Known gaps / deferred
 
-- Azure Blob `BlobStore` implementation (fs volume is the current attachment store; the interface in `packages/core/src/blob.ts` is the seam).
 - Outbound webhooks are fire-and-forget (5s timeout, no retry queue).
 - No GraphQL API (REST + Bearer tokens are shipped; Linear's own API is GraphQL).
 - SCIM covers Users, not Groups (team membership is a product concern, not IdP-driven); no SSO-enforced/session-mapping beyond first login.

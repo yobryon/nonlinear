@@ -545,6 +545,53 @@ rewrite.
 
 ---
 
+## 15. Azure Blob adapter in the API layer, not core
+
+**Decision.** Implement the `BlobStore` seam against Azure Blob Storage as
+`createAzureBlobStore` in `apps/api/src/blob-azure.ts` — the API composition
+layer — rather than in `packages/core`, and select it at boot when
+`AZURE_BLOB_CONNECTION_STRING` is set. Content type is stored natively on the
+blob (no `.meta` sidecar the fs store needs).
+
+**Context.** Attachments on a local fs volume don't survive a stateless
+container — the exact gap between "runs on my Docker" and the founding
+constraint that "a person or organization could self-host on Azure." The
+`BlobStore` interface was designed for a third implementation from the start
+(entry 2 and doc 04); this fills it. The only real question was _where the Azure
+SDK lives_.
+
+**Alternatives considered.** (a) Add `createAzureBlobStore` to
+`packages/core/src/blob.ts` beside the memory/fs stores — but then every
+consumer of `core` (including the pure-domain unit tests and `STORAGE=memory`
+runs) pulls in `@azure/storage-blob` and its transitive deps for a backend most
+never use. (b) A new `packages/storage-azure-blob` package — correct isolation,
+but ceremony out of proportion to one ~50-line factory. (c) Put it in the API
+layer, which already owns infra selection (it imports `createPostgresStorage`,
+wires nodemailer, chooses the fs vs memory blob store) — the SDK stays off
+`core`'s dependency graph with no new package.
+
+**Why.** (c). The blob backend is an infrastructure choice, and the API's
+`index.ts` is already the one place infrastructure is chosen; the Azure SDK
+belongs where the Postgres driver's analogue already is by spirit —
+_not in core_. `core` keeps exporting only the `BlobStore` _interface_ and its
+memory/fs reference stores, so its "no infra drivers" property holds. Selection
+is a three-way branch (Azure if configured, else fs for Postgres, else memory),
+identical in shape to the storage-engine selection.
+
+**Consequences.** A real Azure deploy points `AZURE_BLOB_CONNECTION_STRING` at a
+Storage account and attachments become durable and stateless-container-safe;
+the default self-host path is unchanged (fs volume). Verified end-to-end against
+the Azurite emulator: an attachment uploaded through the app is PUT to Azure
+Blob and read back byte-identical, with `docker-compose.azuretest.yml` as a
+reproducible harness and an env-gated integration test
+(`AZURE_BLOB_TEST_CONNECTION_STRING`, skipped otherwise, like the Postgres
+tests). The same seam now has three implementations, so a future S3 or GCS
+adapter is the same exercise. This closes the last infrastructure gap to Azure
+portability; what remains for a real deploy is the IaC to stand up the services,
+not application code.
+
+---
+
 ## How to extend this log
 
 When you make a decision that would be expensive to reverse — a new storage

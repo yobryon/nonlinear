@@ -3,9 +3,11 @@ import {
   createFsBlobStore,
   createMemoryBlobStore,
   createMemoryStorage,
+  type BlobStore,
   type Storage,
 } from '@nonlinear/core';
 import { createPostgresStorage } from '@nonlinear/storage-postgres';
+import { createAzureBlobStore } from './blob-azure.js';
 import { loadConfig } from './config.js';
 import { buildServer } from './server.js';
 import { createDigestSender } from './digest.js';
@@ -20,8 +22,20 @@ async function main(): Promise<void> {
   } else {
     storage = createMemoryStorage();
   }
-  const blobs =
-    config.storage === 'postgres' ? createFsBlobStore(config.blobDir) : createMemoryBlobStore();
+  // Blob backend: Azure Blob when configured (portable Azure target), else the
+  // fs volume for postgres, else in-memory for STORAGE=memory.
+  let blobs: BlobStore;
+  if (config.azureBlob.connectionString) {
+    blobs = await createAzureBlobStore(
+      config.azureBlob.connectionString,
+      config.azureBlob.container,
+    );
+    console.log(`[blob] Azure Blob Storage (container "${config.azureBlob.container}")`);
+  } else if (config.storage === 'postgres') {
+    blobs = createFsBlobStore(config.blobDir);
+  } else {
+    blobs = createMemoryBlobStore();
+  }
   const domain = createDomain(storage, { blobs });
   const app = await buildServer(domain, config);
 

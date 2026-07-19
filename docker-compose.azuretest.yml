@@ -1,0 +1,19 @@
+# Verification-only override: routes attachment blobs to an Azurite emulator so
+# the Azure Blob adapter can be exercised end-to-end. Not for production.
+#   docker compose -f docker-compose.yml -f docker-compose.azuretest.yml up -d --build
+services:
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    command: azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+    ports:
+      - '10000:10000'
+    restart: unless-stopped
+
+  api:
+    environment:
+      AZURE_BLOB_CONNECTION_STRING: >-
+        DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;
+      AZURE_BLOB_CONTAINER: attachments
+    depends_on:
+      postgres:
+        condition: service_healthy

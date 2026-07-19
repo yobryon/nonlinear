@@ -325,26 +325,27 @@ like everything else. The bytes live in the `BlobStore` under that key. This
 split is what keeps binary out of the real-time path while still letting the UI
 know an attachment exists the instant it's uploaded.
 
-Two implementations ship today, both in `blob.ts`:
+Three implementations ship today:
 
-- **`createMemoryBlobStore()`** — a `Map<string, {data, contentType}>`, used by
-  tests and `STORAGE=memory`. The `Domain` even defaults to this if no blob
-  store is passed (`createDomain`'s `options.blobs ?? createMemoryBlobStore()`).
-- **`createFsBlobStore(dir)`** — writes each blob to a file under `dir` (with a
-  `.meta` sidecar for the content type), used by the self-host container. In
-  `docker-compose.yml` the API mounts a volume at `BLOB_DIR=/data/blobs`.
+- **`createMemoryBlobStore()`** (`blob.ts`) — a `Map<string, {data, contentType}>`,
+  used by tests and `STORAGE=memory`. The `Domain` even defaults to this if no
+  blob store is passed (`createDomain`'s `options.blobs ?? createMemoryBlobStore()`).
+- **`createFsBlobStore(dir)`** (`blob.ts`) — writes each blob to a file under
+  `dir` (with a `.meta` sidecar for the content type), used by the self-host
+  container. In `docker-compose.yml` the API mounts a volume at `BLOB_DIR=/data/blobs`.
+- **`createAzureBlobStore(connectionString, container)`**
+  (`apps/api/src/blob-azure.ts`) — the portable Azure backend. It stores content
+  type natively on the blob (no sidecar) and confines the `@azure/storage-blob`
+  SDK to the API composition layer, so `packages/core` stays driver-free — the
+  same discipline that keeps the Postgres driver in `storage-postgres`.
 
-Selection mirrors the storage selection exactly, in `apps/api/src/index.ts`:
-`config.storage === 'postgres' ? createFsBlobStore(config.blobDir) :
-createMemoryBlobStore()`. Postgres deployments get durable files; memory
-deployments get memory.
-
-**Azure Blob is the explicit next implementation.** It is a sibling factory
-function — `createAzureBlobStore(...)` returning a `BlobStore` — with a config
-branch, and nothing in `packages/core` changes. This is P3 in `ROADMAP.md`
-("Azure Blob storage adapter — implement `BlobStore` against Azure Blob,
-config-select like `STORAGE`") and is called out as a known gap in `CLAUDE.md`.
-The interface was designed for it from the start; it is not yet built.
+Selection lives in `apps/api/src/index.ts`: Azure Blob when
+`AZURE_BLOB_CONNECTION_STRING` is set (a real account _or_ the Azurite
+emulator), else the fs volume for Postgres, else memory. Nothing in
+`packages/core` changed to add Azure — the interface was designed for exactly
+this, and the adapter is a sibling factory with a config branch. Verified
+end-to-end against Azurite: upload → Azure Blob PUT → download → byte-identical
+(see decision log entry 15).
 
 ## The other seam: Domain as core, transports as adapters
 

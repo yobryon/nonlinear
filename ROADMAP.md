@@ -59,9 +59,10 @@ in Docker against a mock OIDC provider.
 | **AI features (agents, triage intelligence, Pulse summaries)** | Build/Intake | Linear's 2025-26 direction: assignable agents, suggested assignees/labels, duplicate AI. Self-host analog: bring-your-own-key LLM integration. |
 | **Diffs (code review)**                                        | Diffs        | Linear now ships code review for human+agent PRs. Large scope; likely out of clone territory — revisit.                                        |
 | **Mobile apps / PWA**                                          | Mobile       | Ship a PWA manifest + responsive layout pass first; native apps out of scope.                                                                  |
-| **Azure Blob storage adapter**                                 | Platform     | Implement `BlobStore` against Azure Blob; config-select like `STORAGE`.                                                                        |
 
-**Shipped from P3:** SSO (Entra ID / OIDC) · SCIM · audit log.
+**Shipped from P3:** SSO (Entra ID / OIDC) · SCIM · audit log · **Azure Blob
+storage adapter** (`AZURE_BLOB_CONNECTION_STRING`; `createAzureBlobStore` in
+`apps/api/src/blob-azure.ts`, verified against Azurite).
 
 ## Non-goals (for now)
 

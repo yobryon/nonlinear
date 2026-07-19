@@ -7,6 +7,15 @@ export interface Config {
   secureCookies: boolean;
   /** Directory for attachment blobs (fs blob store). */
   blobDir: string;
+  /**
+   * Attachment blob backend. Azure Blob when a connection string is set
+   * (portable Azure target), else the fs volume for postgres / memory for
+   * memory storage. Selected at boot in index.ts.
+   */
+  azureBlob: {
+    connectionString: string;
+    container: string;
+  };
   /** Shared secret for the inbound GitHub webhook (HMAC sha256). Empty = disabled. */
   githubWebhookSecret: string;
   /** SMTP connection string for digest emails (smtp://host:port). Empty = digests off. */
@@ -39,6 +48,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: env.DATABASE_URL ?? 'postgres://nonlinear:nonlinear@localhost:5432/nonlinear',
     secureCookies: env.SECURE_COOKIES === 'true',
     blobDir: env.BLOB_DIR ?? './blobs',
+    azureBlob: {
+      connectionString: env.AZURE_BLOB_CONNECTION_STRING ?? '',
+      container: env.AZURE_BLOB_CONTAINER ?? 'attachments',
+    },
     githubWebhookSecret: env.GITHUB_WEBHOOK_SECRET ?? '',
     smtpUrl: env.SMTP_URL ?? '',
     smtpFrom: env.SMTP_FROM ?? 'nonlinear <no-reply@nonlinear.local>',
