@@ -58,18 +58,24 @@ throughput) at `/pulse` · **BYO-key AI** — admin-set workspace LLM config
 (Anthropic / OpenAI, key stored server-side, never synced) powering a Pulse
 "Summarize with AI" action and AI-suggested labels on issues.
 
+**Platform (shipped):** **GraphQL API** — a code-first schema at
+`POST /api/graphql` over the same `Domain` and auth as REST (queries read a
+per-request store snapshot with lazy field resolution; mutations delegate to
+services) · **PWA** — web app manifest, maskable icons, and a hand-rolled
+service worker (network-first navigations with an offline shell, cache-first
+hashed assets) making nonlinear installable and offline-capable.
+
 ## P3 — Platform & scale
 
-| Feature                 | Linear area | Notes                                                                                         |
-| ----------------------- | ----------- | --------------------------------------------------------------------------------------------- |
-| **GraphQL API**         | Platform    | Personal API tokens + REST are shipped; add a GraphQL layer if demand (Linear's is GraphQL).  |
-| **Diffs (code review)** | Diffs       | Linear now ships code review for human+agent PRs. Large scope; likely out of clone territory. |
-| **Mobile apps / PWA**   | Mobile      | Ship a PWA manifest + responsive layout pass first; native apps out of scope.                 |
+| Feature                 | Linear area | Notes                                                                                           |
+| ----------------------- | ----------- | ----------------------------------------------------------------------------------------------- |
+| **Diffs (code review)** | Diffs       | Linear now ships code review for human+agent PRs. Large scope; likely out of clone territory.   |
+| **Native mobile apps**  | Mobile      | The PWA covers install + offline; native iOS/Android remains out of scope for a self-host tool. |
 
 **Shipped from P3:** SSO (Entra ID / OIDC) · SCIM · audit log · Azure Blob
 storage adapter (`createAzureBlobStore`, verified against Azurite) · custom
-dashboards · Pulse activity digest · BYO-key AI features (Pulse summaries +
-suggested labels).
+dashboards · Pulse activity digest · BYO-key AI features · **GraphQL API** ·
+**PWA** (installable + offline shell).
 
 ## Non-goals (for now)
 

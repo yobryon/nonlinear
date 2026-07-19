@@ -13,6 +13,8 @@ import { registerSso, ssoEnabled } from './sso.js';
 import { registerScim } from './scim.js';
 import { suggestLabels, summarizePulse } from './ai.js';
 import { LlmError } from './llm.js';
+import { graphql } from 'graphql';
+import { graphqlContext, graphqlSchema } from './graphql.js';
 
 const SESSION_COOKIE = 'nl_session';
 
@@ -752,6 +754,34 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     }
     return settings;
   }
+
+  // ---- GraphQL API (same auth + Domain as REST) ----
+  const runGraphql = async (
+    req: FastifyRequest,
+    params: { query?: string; variables?: Record<string, unknown>; operationName?: string },
+  ) => {
+    if (!params.query) {
+      return { errors: [{ message: 'A `query` is required' }] };
+    }
+    return graphql({
+      schema: graphqlSchema,
+      source: params.query,
+      variableValues: params.variables,
+      operationName: params.operationName,
+      contextValue: await graphqlContext(domain, req.user),
+    });
+  };
+  app.post('/api/graphql', authed, async (req) =>
+    runGraphql(req, req.body as { query?: string; variables?: Record<string, unknown> }),
+  );
+  app.get('/api/graphql', authed, async (req) => {
+    const q = req.query as { query?: string; variables?: string; operationName?: string };
+    return runGraphql(req, {
+      query: q.query,
+      operationName: q.operationName,
+      variables: q.variables ? JSON.parse(q.variables) : undefined,
+    });
+  });
 
   // ---- audit log (admin) ----
   app.get('/api/audit', authed, async (req) => {

@@ -645,6 +645,58 @@ the summarize/suggest affordances only when a key is configured.
 
 ---
 
+## 17. GraphQL as another adapter; PWA hand-rolled, not Workbox
+
+**Decision.** Add a **GraphQL API** at `POST /api/graphql` as a code-first
+schema over the existing `Domain`, and make the web app an installable **PWA**
+with a hand-written service worker — no PWA framework, no Workbox.
+
+**Context.** Linear's public API is GraphQL, so a clone that wants API parity
+needs a GraphQL surface; and "PWA/mobile" was the last Monitor-adjacent P3 item,
+the cheap path to install + offline without a native app. Both had to fit the
+established seams (transport adapters over one in-process domain) and the
+low-dependency, ~100 KB-SPA constraints.
+
+**Alternatives considered.** (a) _GraphQL server:_ Mercurius (Fastify-native) or
+Apollo Server. Rejected as more framework than needed — the reference `graphql`
+package plus a Fastify route is a thinner adapter that reuses the exact
+cookie/Bearer auth REST already has. (b) _Schema-first (`buildSchema` + SDL):_
+concise, but it can't attach field resolvers, so nested reads (issue → team,
+assignee, labels) would need eager pre-resolution. Code-first
+(`GraphQLObjectType` with `resolve`) gives proper lazy resolution. (c) _N+1
+avoidance:_ DataLoader per request. Rejected as overkill at self-host scale —
+instead each request loads the whole (small) store into id-maps once
+(`graphqlContext`), so every field resolver is a `Map.get`. (d) _PWA:_ the
+`vite-plugin-pwa`/Workbox stack. Rejected — it pulls a build-time dependency and
+a large generated worker for what is, here, ~60 lines: network-first
+navigations with an offline-shell fallback, cache-first for Vite's already-hashed
+`/assets/`, and never caching API traffic.
+
+**Why.** GraphQL is _another view of the same domain_, not a second backend —
+the schema resolvers call the same `IssueService`/`CommentService` as REST and
+MCP, so business rules can't diverge. The per-request store snapshot is the same
+trick the bootstrap already uses (load-all is cheap when the dataset is a
+self-host workspace), and it keeps resolvers trivial and N+1-free. For the PWA,
+hashed assets are immutable by construction, so cache-first can never go stale;
+navigations stay network-first so a new `index.html` ships immediately but the
+app still opens offline. Hand-rolling the worker keeps the dependency budget and
+the behavior fully legible.
+
+**Consequences.** The GraphQL surface is deliberately a useful subset (viewer,
+teams, issues/projects with nested fields; create/update/delete issue,
+create comment), not a full mirror of REST — it demonstrates the pattern and
+extends field-by-field. Its load-all-per-request context is fine at self-host
+scale but is the first thing to revisit under large datasets (add DataLoader or
+scoped queries). The PWA offline story is an _app-shell_ one: the shell and
+static assets work offline, but data needs the API — there is no offline
+mutation queue, which suits a real-time server-authoritative tool. Verified in
+Docker: GraphQL query + mutation over HTTP against Postgres, and the service
+worker active with the shell cached (installable, opens offline). Icons are
+generated at build-authoring time by a small Node PNG encoder (no image
+dependency in the tree).
+
+---
+
 ## How to extend this log
 
 When you make a decision that would be expensive to reverse — a new storage
