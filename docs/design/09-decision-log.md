@@ -592,6 +592,59 @@ not application code.
 
 ---
 
+## 16. Dashboards, Pulse, and BYO-key AI — compute-on-read, key-off-the-wire
+
+**Decision.** Ship three Monitor/Build-tier features as a set: **custom
+dashboards** as a synced `Dashboard` entity whose tiles render client-side from
+the already-normalized store; **Pulse** as a cross-workspace digest computed on
+demand from existing entities with no new storage; and **BYO-key AI** as an
+optional, admin-configured LLM integration whose key is stored server-side and
+never synced. AI powers a Pulse summary and issue label suggestions.
+
+**Context.** Linear's Monitor surface (dashboards, Pulse) and its 2025–26 AI
+direction (suggested labels, activity summaries) were the last big product-tier
+gaps. The self-host constraints shape all three: low resource (don't add compute
+or storage we don't need), modular, and — for AI — no mandatory cloud dependency
+or key handling that could leak.
+
+**Alternatives considered.** (a) _Dashboards:_ store precomputed tile data, or
+compute metrics server-side. Rejected — the client already holds every issue,
+project, and cycle in its normalized store, so a tile is a pure function of
+state the browser has; server-side metric endpoints would duplicate the Insights
+math and add round-trips. Tiles live inline on the dashboard document (one jsonb
+row) rather than as their own entity, because a tile has no identity outside its
+dashboard. (b) _Pulse:_ a materialized activity table fed by every mutation.
+Rejected — the audit log already exists for security events, and a _product_
+activity digest is a read-time projection of project updates + completions +
+cycles the store already has; computing it on read (bounded by a time window)
+avoids a second event pipeline and keeps writes cheap. (c) _AI:_ a hosted
+inference dependency, or per-user keys. Rejected — a self-hosted tool shouldn't
+require our cloud, and a workspace-level admin key matches how a team actually
+buys LLM access. The provider HTTP call is a transport adapter (`llm.ts`), like
+sso/scim/digest, so the domain owns only _settings_.
+
+**Why.** Compute-on-read keeps dashboards and Pulse free of new write paths and
+storage growth — the load a self-host install can least afford. The AI key is
+the sensitive bit: it lives in a non-synced `ai_settings` singleton, the sync
+boundary never carries it, and the client only ever receives `AiSettingsPublic`
+(`{enabled, provider, model, hasKey}`). Every AI feature is gated on
+`domain.ai.isReady()`, so with nothing configured the buttons never render and
+`/api/ai/*` refuses — the default install has no AI surface at all. The LLM wire
+format (Anthropic Messages, OpenAI Chat) is unit-tested against a mocked fetch,
+and label-suggestion parsing is tested independently of any live key.
+
+**Consequences.** Dashboards recompute on every render from the store; at
+self-host scale that is trivial and always fresh, but a workspace with very many
+issues would eventually want memoization or windowed queries. Pulse is a
+point-in-time read with no history table, so it cannot show activity older than
+what the entities themselves retain. AI is best-effort: a provider outage or a
+bad key surfaces as an `LlmError` toast, never a broken page, and suggestions are
+advisory (the user clicks to apply a label). Verified in Docker: dashboards
+render live tiles, Pulse groups real activity by day, and the AI gating shows
+the summarize/suggest affordances only when a key is configured.
+
+---
+
 ## How to extend this log
 
 When you make a decision that would be expensive to reverse — a new storage

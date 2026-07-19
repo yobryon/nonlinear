@@ -1,7 +1,10 @@
 import type {
   ActivityType,
+  AiProvider,
   AuditAction,
   CustomerRequestSource,
+  DashboardTileType,
+  StatMetric,
   DisplayNameFormat,
   EstimateScale,
   FavoriteType,
@@ -390,6 +393,47 @@ export interface ProjectUpdate {
   health: ProjectHealth;
   /** Markdown. */
   body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * A composable insight tile on a dashboard. `config` is interpreted per `type`;
+ * a stat tile reads `metric`, the chart tiles read `teamId`/`projectId` scope.
+ */
+export interface DashboardTile {
+  id: string;
+  type: DashboardTileType;
+  /** Optional override for the tile's heading; a sensible default is derived. */
+  title: string | null;
+  config: {
+    teamId?: string | null;
+    projectId?: string | null;
+    metric?: StatMetric;
+  };
+}
+
+/**
+ * Workspace AI configuration for the optional BYO-key features. Stored
+ * server-side only (holds the API key) and never synced to clients — the
+ * browser sees the `AiSettingsPublic` projection instead.
+ */
+export interface AiSettings {
+  enabled: boolean;
+  provider: AiProvider;
+  model: string;
+  apiKey: string;
+}
+
+/** A custom dashboard: an ordered set of insight tiles, shared or personal. */
+export interface Dashboard {
+  id: string;
+  name: string;
+  creatorId: string;
+  /** Visible to the whole workspace when true, else only its creator. */
+  shared: boolean;
+  tiles: DashboardTile[];
+  sortOrder: string;
   createdAt: string;
   updatedAt: string;
 }

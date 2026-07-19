@@ -6,6 +6,7 @@ import type {
   Customer,
   CustomerRequest,
   CustomView,
+  Dashboard,
   Cycle,
   Document,
   DocumentComment,
@@ -69,6 +70,7 @@ export interface AppState {
   customerRequests: ById<CustomerRequest>;
   documentComments: ById<DocumentComment>;
   triageRules: ById<TriageRule>;
+  dashboards: ById<Dashboard>;
 
   setPhase: (phase: AppState['phase']) => void;
   setConnection: (status: ConnectionStatus) => void;
@@ -106,6 +108,7 @@ const MODEL_TO_KEY = {
   customerRequest: 'customerRequests',
   documentComment: 'documentComments',
   triageRule: 'triageRules',
+  dashboard: 'dashboards',
 } as const;
 
 type CollectionKey = (typeof MODEL_TO_KEY)[keyof typeof MODEL_TO_KEY];
@@ -144,6 +147,7 @@ const emptyCollections = {
   customerRequests: {},
   documentComments: {},
   triageRules: {},
+  dashboards: {},
 };
 
 export const useStore = create<AppState>((set) => ({
@@ -188,6 +192,7 @@ export const useStore = create<AppState>((set) => ({
       customerRequests: indexById(p.customerRequests),
       documentComments: indexById(p.documentComments),
       triageRules: indexById(p.triageRules),
+      dashboards: indexById(p.dashboards),
     }),
 
   applyDeltas: (deltas) =>

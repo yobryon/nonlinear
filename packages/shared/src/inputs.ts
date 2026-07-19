@@ -1,4 +1,5 @@
 import type {
+  AiProvider,
   CustomerRequestSource,
   EstimateScale,
   FavoriteType,
@@ -13,7 +14,7 @@ import type {
   ViewDisplay,
   WebhookFormat,
 } from './enums.js';
-import type { ApiToken, UserPreferences, ViewFilters } from './entities.js';
+import type { ApiToken, DashboardTile, UserPreferences, ViewFilters } from './entities.js';
 
 export interface RegisterInput {
   email: string;
@@ -378,4 +379,25 @@ export interface UpdateProfileInput {
 export interface CreateReactionInput {
   commentId: string;
   emoji: string;
+}
+
+export interface CreateDashboardInput {
+  name: string;
+  shared?: boolean;
+  tiles?: DashboardTile[];
+}
+
+export interface UpdateDashboardInput {
+  name?: string;
+  shared?: boolean;
+  tiles?: DashboardTile[];
+  sortOrder?: string;
+}
+
+/** Admin-set workspace AI config. `apiKey` omitted = keep the stored key. */
+export interface UpdateAiSettingsInput {
+  enabled?: boolean;
+  provider?: AiProvider;
+  model?: string;
+  apiKey?: string;
 }

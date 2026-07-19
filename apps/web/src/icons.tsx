@@ -189,6 +189,21 @@ export const BoardIcon = (p: IconProps) => (
   </I>
 );
 
+export const DashboardIcon = (p: IconProps) => (
+  <I {...p}>
+    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+  </I>
+);
+
+export const PulseIcon = (p: IconProps) => (
+  <I {...p}>
+    <path d="M3 12h4l2 6 4-14 2 8h6" />
+  </I>
+);
+
 export const CopyIcon = (p: IconProps) => (
   <I {...p}>
     <rect x="9" y="9" width="13" height="13" rx="2" />

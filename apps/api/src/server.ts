@@ -11,6 +11,8 @@ import { registerIntake } from './intake.js';
 import { registerMcp } from './mcp.js';
 import { registerSso, ssoEnabled } from './sso.js';
 import { registerScim } from './scim.js';
+import { suggestLabels, summarizePulse } from './ai.js';
+import { LlmError } from './llm.js';
 
 const SESSION_COOKIE = 'nl_session';
 
@@ -34,6 +36,9 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   app.setErrorHandler((err: unknown, _req, reply) => {
     if (err instanceof DomainError) {
       return reply.status(err.status).send({ error: { code: err.code, message: err.message } });
+    }
+    if (err instanceof LlmError) {
+      return reply.status(err.statusCode).send({ error: { code: err.code, message: err.message } });
     }
     const httpErr = err as { statusCode?: number; message?: string };
     if (typeof httpErr.statusCode === 'number' && httpErr.statusCode < 500) {
@@ -700,6 +705,53 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   app.patch('/api/workspace', authed, async (req) =>
     domain.users.updateWorkspace((req.body as { name: string }).name),
   );
+
+  // ---- custom dashboards ----
+  app.post('/api/dashboards', authed, async (req) =>
+    domain.dashboards.create(req.user.id, req.body as never),
+  );
+  app.patch('/api/dashboards/:id', authed, async (req) =>
+    domain.dashboards.update(req.user.id, (req.params as { id: string }).id, req.body as never),
+  );
+  app.delete('/api/dashboards/:id', authed, async (req) => {
+    await domain.dashboards.remove(req.user.id, (req.params as { id: string }).id);
+    return { ok: true };
+  });
+
+  // ---- Pulse (cross-workspace activity digest) ----
+  app.get('/api/pulse', authed, async (req) => {
+    const days = Number((req.query as { days?: string }).days ?? 7);
+    return domain.pulse.feed(Number.isFinite(days) ? Math.min(Math.max(days, 1), 90) : 7);
+  });
+  app.post('/api/pulse/summary', authed, async (req) => {
+    const settings = await requireAiSettings();
+    const days = Number((req.body as { days?: number })?.days ?? 7);
+    const feed = await domain.pulse.feed(
+      Number.isFinite(days) ? Math.min(Math.max(days, 1), 90) : 7,
+    );
+    return { summary: await summarizePulse(settings, feed) };
+  });
+
+  // ---- AI (BYO-key) ----
+  app.get('/api/ai/settings', authed, async () => domain.ai.getPublic());
+  app.put('/api/ai/settings', authed, async (req) => {
+    requireAdmin(req);
+    return domain.ai.update(req.body as never);
+  });
+  app.post('/api/issues/:id/ai/suggest-labels', authed, async (req) => {
+    const settings = await requireAiSettings();
+    return {
+      suggestions: await suggestLabels(domain, settings, (req.params as { id: string }).id),
+    };
+  });
+
+  async function requireAiSettings() {
+    const settings = await domain.ai.getSettings();
+    if (!settings?.enabled || !settings.apiKey) {
+      throw new LlmError('AI features are not configured', 400);
+    }
+    return settings;
+  }
 
   // ---- audit log (admin) ----
   app.get('/api/audit', authed, async (req) => {

@@ -31,6 +31,9 @@ export * from './services/triageRules.js';
 export * from './services/importer.js';
 export * from './services/tokens.js';
 export * from './services/audit.js';
+export * from './services/dashboards.js';
+export * from './services/ai.js';
+export * from './services/pulse.js';
 
 import type { Storage } from './storage.js';
 import { SyncBus, type Ctx } from './domain.js';
@@ -50,6 +53,9 @@ import { TriageRuleService } from './services/triageRules.js';
 import { CsvService } from './services/importer.js';
 import { TokenService } from './services/tokens.js';
 import { AuditService } from './services/audit.js';
+import { DashboardService } from './services/dashboards.js';
+import { AiService } from './services/ai.js';
+import { PulseService } from './services/pulse.js';
 import { AuthService } from './services/auth.js';
 import { TeamService } from './services/teams.js';
 import { IssueService } from './services/issues.js';
@@ -97,6 +103,9 @@ export interface Domain {
   csv: CsvService;
   tokens: TokenService;
   audit: AuditService;
+  dashboards: DashboardService;
+  ai: AiService;
+  pulse: PulseService;
 }
 
 export interface DomainOptions {
@@ -145,5 +154,8 @@ export function createDomain(storage: Storage, options: DomainOptions = {}): Dom
     csv: new CsvService(ctx, issues),
     tokens: new TokenService(ctx),
     audit: new AuditService(ctx),
+    dashboards: new DashboardService(ctx),
+    ai: new AiService(ctx),
+    pulse: new PulseService(ctx),
   };
 }

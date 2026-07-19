@@ -49,20 +49,27 @@ JIT-provision) with a login-page button, config-gated by `OIDC_ISSUER` ·
 role/active changes, and token/agent/webhook/team events. Verified end-to-end
 in Docker against a mock OIDC provider.
 
+**Monitor & AI (shipped):** **Custom dashboards** — a synced `Dashboard` of
+composable insight tiles (stat, throughput, velocity, burn-up,
+by-state/priority/assignee, project-health), shared or personal, reusing the
+Insights chart components · **Pulse** — a cross-workspace activity digest
+(project health updates, completions, new projects, cycle finishes, per-team
+throughput) at `/pulse` · **BYO-key AI** — admin-set workspace LLM config
+(Anthropic / OpenAI, key stored server-side, never synced) powering a Pulse
+"Summarize with AI" action and AI-suggested labels on issues.
+
 ## P3 — Platform & scale
 
-| Feature                                                        | Linear area  | Notes                                                                                                                                          |
-| -------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **GraphQL API**                                                | Platform     | Personal API tokens + REST are shipped; add a GraphQL layer if demand (Linear's is GraphQL).                                                   |
-| **Custom dashboards**                                          | Monitor      | Composable insight tiles (our chart components are already modular).                                                                           |
-| **Pulse (activity digest)**                                    | Monitor      | Cross-workspace feed of project updates and status changes; optional AI summaries.                                                             |
-| **AI features (agents, triage intelligence, Pulse summaries)** | Build/Intake | Linear's 2025-26 direction: assignable agents, suggested assignees/labels, duplicate AI. Self-host analog: bring-your-own-key LLM integration. |
-| **Diffs (code review)**                                        | Diffs        | Linear now ships code review for human+agent PRs. Large scope; likely out of clone territory — revisit.                                        |
-| **Mobile apps / PWA**                                          | Mobile       | Ship a PWA manifest + responsive layout pass first; native apps out of scope.                                                                  |
+| Feature                 | Linear area | Notes                                                                                         |
+| ----------------------- | ----------- | --------------------------------------------------------------------------------------------- |
+| **GraphQL API**         | Platform    | Personal API tokens + REST are shipped; add a GraphQL layer if demand (Linear's is GraphQL).  |
+| **Diffs (code review)** | Diffs       | Linear now ships code review for human+agent PRs. Large scope; likely out of clone territory. |
+| **Mobile apps / PWA**   | Mobile      | Ship a PWA manifest + responsive layout pass first; native apps out of scope.                 |
 
-**Shipped from P3:** SSO (Entra ID / OIDC) · SCIM · audit log · **Azure Blob
-storage adapter** (`AZURE_BLOB_CONNECTION_STRING`; `createAzureBlobStore` in
-`apps/api/src/blob-azure.ts`, verified against Azurite).
+**Shipped from P3:** SSO (Entra ID / OIDC) · SCIM · audit log · Azure Blob
+storage adapter (`createAzureBlobStore`, verified against Azurite) · custom
+dashboards · Pulse activity digest · BYO-key AI features (Pulse summaries +
+suggested labels).
 
 ## Non-goals (for now)
 

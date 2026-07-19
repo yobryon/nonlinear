@@ -14,6 +14,8 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CycleIcon,
+  DashboardIcon,
+  PulseIcon,
   FilterIcon,
   InboxIcon,
   LogoutIcon,
@@ -322,6 +324,20 @@ export function Sidebar() {
           >
             <TeamIcon size={14} />
             <span className="grow">Customers</span>
+          </NavLink>
+          <NavLink
+            to="/pulse"
+            className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+          >
+            <PulseIcon size={15} />
+            <span className="grow">Pulse</span>
+          </NavLink>
+          <NavLink
+            to="/dashboards"
+            className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+          >
+            <DashboardIcon size={15} />
+            <span className="grow">Dashboards</span>
           </NavLink>
           <NavLink
             to="/design"

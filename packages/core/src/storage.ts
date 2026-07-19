@@ -1,7 +1,9 @@
 import type {
+  AiSettings,
   Attachment,
   AuditEvent,
   Comment,
+  Dashboard,
   Customer,
   CustomerRequest,
   CustomView,
@@ -116,6 +118,12 @@ export interface AuditPage {
   nextCursor: string | null;
 }
 
+/** Singleton workspace AI config (holds the API key; never synced). */
+export interface AiSettingsStore {
+  get(): Promise<AiSettings | null>;
+  set(settings: AiSettings): Promise<void>;
+}
+
 export interface AuditStore {
   append(event: AuditEvent): Promise<void>;
   /**
@@ -168,10 +176,12 @@ export interface Storage {
   customerRequests: EntityStore<CustomerRequest>;
   documentComments: EntityStore<DocumentComment>;
   triageRules: EntityStore<TriageRule>;
+  dashboards: EntityStore<Dashboard>;
   activities: ActivityStore;
   sessions: SessionStore;
   apiTokens: ApiTokenStore;
   auditLog: AuditStore;
+  aiSettings: AiSettingsStore;
   syncLog: SyncLogStore;
   /** Close pools/handles. */
   close(): Promise<void>;

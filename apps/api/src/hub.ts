@@ -20,9 +20,9 @@ function visibleTo(delta: SyncDelta, userId: string): boolean {
   if (delta.model === 'issueReminder') {
     return (delta.data as { userId?: string }).userId === userId;
   }
-  if (delta.model === 'customView') {
-    const view = delta.data as { shared?: boolean; creatorId?: string };
-    return view.shared === true || view.creatorId === userId;
+  if (delta.model === 'customView' || delta.model === 'dashboard') {
+    const owned = delta.data as { shared?: boolean; creatorId?: string };
+    return owned.shared === true || owned.creatorId === userId;
   }
   return true;
 }

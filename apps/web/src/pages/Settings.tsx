@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
-import type { AuditEvent, StateCategory, Team, WorkflowState } from '@nonlinear/shared';
+import type {
+  AiSettingsPublic,
+  AuditEvent,
+  StateCategory,
+  Team,
+  UpdateAiSettingsInput,
+  WorkflowState,
+} from '@nonlinear/shared';
 import { ESTIMATE_SCALES, STATE_CATEGORIES } from '@nonlinear/shared';
 import { TemplatesSettings } from '../components/TemplatesSettings.js';
 import { TriageRulesSettings } from '../components/TriageRulesSettings.js';
@@ -72,6 +79,7 @@ export function SettingsPage() {
         {link('/settings/members', 'Members')}
         {link('/settings/teams', 'Teams')}
         {link('/settings/labels', 'Labels')}
+        {isAdmin && link('/settings/ai', 'AI')}
         {isAdmin && link('/settings/audit', 'Audit log')}
       </div>
       <div className="settings-content">
@@ -89,6 +97,7 @@ export function SettingsPage() {
             <Route path="teams" element={<TeamsSettings />} />
             <Route path="team/:teamKey" element={<TeamSettings />} />
             <Route path="labels" element={<LabelsSettings />} />
+            <Route path="ai" element={<AiSettings />} />
             <Route path="audit" element={<AuditSettings />} />
             <Route path="*" element={<Navigate to="/settings/preferences" replace />} />
           </Routes>
@@ -1336,6 +1345,107 @@ function AuditSettings() {
             {loading ? 'Loading…' : 'Load more'}
           </button>
         )}
+      </div>
+    </>
+  );
+}
+
+function AiSettings() {
+  const [settings, setSettings] = useState<AiSettingsPublic | null>(null);
+  const [apiKey, setApiKey] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void api.aiSettings().then(setSettings).catch(toastError);
+  }, []);
+
+  if (!settings) return null;
+
+  const save = (patch: UpdateAiSettingsInput) => {
+    setSaving(true);
+    void api
+      .updateAiSettings(patch)
+      .then((s) => {
+        setSettings(s);
+        if (patch.apiKey !== undefined) setApiKey('');
+        toast('AI settings saved', 'success');
+      })
+      .catch(toastError)
+      .finally(() => setSaving(false));
+  };
+
+  return (
+    <>
+      <h1>AI</h1>
+      <p className="subtitle">
+        Bring your own LLM key to enable AI features — Pulse summaries and suggested labels. The key
+        is stored on the server and never sent to browsers.
+      </p>
+      <div className="settings-section">
+        <div className="setting-row">
+          <div className="info">
+            <div className="label">Enable AI features</div>
+            <div className="desc">Turn the optional AI features on across the workspace.</div>
+          </div>
+          <Switch on={settings.enabled} onChange={(enabled) => save({ enabled })} />
+        </div>
+        <div className="setting-row">
+          <div className="info">
+            <div className="label">Provider</div>
+            <div className="desc">Anthropic (Claude) or OpenAI-compatible.</div>
+          </div>
+          <select
+            className="input"
+            style={{ width: 170 }}
+            value={settings.provider}
+            onChange={(e) => save({ provider: e.target.value as AiSettingsPublic['provider'] })}
+          >
+            <option value="anthropic">Anthropic</option>
+            <option value="openai">OpenAI</option>
+          </select>
+        </div>
+        <div className="setting-row">
+          <div className="info">
+            <div className="label">Model</div>
+            <div className="desc">The model id to call.</div>
+          </div>
+          <input
+            className="input"
+            style={{ width: 220 }}
+            defaultValue={settings.model}
+            key={settings.model}
+            onBlur={(e) =>
+              e.target.value.trim() !== settings.model && save({ model: e.target.value })
+            }
+          />
+        </div>
+        <div className="setting-row">
+          <div className="info">
+            <div className="label">API key</div>
+            <div className="desc">
+              {settings.hasKey
+                ? 'A key is stored. Enter a new one to replace it.'
+                : 'No key stored yet.'}
+            </div>
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <input
+              className="input"
+              type="password"
+              style={{ width: 220 }}
+              placeholder={settings.hasKey ? '••••••••' : 'sk-…'}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+            <button
+              className="btn primary"
+              disabled={saving || !apiKey.trim()}
+              onClick={() => save({ apiKey: apiKey.trim() })}
+            >
+              Save key
+            </button>
+          </div>
+        </div>
       </div>
     </>
   );

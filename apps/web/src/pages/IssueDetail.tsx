@@ -511,6 +511,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
               <LabelIcon size={13} />
             </button>
           </div>
+          <AiLabelSuggest issueId={issueId} />
 
           <div className="side-heading">Organize</div>
           <div className="prop-row">
@@ -1222,5 +1223,61 @@ function MilestonePickerButton({
         </Popover>
       )}
     </>
+  );
+}
+
+/** AI label suggestions — shown only when the workspace has AI enabled. */
+function AiLabelSuggest({ issueId }: { issueId: string }) {
+  const issue = useStore((s) => s.issues[issueId]);
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [suggestions, setSuggestions] = useState<{ labelId: string; name: string }[] | null>(null);
+
+  useEffect(() => {
+    void api
+      .aiSettings()
+      .then((s) => setEnabled(s.enabled && s.hasKey))
+      .catch(() => setEnabled(false));
+  }, []);
+
+  if (!enabled) return null;
+
+  const suggest = () => {
+    setBusy(true);
+    void api
+      .suggestLabels(issueId)
+      .then((r) => setSuggestions(r.suggestions))
+      .catch(toastError)
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      {suggestions === null ? (
+        <button className="btn ghost sm" onClick={suggest} disabled={busy}>
+          {busy ? 'Thinking…' : '✨ Suggest labels'}
+        </button>
+      ) : suggestions.length === 0 ? (
+        <span className="muted" style={{ fontSize: 12 }}>
+          No label suggestions.
+        </span>
+      ) : (
+        <div className="row" style={{ flexWrap: 'wrap', gap: 4 }}>
+          {suggestions.map((s) => (
+            <button
+              key={s.labelId}
+              className="chip"
+              title="Add this label"
+              onClick={() => {
+                if (issue) toggleLabel(issue, s.labelId);
+                setSuggestions((prev) => prev?.filter((x) => x.labelId !== s.labelId) ?? null);
+              }}
+            >
+              + {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

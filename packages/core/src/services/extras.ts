@@ -286,6 +286,7 @@ export class BootstrapService {
       customerRequests,
       documentComments,
       triageRules,
+      dashboards,
       syncId,
     ] = await Promise.all([
       s.users.all(),
@@ -314,6 +315,7 @@ export class BootstrapService {
       s.customerRequests.all(),
       s.documentComments.all(),
       s.triageRules.all(),
+      s.dashboards.all(),
       s.syncLog.currentSyncId(),
     ]);
     return {
@@ -346,6 +348,7 @@ export class BootstrapService {
       customerRequests,
       documentComments,
       triageRules,
+      dashboards: dashboards.filter((d) => d.shared || d.creatorId === userId),
     };
   }
 }

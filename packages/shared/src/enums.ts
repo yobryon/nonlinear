@@ -134,6 +134,37 @@ export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 export const AUTH_METHODS = ['password', 'sso', 'scim'] as const;
 export type AuthMethod = (typeof AUTH_METHODS)[number];
 
+/** BYO-key LLM providers for the optional AI features. */
+export const AI_PROVIDERS = ['anthropic', 'openai'] as const;
+export type AiProvider = (typeof AI_PROVIDERS)[number];
+
+/** Composable insight tiles a custom dashboard can hold. */
+export const DASHBOARD_TILE_TYPES = [
+  'stat',
+  'throughput',
+  'velocity',
+  'burnup',
+  'by-state',
+  'by-priority',
+  'by-assignee',
+  'project-health',
+] as const;
+export type DashboardTileType = (typeof DASHBOARD_TILE_TYPES)[number];
+
+/** A single-number metric a `stat` tile can show. */
+export const STAT_METRICS = ['open', 'started', 'completed14', 'overdue', 'created14'] as const;
+export type StatMetric = (typeof STAT_METRICS)[number];
+
+/** Kinds of events that appear in the Pulse activity feed. */
+export const PULSE_ITEM_TYPES = [
+  'project_update',
+  'project_completed',
+  'project_created',
+  'cycle_completed',
+  'issues_completed',
+] as const;
+export type PulseItemType = (typeof PULSE_ITEM_TYPES)[number];
+
 /**
  * Workspace-level security/admin events recorded to the audit log. Distinct
  * from per-issue ActivityType — these are for admins reviewing who did what.

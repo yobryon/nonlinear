@@ -5,6 +5,7 @@ import type {
   CustomerRequest,
   CustomView,
   Cycle,
+  Dashboard,
   Document,
   DocumentComment,
   Favorite,
@@ -66,6 +67,7 @@ export interface SyncModelMap {
   customerRequest: CustomerRequest;
   documentComment: DocumentComment;
   triageRule: TriageRule;
+  dashboard: Dashboard;
 }
 
 export type SyncModelName = keyof SyncModelMap;
@@ -99,6 +101,7 @@ export const SYNC_MODEL_NAMES = [
   'customerRequest',
   'documentComment',
   'triageRule',
+  'dashboard',
 ] as const satisfies readonly SyncModelName[];
 
 export type SyncAction = 'create' | 'update' | 'delete';
@@ -152,4 +155,5 @@ export interface BootstrapPayload {
   customerRequests: CustomerRequest[];
   documentComments: DocumentComment[];
   triageRules: TriageRule[];
+  dashboards: Dashboard[];
 }

@@ -1,7 +1,16 @@
 import pg from 'pg';
-import type { AuditEvent, Issue, IssueActivity, SyncDelta, Team, User } from '@nonlinear/shared';
+import type {
+  AiSettings,
+  AuditEvent,
+  Issue,
+  IssueActivity,
+  SyncDelta,
+  Team,
+  User,
+} from '@nonlinear/shared';
 import type {
   ActivityStore,
+  AiSettingsStore,
   ApiTokenStore,
   AuditPage,
   AuditStore,
@@ -351,6 +360,21 @@ function splitAuditCursor(cursor: string): [string, string] {
   return i === -1 ? [cursor, ''] : [cursor.slice(0, i), cursor.slice(i + 1)];
 }
 
+class PgAiSettingsStore implements AiSettingsStore {
+  constructor(private pool: pg.Pool) {}
+  async get(): Promise<AiSettings | null> {
+    const { rows } = await this.pool.query(`SELECT data FROM ai_settings WHERE id = 'singleton'`);
+    return rows[0]?.data ?? null;
+  }
+  async set(settings: AiSettings): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO ai_settings (id, data) VALUES ('singleton', $1)
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data`,
+      [JSON.stringify(settings)],
+    );
+  }
+}
+
 export interface PostgresStorageOptions {
   connectionString: string;
   /** Pool size; keep small — this app is a single low-resource container. */
@@ -391,10 +415,12 @@ export async function createPostgresStorage(options: PostgresStorageOptions): Pr
     customerRequests: new PgEntityStore(pool, 'customer_requests'),
     documentComments: new PgEntityStore(pool, 'document_comments'),
     triageRules: new PgEntityStore(pool, 'triage_rules'),
+    dashboards: new PgEntityStore(pool, 'dashboards'),
     activities: new PgActivityStore(pool, 'issue_activities'),
     sessions: new PgSessionStore(pool),
     apiTokens: new PgApiTokenStore(pool),
     auditLog: new PgAuditStore(pool),
+    aiSettings: new PgAiSettingsStore(pool),
     syncLog: new PgSyncLog(pool),
     close: () => pool.end(),
   };

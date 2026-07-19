@@ -1,6 +1,13 @@
 import type {
+  AiSettingsPublic,
   Attachment,
   AuditEvent,
+  CreateDashboardInput,
+  Dashboard,
+  LabelSuggestion,
+  PulseFeed,
+  UpdateAiSettingsInput,
+  UpdateDashboardInput,
   BootstrapPayload,
   Comment,
   CreateCommentInput,
@@ -219,6 +226,21 @@ export const api = {
   updateView: (id: string, input: Record<string, unknown>) =>
     req<CustomView>('PATCH', `/api/views/${id}`, input),
   deleteView: (id: string) => req<{ ok: true }>('DELETE', `/api/views/${id}`),
+
+  createDashboard: (input: CreateDashboardInput) =>
+    req<Dashboard>('POST', '/api/dashboards', input),
+  updateDashboard: (id: string, input: UpdateDashboardInput) =>
+    req<Dashboard>('PATCH', `/api/dashboards/${id}`, input),
+  deleteDashboard: (id: string) => req<{ ok: true }>('DELETE', `/api/dashboards/${id}`),
+
+  // Pulse + AI
+  pulse: (days = 7) => req<PulseFeed>('GET', `/api/pulse?days=${days}`),
+  pulseSummary: (days = 7) => req<{ summary: string }>('POST', '/api/pulse/summary', { days }),
+  aiSettings: () => req<AiSettingsPublic>('GET', '/api/ai/settings'),
+  updateAiSettings: (input: UpdateAiSettingsInput) =>
+    req<AiSettingsPublic>('PUT', '/api/ai/settings', input),
+  suggestLabels: (issueId: string) =>
+    req<{ suggestions: LabelSuggestion[] }>('POST', `/api/issues/${issueId}/ai/suggest-labels`),
 
   createTemplate: (input: CreateIssueTemplateInput) =>
     req<IssueTemplate>('POST', '/api/templates', input),
