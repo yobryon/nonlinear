@@ -176,4 +176,53 @@ describe('P1/P2 over HTTP', () => {
     expect(slackPost.statusCode).toBe(200);
     expect(slackPost.json().response_type).toBe('ephemeral');
   });
+
+  it('public intake: status read-back, attribution, and honeypot', async () => {
+    const team = boot.teams[0]!;
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/teams/${team.id}`,
+      headers: { cookie },
+      payload: { intakeEnabled: true },
+    });
+
+    // A submission returns a signed status URL the submitter can poll.
+    const post = await app.inject({
+      method: 'POST',
+      url: `/api/public/intake/${team.key}`,
+      payload: { title: 'Track me', reporter: 'orderflow-web', email: 'dev@acme.test' },
+    });
+    expect(post.statusCode).toBe(200);
+    const { identifier, statusUrl } = post.json() as { identifier: string; statusUrl: string };
+    expect(statusUrl).toContain('/api/public/intake/status/');
+
+    const status = await app.inject({ method: 'GET', url: new URL(statusUrl).pathname });
+    expect(status.statusCode).toBe(200);
+    expect(status.json().identifier).toBe(identifier);
+    expect(typeof status.json().status).toBe('string');
+    expect(status.json().category.length).toBeGreaterThan(0);
+
+    // A tampered signature is rejected.
+    const bad = await app.inject({
+      method: 'GET',
+      url: new URL(statusUrl).pathname.replace(/.$/, 'x'),
+    });
+    expect(bad.statusCode).toBe(404);
+
+    // Attribution is recorded on the issue.
+    const number = Number(identifier.split('-')[1]);
+    const issue = (await domain.ctx.storage.issues.byTeam(team.id)).find((i) => i.number === number);
+    expect(issue?.description).toContain('orderflow-web');
+
+    // The honeypot field silently drops bot submissions (no issue created).
+    const before = (await domain.ctx.storage.issues.byTeam(team.id)).length;
+    const trap = await app.inject({
+      method: 'POST',
+      url: `/api/public/intake/${team.key}`,
+      payload: { title: 'spam', website: 'http://spammer.example' },
+    });
+    expect(trap.statusCode).toBe(200);
+    expect(trap.json().identifier).toBeUndefined();
+    expect((await domain.ctx.storage.issues.byTeam(team.id)).length).toBe(before);
+  });
 });

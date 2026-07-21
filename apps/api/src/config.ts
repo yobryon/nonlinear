@@ -43,6 +43,10 @@ export interface Config {
   };
   /** Bearer token guarding the SCIM 2.0 provisioning endpoints. Empty = SCIM off. */
   scimToken: string;
+  /** Secret that signs public intake status links. Empty = a random one is
+   *  generated per boot (status links then invalidate on restart). Set for
+   *  durable links. */
+  intakeSecret: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -75,5 +79,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       autoProvision: env.OIDC_AUTO_PROVISION !== 'false',
     },
     scimToken: env.SCIM_TOKEN ?? '',
+    intakeSecret: env.INTAKE_SECRET ?? '',
   };
 }

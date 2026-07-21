@@ -35,7 +35,7 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   await app.register(websocket);
   await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
   await registerGithubWebhook(app, domain, config.githubWebhookSecret);
-  registerIntake(app, domain);
+  registerIntake(app, domain, config);
   registerMcp(app, domain, (bearer) => domain.tokens.authenticate(bearer));
 
   const hub = new SyncHub(domain);
