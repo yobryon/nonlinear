@@ -331,13 +331,6 @@ export function Sidebar() {
             <DashboardIcon size={15} />
             <span className="grow">Dashboards</span>
           </NavLink>
-          <NavLink
-            to="/design"
-            className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-          >
-            <BookIcon size={14} />
-            <span className="grow">Design docs</span>
-          </NavLink>
         </div>
 
         {myViews.length > 0 && (
@@ -479,6 +472,16 @@ export function Sidebar() {
           >
             <TeamIcon size={14} />
             <span className="grow">Invite &amp; manage members</span>
+          </button>
+          <button
+            className="menu-item"
+            onClick={() => {
+              navigate('/docs');
+              setWsMenu(null);
+            }}
+          >
+            <BookIcon size={14} />
+            <span className="grow">Help &amp; docs</span>
           </button>
           <div className="menu-separator" />
           <button

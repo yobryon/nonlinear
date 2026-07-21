@@ -13,10 +13,12 @@ RUN pnpm install --frozen-lockfile --filter @nonlinear/web...
 
 COPY packages/shared packages/shared
 COPY apps/web apps/web
-# The product-design corpus is served as static assets so the app can reflect
-# its own design thinking (see the in-app "Design docs" reader). Vite copies
-# everything under public/ into dist/ verbatim.
+# The docs corpora are served as static assets so the app can reflect its own
+# documentation (see the in-app "Help & docs" reader). Vite copies everything
+# under public/ into dist/ verbatim.
 COPY docs/design apps/web/public/design
+COPY docs/guides apps/web/public/guides
+COPY docs/configuration.md apps/web/public/configuration.md
 RUN pnpm --filter @nonlinear/shared build && pnpm --filter @nonlinear/web build
 
 # Serve stage: nginx standing in for Azure Static Web Apps (static assets +

@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
 import { useStore } from './store.js';
 import { startSync } from './sync.js';
 import { Sidebar } from './Sidebar.js';
@@ -20,7 +28,7 @@ import { SettingsPage } from './pages/Settings.js';
 import { TriagePage } from './pages/Triage.js';
 import { InitiativeDetailPage, InitiativesPage } from './pages/Initiatives.js';
 import { DocumentDetailPage, DocumentsPage } from './pages/Documents.js';
-import { DesignDocsPage } from './pages/DesignDocs.js';
+import { DocsPage } from './pages/Docs.js';
 import { DashboardDetailPage, DashboardsPage } from './pages/Dashboards.js';
 import { PulsePage } from './pages/Pulse.js';
 import { InsightsPage } from './pages/Insights.js';
@@ -95,6 +103,12 @@ function DefaultRedirect() {
   return <Navigate to="/settings/teams" replace />;
 }
 
+/** Old /design/:slug bookmarks land in the unified docs hub. */
+function DesignDocsRedirect() {
+  const { slug } = useParams();
+  return <Navigate to={`/docs/design/${slug ?? 'README'}`} replace />;
+}
+
 function AppShell() {
   const connection = useStore((s) => s.connection);
   const workspace = useStore((s) => s.workspace);
@@ -153,8 +167,11 @@ function AppShell() {
             <Route path="/initiative/:initiativeId" element={<InitiativeDetailPage />} />
             <Route path="/documents" element={<DocumentsPage />} />
             <Route path="/document/:documentId" element={<DocumentDetailPage />} />
-            <Route path="/design" element={<DesignDocsPage />} />
-            <Route path="/design/:slug" element={<DesignDocsPage />} />
+            <Route path="/docs" element={<DocsPage />} />
+            <Route path="/docs/:group/:slug" element={<DocsPage />} />
+            {/* Back-compat: the old standalone Design-docs routes now live in the hub. */}
+            <Route path="/design" element={<Navigate to="/docs/design/README" replace />} />
+            <Route path="/design/:slug" element={<DesignDocsRedirect />} />
             <Route path="/dashboards" element={<DashboardsPage />} />
             <Route path="/dashboard/:dashboardId" element={<DashboardDetailPage />} />
             <Route path="/pulse" element={<PulsePage />} />
