@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { issueKey, useStore } from './store.js';
 import { anchorFromEvent, Popover, toastError, type Anchor } from './ui.js';
@@ -30,6 +30,8 @@ import { openPalette } from './CommandPalette.js';
 import { api } from './api.js';
 import { stopSync } from './sync.js';
 import { getTheme, toggleTheme } from './theme.js';
+
+const TEAM_COLLAPSE_KEY = 'nl.sidebar.collapsed';
 
 function InitiativeGlyphSidebar() {
   return (
@@ -139,7 +141,22 @@ export function Sidebar() {
   const navigate = useNavigate();
 
   const [wsMenu, setWsMenu] = useState<Anchor | null>(null);
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Team expand/collapse is a per-device preference (localStorage, not synced):
+  // you tend to live in one team at a time, so persist it across refreshes.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(TEAM_COLLAPSE_KEY) ?? '{}');
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(TEAM_COLLAPSE_KEY, JSON.stringify(collapsed));
+    } catch {
+      // storage unavailable (private mode / quota) — fall back to in-memory only
+    }
+  }, [collapsed]);
   const [theme, setThemeState] = useState(getTheme());
 
   const workflowStates = useStore((s) => s.workflowStates);
