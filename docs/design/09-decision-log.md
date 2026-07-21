@@ -844,12 +844,18 @@ scoped to it — they see that team and nothing else. Running one instance per
 product is now a maximum-isolation option, not the only way. New surfaces to
 keep in sync when adding a synced model: add its visibility rule to
 `filterPayload` *and* the hub's `visibleTo`/indexes (a model that resolves to a
-team through a parent needs an index). Deferred: write-side membership
-enforcement (a non-member creating an issue in a team they can't see) — not an
-exposure path, so left for later. Public intake gained a signed status link, so
-anonymous submitters can now track without an account (entry 19's write-only
-caveat no longer holds). The three audience guides were updated to describe the
-enforced model.
+team through a parent needs an index). Write-side enforcement was initially
+deferred, then closed once dogfooding showed the inconsistency: the MCP blocked
+writes to unseen teams (via `resolveTeam`) but REST/GraphQL did not, so a
+credential could create an issue in a team it couldn't read. All create paths
+now assert team access (membership ∩ token scope) before writing —
+`requireTeamAccess` in the REST routes and a `vis` check in the GraphQL
+mutations — mirroring the MCP; the intended cross-team channel remains public
+intake (unauthenticated, needs no membership). Public intake also gained a
+signed status link, so anonymous submitters can track without an account
+(entry 19's write-only caveat no longer holds). The three audience guides were
+updated to describe the enforced model, including that you can only file into a
+team you can see.
 
 ---
 

@@ -347,6 +347,12 @@ curl -X POST http://localhost:8080/api/public/intake/AUGRID \
 | Consumer/agent who needs to **track, comment, and be @mentioned back** | **A guest account or scoped agent token limited to your team** — team-scoped isolation confines them to your team, not the rest of the workspace |
 | Consumers who must not even know your other teams exist | **Pattern B** — a separate instance per product |
 
+A consumer can only file into a team it has access to — authenticated writes to a team you
+can't see are refused (`Unknown team` over MCP, `403` over REST/GraphQL). So a consumer's
+membership in *its own* product team grants it nothing on yours: to let it report to you,
+add it to **your** team (guest or scoped token) or point it at **your** public intake. Neither
+exposes your other teams.
+
 Point consumers at guide 03 either way.
 
 ---

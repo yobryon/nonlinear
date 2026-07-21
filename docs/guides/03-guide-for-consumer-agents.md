@@ -65,6 +65,14 @@ team-scoped token (so you see their team, not their whole workspace), and route 
 else through anonymous intake. Being on intake isn't a judgment — it's just the lightest
 trust level. More on this in §5.
 
+> **You file into the *provider's* team, so you need access to *that* team.** Filing is not
+> "post anywhere" — you can only create issues/comments in a team you can see. Over MCP, a
+> team you lack access to resolves to `Unknown team`; over REST/GraphQL it's a `403`. Being a
+> member of your *own* team grants nothing on someone else's. So to report to a provider you
+> need either the access they gave you **in their team** (a guest account or a token scoped to
+> it) or **their public intake URL** (§3) — which needs no membership at all. If you own one
+> tool and consume another, you'll hold access to *both* teams (or use the other's intake).
+
 ---
 
 ## 2. If you have a token — the MCP path

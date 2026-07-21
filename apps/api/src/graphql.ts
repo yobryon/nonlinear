@@ -10,7 +10,7 @@ import {
   GraphQLSchema,
   GraphQLString,
 } from 'graphql';
-import type { Domain } from '@nonlinear/core';
+import { applyScope, seesTeam, visibilityFor, type Domain, type Visibility } from '@nonlinear/core';
 import type {
   Comment,
   Cycle,
@@ -19,6 +19,7 @@ import type {
   Project,
   ProjectUpdate,
   Team,
+  TokenScope,
   User,
   WorkflowState,
 } from '@nonlinear/shared';
@@ -37,6 +38,7 @@ import { PRIORITY_LABELS, type Priority } from '@nonlinear/shared';
 export interface GraphqlContext {
   domain: Domain;
   viewer: User;
+  vis: Visibility;
   teams: Map<string, Team>;
   states: Map<string, WorkflowState>;
   users: Map<string, User>;
@@ -51,9 +53,13 @@ export interface GraphqlContext {
 const byId = <T extends { id: string }>(rows: T[]) => new Map(rows.map((r) => [r.id, r]));
 
 /** Build a read snapshot + service handle for one GraphQL request. */
-export async function graphqlContext(domain: Domain, viewer: User): Promise<GraphqlContext> {
+export async function graphqlContext(
+  domain: Domain,
+  viewer: User,
+  scope: TokenScope,
+): Promise<GraphqlContext> {
   const s = domain.ctx.storage;
-  const [teams, states, users, labels, projects, issues, comments, cycles, updates] =
+  const [teams, states, users, labels, projects, issues, comments, cycles, updates, baseVis] =
     await Promise.all([
       s.teams.all(),
       s.workflowStates.all(),
@@ -64,10 +70,12 @@ export async function graphqlContext(domain: Domain, viewer: User): Promise<Grap
       s.comments.all(),
       s.cycles.all(),
       s.projectUpdates.all(),
+      visibilityFor(domain.ctx, viewer.id),
     ]);
   return {
     domain,
     viewer,
+    vis: applyScope(baseVis, scope.teamIds),
     teams: byId(teams),
     states: byId(states),
     users: byId(users),
@@ -362,8 +370,12 @@ const MutationType = new GraphQLObjectType<unknown, Ctx>({
     createIssue: {
       type: new GraphQLNonNull(IssueType),
       args: { input: { type: new GraphQLNonNull(IssueInput) } },
-      resolve: (_s, { input }: { input: Record<string, unknown> }, ctx) =>
-        ctx.domain.issues.create(ctx.viewer.id, input as never),
+      resolve: (_s, { input }: { input: Record<string, unknown> }, ctx) => {
+        if (!seesTeam(ctx.vis, input.teamId as string)) {
+          throw new Error('You do not have access to that team');
+        }
+        return ctx.domain.issues.create(ctx.viewer.id, input as never);
+      },
     },
     updateIssue: {
       type: new GraphQLNonNull(IssueType),
@@ -388,8 +400,13 @@ const MutationType = new GraphQLObjectType<unknown, Ctx>({
         issueId: { type: new GraphQLNonNull(GraphQLID) },
         body: { type: new GraphQLNonNull(GraphQLString) },
       },
-      resolve: (_s, { issueId, body }: { issueId: string; body: string }, ctx) =>
-        ctx.domain.comments.create(ctx.viewer.id, { issueId, body }),
+      resolve: (_s, { issueId, body }: { issueId: string; body: string }, ctx) => {
+        const issue = ctx.issues.get(issueId);
+        if (issue && !seesTeam(ctx.vis, issue.teamId)) {
+          throw new Error('You do not have access to that team');
+        }
+        return ctx.domain.comments.create(ctx.viewer.id, { issueId, body });
+      },
     },
   }),
 });

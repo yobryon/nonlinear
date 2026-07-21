@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
 import multipart from '@fastify/multipart';
-import { DomainError, type Domain } from '@nonlinear/core';
+import { applyScope, DomainError, seesTeam, visibilityFor, type Domain } from '@nonlinear/core';
 import type { TokenScope, User } from '@nonlinear/shared';
 import type { Config } from './config.js';
 import { SyncHub } from './hub.js';
@@ -105,6 +105,16 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
 
   const authed = { preHandler: requireUser };
   type Body<T> = FastifyRequest & { body: T };
+
+  // Writes must target a team the caller can see (team membership ∩ token
+  // scope) — the same rule the MCP enforces via resolveTeam. Reads are already
+  // isolated in the bootstrap/hub; this closes the write side.
+  async function requireTeamAccess(req: FastifyRequest, teamId: string): Promise<void> {
+    const vis = applyScope(await visibilityFor(domain.ctx, req.user.id), req.tokenScope.teamIds);
+    if (!seesTeam(vis, teamId)) {
+      throw new DomainError('forbidden', 'You do not have access to that team', 403);
+    }
+  }
 
   // ---- health & meta ----
   app.get('/healthz', async () => ({ ok: true }));
@@ -268,9 +278,10 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   });
 
   // ---- issues ----
-  app.post('/api/issues', authed, async (req) =>
-    domain.issues.create(req.user.id, (req as Body<never>).body),
-  );
+  app.post('/api/issues', authed, async (req) => {
+    await requireTeamAccess(req, (req.body as { teamId: string }).teamId);
+    return domain.issues.create(req.user.id, (req as Body<never>).body);
+  });
   app.patch('/api/issues/:id', authed, async (req) =>
     domain.issues.update(req.user.id, (req.params as { id: string }).id, req.body as never),
   );
@@ -283,9 +294,11 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   );
 
   // ---- comments & reactions ----
-  app.post('/api/comments', authed, async (req) =>
-    domain.comments.create(req.user.id, req.body as never),
-  );
+  app.post('/api/comments', authed, async (req) => {
+    const issue = await domain.ctx.storage.issues.get((req.body as { issueId: string }).issueId);
+    if (issue) await requireTeamAccess(req, issue.teamId);
+    return domain.comments.create(req.user.id, req.body as never);
+  });
   app.patch('/api/comments/:id', authed, async (req) =>
     domain.comments.update(
       req.user.id,
@@ -390,7 +403,12 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   });
 
   // ---- projects & milestones ----
-  app.post('/api/projects', authed, async (req) => domain.projects.create(req.body as never));
+  app.post('/api/projects', authed, async (req) => {
+    for (const teamId of (req.body as { teamIds?: string[] }).teamIds ?? []) {
+      await requireTeamAccess(req, teamId);
+    }
+    return domain.projects.create(req.body as never);
+  });
   app.patch('/api/projects/:id', authed, async (req) =>
     domain.projects.update((req.params as { id: string }).id, req.body as never),
   );
@@ -859,7 +877,7 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
       source: params.query,
       variableValues: params.variables,
       operationName: params.operationName,
-      contextValue: await graphqlContext(domain, req.user),
+      contextValue: await graphqlContext(domain, req.user, req.tokenScope),
     });
   };
   app.post('/api/graphql', authed, async (req) =>
