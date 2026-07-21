@@ -87,14 +87,14 @@ for (const g of GUIDES) {
   if (text) GUIDE_TEXT.set(g.uri, { meta: g, text });
 }
 
-const MCP_INSTRUCTIONS = `You are connected to nonlinear (a self-hostable Linear clone) over MCP, authenticated as one specific user. Call the \`whoami\` tool FIRST to confirm who you are (name, isAgent, role) and your workspace — every write is attributed to you, and you only see the teams you belong to.
+const MCP_INSTRUCTIONS = `You are connected to nonlinear (a self-hostable Linear clone) over MCP, authenticated as one specific user. Call the \`whoami\` tool FIRST — it returns who you are (name, isAgent, role), your workspace, the teams you can see, and your token's scope (read-only? which teams?). Every write is attributed to you, and you only see the teams you belong to.
 
 If this is your first time, read the guide resources (list them with resources/list, then resources/read):
 - nonlinear://guides/for-consumer-agents — you USE a tool another team provides and want to file & track bugs/requests.
 - nonlinear://guides/for-provider-agents — you OWN a tool/component and run its project + support its users here.
 - nonlinear://guides/readme — overview and the team-scoped access model.
 
-Quick loop: whoami → list_teams → search_issues (always search before filing to avoid duplicates) → create_issue / add_comment / update_issue. Names are resolved for you: team by key (e.g. ENG), state/label by name, assignee by email/@handle/name. Priority is 0 none, 1 urgent, 2 high, 3 medium, 4 low — set it honestly. A read-only or team-scoped token limits what you can do; tools will tell you.`;
+Quick loop: whoami → list_teams → search_issues (always search before filing to avoid duplicates) → create_issue / add_comment / update_issue. Use \`my_work\` to see what's assigned to you or @mentions you. Names are resolved for you: team by key (e.g. ENG), state/label/project by name, assignee by email/@handle/name. Priority is 0 none, 1 urgent, 2 high, 3 medium, 4 low — set it honestly. A read-only or team-scoped token limits what you can do (whoami shows this).`;
 
 const PRIORITY_BY_NAME: Record<string, Priority> = {
   none: 0,
@@ -173,8 +173,26 @@ async function resolveLabels(domain: Domain, teamId: string, names: string[] | u
   });
 }
 
-/** Present an issue in an agent-friendly shape (names, not ids). */
-async function serializeIssue(domain: Domain, issue: Issue) {
+async function resolveProject(
+  domain: Domain,
+  name: string | undefined,
+  vis: Visibility,
+): Promise<string | undefined> {
+  if (name === undefined) return undefined;
+  const v = name.trim().toLowerCase();
+  const match = (await domain.ctx.storage.projects.all()).find(
+    (p) => p.name.toLowerCase() === v && (vis.seesAll || p.teamIds.some((t) => vis.teamIds.has(t))),
+  );
+  if (!match) throw new Error(`Unknown project "${name}"`);
+  return match.id;
+}
+
+/**
+ * Present an issue in an agent-friendly shape (names, not ids). `summary` omits
+ * the description — used for list/search results so a scan stays lean; call
+ * get_issue for the full body + comments.
+ */
+async function serializeIssue(domain: Domain, issue: Issue, opts: { summary?: boolean } = {}) {
   const s = domain.ctx.storage;
   const [team, state, assignee, labels] = await Promise.all([
     s.teams.get(issue.teamId),
@@ -182,10 +200,10 @@ async function serializeIssue(domain: Domain, issue: Issue) {
     issue.assigneeId ? s.users.get(issue.assigneeId) : Promise.resolve(null),
     s.labels.all(),
   ]);
-  return {
-    identifier: team ? `${team.key}-${issue.number}` : issue.id,
+  const identifier = team ? `${team.key}-${issue.number}` : issue.id;
+  const base = {
+    identifier,
     title: issue.title,
-    description: issue.description,
     state: state?.name ?? null,
     priority: PRIORITY_LABELS[issue.priority],
     assignee: assignee?.displayName ?? null,
@@ -193,10 +211,11 @@ async function serializeIssue(domain: Domain, issue: Issue) {
     project: issue.projectId,
     dueDate: issue.dueDate,
     estimate: issue.estimate,
-    url: `/issue/${team ? `${team.key}-${issue.number}` : issue.id}`,
+    url: `/issue/${identifier}`,
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
   };
+  return opts.summary ? base : { ...base, description: issue.description };
 }
 
 const ok = (data: unknown) => ({
@@ -208,7 +227,7 @@ const fail = (message: string) => ({
 });
 
 /** Build a per-request MCP server whose tools act as `user`. */
-function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: boolean): McpServer {
+function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenScope): McpServer {
   const server = new McpServer(
     { name: 'nonlinear', version: '1.0.0' },
     { instructions: MCP_INSTRUCTIONS },
@@ -227,15 +246,28 @@ function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: bool
     );
   }
   const guardWrite = () => {
-    if (readOnly) throw new Error('This API token is read-only');
+    if (scope.readOnly) throw new Error('This API token is read-only');
   };
   const projectVisible = (teamIds: string[]) => vis.seesAll || teamIds.some((t) => seesTeam(vis, t));
 
   server.registerTool(
     'whoami',
-    { description: 'Return the authenticated user and workspace.', inputSchema: {} },
+    {
+      description:
+        'Return the authenticated user, the teams you can see, and your token scope. Call this first.',
+      inputSchema: {},
+    },
     async () => {
       const workspace = (await s.workspaces.all())[0];
+      const allTeams = await s.teams.all();
+      const keyOf = (id: string) => allTeams.find((t) => t.id === id)?.key;
+      const visibleKeys = vis.seesAll
+        ? allTeams.map((t) => t.key)
+        : [...vis.teamIds].map(keyOf).filter((k): k is string => Boolean(k));
+      const tokenTeams =
+        scope.teamIds === null
+          ? 'all'
+          : scope.teamIds.map(keyOf).filter((k): k is string => Boolean(k));
       return ok({
         user: {
           name: user.name,
@@ -244,6 +276,10 @@ function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: bool
           role: user.role,
         },
         workspace: workspace?.name,
+        // The teams you can read/act in. Admins see every team.
+        teams: visibleKeys,
+        // What the presenting credential is allowed to do.
+        token: { readOnly: scope.readOnly, teams: tokenTeams },
       });
     },
   );
@@ -364,7 +400,7 @@ function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: bool
       issues = issues
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .slice(0, Math.min(limit ?? 25, 100));
-      return ok(await Promise.all(issues.map((i) => serializeIssue(domain, i))));
+      return ok(await Promise.all(issues.map((i) => serializeIssue(domain, i, { summary: true }))));
     },
   );
 
@@ -398,7 +434,39 @@ function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: bool
       const mine = (await s.issues.all())
         .filter((i) => i.assigneeId === user.id && !i.archivedAt && seesTeam(vis, i.teamId))
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-      return ok(await Promise.all(mine.map((i) => serializeIssue(domain, i))));
+      return ok(await Promise.all(mine.map((i) => serializeIssue(domain, i, { summary: true }))));
+    },
+  );
+
+  server.registerTool(
+    'my_work',
+    {
+      description:
+        'What needs your attention: issues assigned to you and issues where a comment @mentions your handle. A pull-based alternative to a webhook.',
+      inputSchema: {},
+    },
+    async () => {
+      const visible = (await s.issues.all()).filter((i) => !i.archivedAt && seesTeam(vis, i.teamId));
+      const byUpdated = (a: Issue, b: Issue) => b.updatedAt.localeCompare(a.updatedAt);
+      const assigned = visible.filter((i) => i.assigneeId === user.id).sort(byUpdated);
+
+      const handle = user.displayName.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const mentionRe = new RegExp(`(^|[^\\w])@${handle}(?![\\w.-])`);
+      const mentionedIds = new Set(
+        (await s.comments.all())
+          .filter((c) => mentionRe.test((c.body ?? '').toLowerCase()))
+          .map((c) => c.issueId),
+      );
+      const mentioned = visible
+        .filter((i) => mentionedIds.has(i.id) && i.assigneeId !== user.id)
+        .sort(byUpdated);
+
+      return ok({
+        assigned: await Promise.all(assigned.map((i) => serializeIssue(domain, i, { summary: true }))),
+        mentioned: await Promise.all(
+          mentioned.map((i) => serializeIssue(domain, i, { summary: true })),
+        ),
+      });
     },
   );
 
@@ -415,9 +483,10 @@ function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: bool
         assignee: z.string().optional(),
         state: z.string().optional(),
         labels: z.array(z.string()).optional(),
+        project: z.string().optional().describe('Project name to file the issue into'),
       },
     },
-    async ({ teamKey, title, description, priority, assignee, state, labels }) => {
+    async ({ teamKey, title, description, priority, assignee, state, labels, project }) => {
       try {
         guardWrite();
         const team = await resolveTeam(domain, teamKey, vis);
@@ -429,6 +498,7 @@ function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: bool
           assigneeId: await resolveAssignee(domain, assignee),
           stateId: await resolveState(domain, team.id, state),
           labelIds: await resolveLabels(domain, team.id, labels),
+          projectId: await resolveProject(domain, project, vis),
         });
         return ok(await serializeIssue(domain, issue));
       } catch (err) {
@@ -448,9 +518,10 @@ function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: bool
         state: z.string().optional(),
         priority: z.string().optional(),
         assignee: z.string().nullable().optional(),
+        project: z.string().optional().describe('Project name to move the issue into'),
       },
     },
-    async ({ identifier, title, description, state, priority, assignee }) => {
+    async ({ identifier, title, description, state, priority, assignee, project }) => {
       try {
         guardWrite();
         const issue = await resolveIssue(domain, identifier, vis);
@@ -460,6 +531,7 @@ function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: bool
           stateId: await resolveState(domain, issue.teamId, state),
           priority: parsePriority(priority),
           assigneeId: await resolveAssignee(domain, assignee),
+          projectId: await resolveProject(domain, project, vis),
         });
         return ok(await serializeIssue(domain, updated));
       } catch (err) {
@@ -543,7 +615,7 @@ export function registerMcp(
     );
 
     // Stateless: one server + transport per request, torn down on close.
-    const server = buildServer(domain, resolved.user, vis, resolved.scope.readOnly);
+    const server = buildServer(domain, resolved.user, vis, resolved.scope);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     reply.raw.on('close', () => {
       void transport.close();
