@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { FastifyInstance } from 'fastify';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -15,6 +18,83 @@ import { PRIORITY_LABELS } from '@nonlinear/shared';
  * session is bound to that token's user. Stateless (a fresh server + transport
  * per request) so no session bookkeeping is needed.
  */
+
+/**
+ * The setup/use guides, loaded from disk once and exposed as MCP resources so a
+ * connecting agent can read them. In the container they're copied to
+ * `<cwd>/guides`; in dev they live at `docs/guides`.
+ */
+const HERE = dirname(fileURLToPath(import.meta.url));
+const GUIDE_DIRS = [
+  process.env.GUIDES_DIR,
+  join(process.cwd(), 'guides'),
+  join(process.cwd(), 'docs', 'guides'),
+  join(HERE, '..', '..', '..', '..', 'docs', 'guides'),
+].filter((d): d is string => Boolean(d));
+
+interface GuideResource {
+  uri: string;
+  file: string;
+  title: string;
+  description: string;
+}
+const GUIDES: GuideResource[] = [
+  {
+    uri: 'nonlinear://guides/readme',
+    file: 'README.md',
+    title: 'Guides overview',
+    description: 'Index of the guides and the team-scoped access model — start here.',
+  },
+  {
+    uri: 'nonlinear://guides/for-consumer-agents',
+    file: '03-guide-for-consumer-agents.md',
+    title: 'Guide for consumer agents',
+    description:
+      'For an agent that USES a tool/library another team provides: how to file and track bugs, gaps, and feature requests.',
+  },
+  {
+    uri: 'nonlinear://guides/for-provider-agents',
+    file: '02-guide-for-provider-agents.md',
+    title: 'Guide for provider agents',
+    description:
+      'For an agent that OWNS a tool/component: run its project and service the issues consumers file against it.',
+  },
+  {
+    uri: 'nonlinear://guides/for-humans',
+    file: '01-guide-for-humans.md',
+    title: 'Guide for humans',
+    description: 'For the operator standing up and configuring nonlinear.',
+  },
+];
+
+function loadGuide(file: string): string | null {
+  for (const dir of GUIDE_DIRS) {
+    const path = join(dir, file);
+    if (existsSync(path)) {
+      try {
+        return readFileSync(path, 'utf8');
+      } catch {
+        // fall through to the next candidate
+      }
+    }
+  }
+  return null;
+}
+// Read once at module load; keep only the guides actually present on disk.
+const GUIDE_TEXT = new Map<string, { meta: GuideResource; text: string }>();
+for (const g of GUIDES) {
+  const text = loadGuide(g.file);
+  if (text) GUIDE_TEXT.set(g.uri, { meta: g, text });
+}
+
+const MCP_INSTRUCTIONS = `You are connected to nonlinear (a self-hostable Linear clone) over MCP, authenticated as one specific user. Call the \`whoami\` tool FIRST to confirm who you are (name, isAgent, role) and your workspace — every write is attributed to you, and you only see the teams you belong to.
+
+If this is your first time, read the guide resources (list them with resources/list, then resources/read):
+- nonlinear://guides/for-consumer-agents — you USE a tool another team provides and want to file & track bugs/requests.
+- nonlinear://guides/for-provider-agents — you OWN a tool/component and run its project + support its users here.
+- nonlinear://guides/readme — overview and the team-scoped access model.
+
+Quick loop: whoami → list_teams → search_issues (always search before filing to avoid duplicates) → create_issue / add_comment / update_issue. Names are resolved for you: team by key (e.g. ENG), state/label by name, assignee by email/@handle/name. Priority is 0 none, 1 urgent, 2 high, 3 medium, 4 low — set it honestly. A read-only or team-scoped token limits what you can do; tools will tell you.`;
 
 const PRIORITY_BY_NAME: Record<string, Priority> = {
   none: 0,
@@ -129,8 +209,23 @@ const fail = (message: string) => ({
 
 /** Build a per-request MCP server whose tools act as `user`. */
 function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: boolean): McpServer {
-  const server = new McpServer({ name: 'nonlinear', version: '1.0.0' });
+  const server = new McpServer(
+    { name: 'nonlinear', version: '1.0.0' },
+    { instructions: MCP_INSTRUCTIONS },
+  );
   const s = domain.ctx.storage;
+
+  // Expose the guides as readable resources so an agent can get up to speed.
+  for (const { meta, text } of GUIDE_TEXT.values()) {
+    server.registerResource(
+      meta.file,
+      meta.uri,
+      { title: meta.title, description: meta.description, mimeType: 'text/markdown' },
+      async (uri) => ({
+        contents: [{ uri: uri.href, mimeType: 'text/markdown', text }],
+      }),
+    );
+  }
   const guardWrite = () => {
     if (readOnly) throw new Error('This API token is read-only');
   };

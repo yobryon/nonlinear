@@ -27,6 +27,8 @@ FROM node:22-alpine
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /out .
+# The setup/use guides, exposed as MCP resources so connecting agents can read them.
+COPY docs/guides ./guides
 # Attachment blob volume mounts here; pre-create with the runtime user's ownership.
 RUN mkdir -p /data/blobs && chown -R node:node /data
 USER node
