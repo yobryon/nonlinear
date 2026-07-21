@@ -7,6 +7,7 @@ import type {
   StateCategory,
   Team,
   UpdateAiSettingsInput,
+  User,
   WorkflowState,
 } from '@nonlinear/shared';
 import { ESTIMATE_SCALES, STATE_CATEGORIES } from '@nonlinear/shared';
@@ -21,7 +22,7 @@ import { api } from '../api.js';
 import { relativeTime, useStore } from '../store.js';
 import { anchorFromEvent, Avatar, Picker, Switch, toast, toastError, type Anchor } from '../ui.js';
 import { SortableList, type SortableDrop } from '../sortable.js';
-import { ArrowLeftIcon, MenuIcon, PlusIcon, StateIcon, TrashIcon } from '../icons.js';
+import { ArrowLeftIcon, CopyIcon, MenuIcon, PlusIcon, StateIcon, TrashIcon } from '../icons.js';
 
 const SWATCHES = [
   '#5e6ad2',
@@ -392,6 +393,16 @@ function MembersSettings() {
   const rows = Object.values(users).sort((a, b) => a.name.localeCompare(b.name));
 
   const [agentName, setAgentName] = useState('');
+  const [minted, setMinted] = useState<{ agentId: string; name: string; secret: string } | null>(
+    null,
+  );
+
+  const mintAgentToken = (agent: User) => {
+    void api
+      .createAgentToken(agent.id, `token ${new Date().toISOString().slice(0, 10)}`)
+      .then((res) => setMinted({ agentId: agent.id, name: agent.name, secret: res.secret }))
+      .catch(toastError);
+  };
 
   return (
     <>
@@ -401,6 +412,40 @@ function MembersSettings() {
         {rows.filter((u) => u.active).length === 1 ? '' : 's'}
       </p>
       {isAdmin && <InvitePeople />}
+      {minted && (
+        <div
+          className="auth-error"
+          style={{
+            background: 'rgba(76,183,130,0.1)',
+            borderColor: 'rgba(76,183,130,0.35)',
+            color: 'var(--success)',
+            marginBottom: 12,
+          }}
+        >
+          <div style={{ marginBottom: 6 }}>
+            Token for <b>{minted.name}</b> — this <b>is</b> the agent's identity. Copy it now; it
+            won't be shown again. Put it in the agent's client (e.g. <code>.mcp.json</code>) as{' '}
+            <code>Authorization: Bearer &lt;token&gt;</code>.
+          </div>
+          <div className="row" style={{ gap: 8 }}>
+            <code style={{ flex: 1, wordBreak: 'break-all', color: 'var(--text-1)' }}>
+              {minted.secret}
+            </code>
+            <button
+              className="btn"
+              onClick={() => {
+                void navigator.clipboard.writeText(minted.secret);
+                toast('Token copied');
+              }}
+            >
+              <CopyIcon size={13} /> Copy
+            </button>
+            <button className="btn ghost" onClick={() => setMinted(null)}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
       <div className="settings-section">
         {rows.map((user) => (
           <div key={user.id} className="member-row">
@@ -424,6 +469,15 @@ function MembersSettings() {
             </div>
             {isAdmin && user.id !== me?.id ? (
               <>
+                {user.isAgent && (
+                  <button
+                    className="btn ghost"
+                    title="Mint a Bearer token that authenticates as this agent"
+                    onClick={() => mintAgentToken(user)}
+                  >
+                    Mint token
+                  </button>
+                )}
                 <button
                   className="chip"
                   onClick={(e) => setRoleAnchor({ anchor: anchorFromEvent(e), userId: user.id })}
@@ -452,8 +506,10 @@ function MembersSettings() {
         <div className="settings-section">
           <h2>Agents</h2>
           <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
-            Agents are non-human teammates you can assign issues to and @mention. They act through
-            an API token (mint one in Profile → API tokens) over REST or the MCP server. See{' '}
+            Agents are non-human teammates you can assign issues to and @mention. They can't log in;
+            they act through a Bearer token over REST or the MCP server. Mint that token with the{' '}
+            <b>Mint token</b> button on the agent's row above — <em>not</em> your personal token in
+            Profile → API tokens, which would make the agent act as you. See{' '}
             <code>examples/agent</code> for a runnable reference.
           </p>
           <div className="row" style={{ gap: 8, maxWidth: 420 }}>
