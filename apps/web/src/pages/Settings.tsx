@@ -19,16 +19,8 @@ import { ApiTokens } from '../components/ApiTokens.js';
 import { applyPreferences } from '../preferences.js';
 import { api } from '../api.js';
 import { relativeTime, useStore } from '../store.js';
-import {
-  anchorFromEvent,
-  Avatar,
-  Picker,
-  Switch,
-  toast,
-  toastError,
-  useDragReorder,
-  type Anchor,
-} from '../ui.js';
+import { anchorFromEvent, Avatar, Picker, Switch, toast, toastError, type Anchor } from '../ui.js';
+import { SortableList, type SortableDrop } from '../sortable.js';
 import { ArrowLeftIcon, MenuIcon, PlusIcon, StateIcon, TrashIcon } from '../icons.js';
 
 const SWATCHES = [
@@ -643,24 +635,33 @@ function TeamSettingsInner({ team }: { team: Team }) {
   const teamMembers = Object.values(memberships).filter((m) => m.teamId === team.id);
   const memberIds = new Set(teamMembers.map((m) => m.userId));
 
-  // Reorder workflow states by dragging; moves stay within the state's category.
-  const stateReorder = useDragReorder(teamStates, (dragged, insertAt) => {
-    const siblings = teamStates.filter((s) => s.category === dragged.category);
-    const fromSib = siblings.findIndex((s) => s.id === dragged.id);
-    let toSib = teamStates.slice(0, insertAt).filter((s) => s.category === dragged.category).length;
-    const without = siblings.filter((s) => s.id !== dragged.id);
-    if (fromSib < toSib) toSib -= 1;
-    toSib = Math.max(0, Math.min(without.length, toSib));
-    without.splice(toSib, 0, dragged);
-    without.forEach((state, position) => {
-      if (state.position === position) return;
+  // Reorder workflow states by dragging the handle. Category is fixed per state;
+  // positions are reassigned within each category to match the new order.
+  const handleStateDrop = (drop: SortableDrop) => {
+    const stateById = Object.fromEntries(teamStates.map((s) => [s.id, s]));
+    const order = teamStates.map((s) => s.id).filter((id) => id !== drop.id);
+    let idx = drop.beforeId
+      ? order.indexOf(drop.beforeId) + 1
+      : drop.afterId
+        ? order.indexOf(drop.afterId)
+        : order.length;
+    if (idx < 0) idx = order.length;
+    order.splice(idx, 0, drop.id);
+
+    const perCat: Record<string, number> = {};
+    for (const id of order) {
+      const state = stateById[id];
+      if (!state) continue;
+      const position = perCat[state.category] ?? 0;
+      perCat[state.category] = position + 1;
+      if (state.position === position) continue;
       useStore.getState().putEntity('workflowState', { ...state, position });
       void api
-        .updateState(state.id, { position })
+        .updateState(id, { position })
         .then((s) => useStore.getState().putEntity('workflowState', s))
         .catch(toastError);
-    });
-  });
+    }
+  };
 
   const patchTeam = (patch: Record<string, unknown>) => {
     void api
@@ -808,28 +809,20 @@ function TeamSettingsInner({ team }: { team: Team }) {
 
       <div className="settings-section">
         <h2>Workflow states</h2>
-        {teamStates.map((state, index) => (
-          <div
-            key={state.id}
-            className={`${stateReorder.insertBefore === index ? 'reorder-before' : ''} ${
-              stateReorder.dragId === state.id ? 'reorder-dragging' : ''
-            }`.trim()}
-            {...stateReorder.itemProps(index)}
-          >
-            <WorkflowStateRow
-              state={state}
-              dragHandle={
-                <span
-                  className="drag-handle"
-                  title="Drag to reorder"
-                  {...stateReorder.dragProps(state, state.name)}
-                >
-                  ⋮⋮
-                </span>
-              }
-            />
-          </div>
-        ))}
+        <SortableList sortGroup="states" handle=".drag-handle" onDrop={handleStateDrop}>
+          {teamStates.map((state) => (
+            <div key={state.id} data-sort-id={state.id}>
+              <WorkflowStateRow
+                state={state}
+                dragHandle={
+                  <span className="drag-handle" title="Drag to reorder">
+                    ⋮⋮
+                  </span>
+                }
+              />
+            </div>
+          ))}
+        </SortableList>
         <div className="row" style={{ gap: 8, marginTop: 10, maxWidth: 480 }}>
           <input
             className="input"

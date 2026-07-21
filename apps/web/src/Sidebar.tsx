@@ -1,14 +1,8 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { issueKey, useStore } from './store.js';
-import {
-  anchorFromEvent,
-  Popover,
-  sortKeyForInsert,
-  toastError,
-  useDragReorder,
-  type Anchor,
-} from './ui.js';
+import { anchorFromEvent, Popover, toastError, type Anchor } from './ui.js';
+import { SortableList, keyBetweenNeighbors, type SortableDrop } from './sortable.js';
 import {
   BookIcon,
   ChevronDownIcon,
@@ -168,12 +162,14 @@ export function Sidebar() {
     .filter((v) => v.shared || v.creatorId === userId)
     .sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1));
 
-  const favReorder = useDragReorder(myFavorites, (dragged, insertAt) => {
-    const sortOrder = sortKeyForInsert(myFavorites, dragged, insertAt);
-    if (!sortOrder) return;
-    useStore.getState().putEntity('favorite', { ...dragged, sortOrder });
-    void api.reorderFavorite(dragged.id, sortOrder).catch(toastError);
-  });
+  const favsById = Object.fromEntries(myFavorites.map((f) => [f.id, f]));
+  const handleFavDrop = (drop: SortableDrop) => {
+    const fav = favsById[drop.id];
+    const sortOrder = keyBetweenNeighbors(favsById, drop);
+    if (!fav || !sortOrder) return;
+    useStore.getState().putEntity('favorite', { ...fav, sortOrder });
+    void api.reorderFavorite(drop.id, sortOrder).catch(toastError);
+  };
 
   const logout = async () => {
     try {
@@ -219,72 +215,68 @@ export function Sidebar() {
         {myFavorites.length > 0 && (
           <div className="side-section">
             <div className="side-section-header">Favorites</div>
-            {myFavorites.map((fav, index) => {
-              let node = null;
-              let label = '';
-              if (fav.type === 'issue') {
-                const issue = issues[fav.targetId];
-                if (issue) {
-                  const key = issueKey(issue, teams);
-                  label = `${key} ${issue.title}`;
-                  node = (
-                    <NavLink
-                      to={`/issue/${key}`}
-                      draggable={false}
-                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-                    >
-                      <StarIcon size={13} filled style={{ color: 'var(--warning)' }} />
-                      <span className="grow">
-                        {key} {issue.title}
-                      </span>
-                    </NavLink>
-                  );
+            <SortableList sortGroup="favorites" onDrop={handleFavDrop}>
+              {myFavorites.map((fav) => {
+                let node = null;
+                let label = '';
+                if (fav.type === 'issue') {
+                  const issue = issues[fav.targetId];
+                  if (issue) {
+                    const key = issueKey(issue, teams);
+                    label = `${key} ${issue.title}`;
+                    node = (
+                      <NavLink
+                        to={`/issue/${key}`}
+                        draggable={false}
+                        className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                      >
+                        <StarIcon size={13} filled style={{ color: 'var(--warning)' }} />
+                        <span className="grow">
+                          {key} {issue.title}
+                        </span>
+                      </NavLink>
+                    );
+                  }
+                } else if (fav.type === 'project') {
+                  const project = projects[fav.targetId];
+                  if (project) {
+                    label = project.name;
+                    node = (
+                      <NavLink
+                        to={`/project/${project.id}`}
+                        draggable={false}
+                        className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                      >
+                        <ProjectIcon size={13} />
+                        <span className="grow">{project.name}</span>
+                      </NavLink>
+                    );
+                  }
+                } else if (fav.type === 'cycle') {
+                  const cycle = cycles[fav.targetId];
+                  if (cycle) {
+                    label = cycle.name || `Cycle ${cycle.number}`;
+                    node = (
+                      <NavLink
+                        to={`/cycle/${cycle.id}`}
+                        draggable={false}
+                        className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                      >
+                        <CycleIcon size={13} />
+                        <span className="grow">{cycle.name || `Cycle ${cycle.number}`}</span>
+                      </NavLink>
+                    );
+                  }
                 }
-              } else if (fav.type === 'project') {
-                const project = projects[fav.targetId];
-                if (project) {
-                  label = project.name;
-                  node = (
-                    <NavLink
-                      to={`/project/${project.id}`}
-                      draggable={false}
-                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-                    >
-                      <ProjectIcon size={13} />
-                      <span className="grow">{project.name}</span>
-                    </NavLink>
-                  );
-                }
-              } else if (fav.type === 'cycle') {
-                const cycle = cycles[fav.targetId];
-                if (cycle) {
-                  label = cycle.name || `Cycle ${cycle.number}`;
-                  node = (
-                    <NavLink
-                      to={`/cycle/${cycle.id}`}
-                      draggable={false}
-                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
-                    >
-                      <CycleIcon size={13} />
-                      <span className="grow">{cycle.name || `Cycle ${cycle.number}`}</span>
-                    </NavLink>
-                  );
-                }
-              }
-              if (!node) return null;
-              return (
-                <div
-                  key={fav.id}
-                  className={`${favReorder.insertBefore === index ? 'reorder-before' : ''} ${
-                    favReorder.dragId === fav.id ? 'reorder-dragging' : ''
-                  }`.trim()}
-                  {...favReorder.itemProps(index)}
-                  {...favReorder.dragProps(fav, label)}
-                >
-                  {node}
-                </div>
-              );
-            })}
+                void label;
+                if (!node) return null;
+                return (
+                  <div key={fav.id} data-sort-id={fav.id} className="fav-row">
+                    {node}
+                  </div>
+                );
+              })}
+            </SortableList>
           </div>
         )}
 

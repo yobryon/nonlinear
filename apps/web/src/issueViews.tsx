@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { create } from 'zustand';
-import { beginPointerDrag } from './dragdrop.js';
+import { SortableList, type SortableDrop } from './sortable.js';
 import type { Issue, Label, Priority, User, WorkflowState } from '@nonlinear/shared';
 import { PRIORITY_LABELS, keyBetween } from '@nonlinear/shared';
 import { issueKey, formatDate, relativeTime, sortedStates, useStore, type ById } from './store.js';
@@ -260,18 +260,12 @@ function LabelDots({ labelIds, labels }: { labelIds: string[]; labels: ById<Labe
 export function IssueRow({
   issue,
   showState = true,
-  onRowPointerDown,
-  isDragging = false,
-  rowIndex,
-  rowGroup,
+  sortId,
 }: {
   issue: Issue;
   showState?: boolean;
-  onRowPointerDown?: (e: React.PointerEvent, issue: Issue) => void;
-  isDragging?: boolean;
-  /** Position within its group, for drop hit-testing. */
-  rowIndex?: number;
-  rowGroup?: string;
+  /** Set to the issue id to make the row draggable (SortableJS marker). */
+  sortId?: string;
 }) {
   const teams = useStore((s) => s.teams);
   const states = useStore((s) => s.workflowStates);
@@ -292,10 +286,8 @@ export function IssueRow({
   return (
     <>
       <div
-        className={`issue-row${selected ? ' selected' : ''}${isDragging ? ' dragging' : ''}`}
-        data-issue-index={rowIndex}
-        data-row-group={rowGroup}
-        onPointerDown={onRowPointerDown ? (e) => onRowPointerDown(e, issue) : undefined}
+        className={`issue-row${selected ? ' selected' : ''}${sortId ? ' draggable' : ''}`}
+        data-sort-id={sortId}
         onClick={(e) => {
           if (e.metaKey || e.ctrlKey) {
             useSelection.getState().toggle(issue.id);
@@ -555,9 +547,7 @@ export function GroupedIssueList({
   onQuickAdd?: (group: IssueGroup) => void;
 }) {
   const teams = useStore((s) => s.teams);
-  const [dragIssue, setDragIssue] = useState<Issue | null>(null);
-  // Where the dragged row will land: a group and an insertion index (0..len).
-  const [drop, setDrop] = useState<{ group: string; index: number } | null>(null);
+  const issuesById = useStore((s) => s.issues);
 
   // When drag is enabled, present each group in manual (sortOrder) order so
   // reordering is stable and remembered.
@@ -581,6 +571,24 @@ export function GroupedIssueList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderKey]);
 
+  // Reorder + cross-group reassignment on drop, computed from the dropped
+  // neighbors (fractional key) plus the destination group's grouped field.
+  const handleDrop = (drop: SortableDrop) => {
+    if (!grouping) return;
+    const group = groupsRef.current.find((g) => g.key === drop.toGroup);
+    const groupChange = group ? groupPatch(grouping, group) : null;
+    if (!group || !groupChange) return;
+    const patch: Record<string, unknown> = { ...groupChange };
+    const before = drop.beforeId ? (issuesById[drop.beforeId]?.sortOrder ?? null) : null;
+    const after = drop.afterId ? (issuesById[drop.afterId]?.sortOrder ?? null) : null;
+    try {
+      patch.sortOrder = keyBetween(before, after);
+    } catch {
+      /* neighbors briefly out of order — keep existing key */
+    }
+    void patchIssue(drop.id, patch);
+  };
+
   const total = orderedGroups.reduce((n, g) => n + g.issues.length, 0);
   if (total === 0) {
     return (
@@ -593,82 +601,12 @@ export function GroupedIssueList({
     );
   }
 
-  const droppable = (group: IssueGroup): boolean =>
-    grouping !== undefined && dragIssue !== null && groupPatch(grouping, group) !== null;
-
-  /** Group + insertion index under the cursor (before/after by row half). */
-  const hitTest = (
-    target: Element | null,
-    e: PointerEvent,
-  ): { group: string; index: number } | null => {
-    const row = target?.closest('[data-issue-index]') as HTMLElement | null;
-    if (row) {
-      const groupKey = row.dataset.rowGroup!;
-      const idx = Number(row.dataset.issueIndex);
-      const rect = row.getBoundingClientRect();
-      const before = e.clientY < rect.top + rect.height / 2;
-      return { group: groupKey, index: before ? idx : idx + 1 };
-    }
-    const groupEl = target?.closest('[data-group-key]') as HTMLElement | null;
-    if (groupEl) {
-      const key = groupEl.dataset.groupKey!;
-      const g = groupsRef.current.find((x) => x.key === key);
-      return { group: key, index: g?.issues.length ?? 0 };
-    }
-    return null;
-  };
-
-  const startRowDrag = (e: React.PointerEvent, issue: Issue) => {
-    if (!grouping) return;
-    if ((e.target as HTMLElement).closest('button, a, input')) return;
-    beginPointerDrag({
-      event: e,
-      ghostText: `${issueKey(issue, teams)}  ${issue.title}`,
-      onActivate: () => setDragIssue(issue),
-      onHover: (target, ev) => setDrop(hitTest(target, ev)),
-      onDrop: (target, ev) => {
-        const hit = hitTest(target, ev);
-        if (!hit) return;
-        const group = groupsRef.current.find((g) => g.key === hit.group);
-        // Read the group patch directly rather than droppable(), which closes
-        // over the drag-start `dragIssue` (still null here) and would bail.
-        const groupChange = group ? groupPatch(grouping, group) : null;
-        if (!group || !groupChange) return;
-        const patch: Record<string, unknown> = { ...groupChange };
-
-        // Position within the target group by fractional index between neighbors,
-        // excluding the dragged issue itself.
-        const siblings = group.issues.filter((i) => i.id !== issue.id);
-        const before = siblings[hit.index - 1]?.sortOrder ?? null;
-        const after = siblings[hit.index]?.sortOrder ?? null;
-        try {
-          patch.sortOrder = keyBetween(before, after);
-        } catch {
-          /* neighbors out of order — keep existing order */
-        }
-        void patchIssue(issue.id, patch);
-      },
-      onEnd: () => {
-        setDragIssue(null);
-        setDrop(null);
-      },
-    });
-  };
-
-  const line = (groupKey: string, index: number) =>
-    dragIssue && drop && drop.group === groupKey && drop.index === index ? (
-      <div className="insert-line" />
-    ) : null;
-
   return (
     <div>
       {orderedGroups.map((group) => (
         <Fragment key={group.key}>
           {group.issues.length > 0 && (
-            <div
-              className={`drop-group${drop?.group === group.key && droppable(group) ? ' drag-over' : ''}`}
-              data-group-key={group.key}
-            >
+            <div className="drop-group">
               <div className="group-header">
                 {group.icon}
                 <span>{group.label}</span>
@@ -679,20 +617,21 @@ export function GroupedIssueList({
                   </button>
                 )}
               </div>
-              {group.issues.map((issue, index) => (
-                <Fragment key={issue.id}>
-                  {line(group.key, index)}
+              <SortableList
+                sortGroup={group.key}
+                group={grouping ? 'issue-list' : undefined}
+                onDrop={handleDrop}
+                disabled={!grouping}
+              >
+                {group.issues.map((issue) => (
                   <IssueRow
+                    key={issue.id}
                     issue={issue}
                     showState={showState}
-                    isDragging={dragIssue?.id === issue.id}
-                    onRowPointerDown={grouping ? startRowDrag : undefined}
-                    rowIndex={index}
-                    rowGroup={group.key}
+                    sortId={grouping ? issue.id : undefined}
                   />
-                </Fragment>
-              ))}
-              {line(group.key, group.issues.length)}
+                ))}
+              </SortableList>
             </div>
           )}
         </Fragment>
@@ -832,71 +771,42 @@ export function Board({
   const teams = useStore((s) => s.teams);
   const users = useStore((s) => s.users);
   const labels = useStore((s) => s.labels);
+  const issuesById = useStore((s) => s.issues);
   const navigate = useNavigate();
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [over, setOver] = useState<{ group: string; index: number } | null>(null);
   const [ctxMenu, setCtxMenu] = useState<{ issue: Issue; anchor: Anchor } | null>(null);
-  const groupsRef = useRef(groups);
-  groupsRef.current = groups;
 
-  /** Column + insertion index under the cursor. */
-  const hitTest = (target: Element | null, e: PointerEvent) => {
-    const card = target?.closest('[data-card-group]') as HTMLElement | null;
-    if (card) {
-      const rect = card.getBoundingClientRect();
-      const before = e.clientY < rect.top + rect.height / 2;
-      const index = Number(card.dataset.cardIndex);
-      return { group: card.dataset.cardGroup!, index: before ? index : index + 1 };
-    }
-    const col = target?.closest('[data-board-group]') as HTMLElement | null;
-    if (col) {
-      const key = col.dataset.boardGroup!;
-      const group = groupsRef.current.find((g) => g.key === key);
-      return { group: key, index: group?.issues.length ?? 0 };
-    }
-    return null;
-  };
+  // Present each column in manual (sortOrder) order so reordering is stable.
+  const orderedGroups = useMemo(
+    () =>
+      groups.map((g) => ({
+        ...g,
+        issues: [...g.issues].sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1)),
+      })),
+    [groups],
+  );
+  const groupsRef = useRef(orderedGroups);
+  groupsRef.current = orderedGroups;
 
-  const startCardDrag = (e: React.PointerEvent, issue: Issue) => {
-    if ((e.target as HTMLElement).closest('button, a, input')) return;
-    beginPointerDrag({
-      event: e,
-      ghostText: `${issueKey(issue, teams)}  ${issue.title}`,
-      onActivate: () => setDragId(issue.id),
-      onHover: (target, ev) => setOver(hitTest(target, ev)),
-      onDrop: (target, ev) => {
-        const hit = hitTest(target, ev);
-        if (!hit) return;
-        const group = groupsRef.current.find((g) => g.key === hit.group);
-        if (!group?.stateId) return;
-        const cards = group.issues.filter((i) => i.id !== issue.id);
-        const before = cards[hit.index - 1]?.sortOrder ?? null;
-        const after = cards[hit.index]?.sortOrder ?? null;
-        let sortOrder: string;
-        try {
-          sortOrder = keyBetween(before, after);
-        } catch {
-          sortOrder = issue.sortOrder;
-        }
-        const patch: Record<string, unknown> = { sortOrder };
-        if (issue.stateId !== group.stateId) patch.stateId = group.stateId;
-        void patchIssue(issue.id, patch);
-      },
-      onEnd: () => {
-        setDragId(null);
-        setOver(null);
-      },
-    });
+  const handleDrop = (drop: SortableDrop) => {
+    const group = groupsRef.current.find((g) => g.key === drop.toGroup);
+    if (!group?.stateId) return;
+    const before = drop.beforeId ? (issuesById[drop.beforeId]?.sortOrder ?? null) : null;
+    const after = drop.afterId ? (issuesById[drop.afterId]?.sortOrder ?? null) : null;
+    const patch: Record<string, unknown> = {};
+    try {
+      patch.sortOrder = keyBetween(before, after);
+    } catch {
+      /* neighbors briefly out of order — keep existing key */
+    }
+    const moved = issuesById[drop.id];
+    if (moved && moved.stateId !== group.stateId) patch.stateId = group.stateId;
+    void patchIssue(drop.id, patch);
   };
 
   return (
     <div className="board">
-      {groups.map((group) => (
-        <div
-          key={group.key}
-          className={`board-col${over?.group === group.key ? ' drag-over' : ''}`}
-          data-board-group={group.key}
-        >
+      {orderedGroups.map((group) => (
+        <div key={group.key} className="board-col">
           <div className="board-col-header">
             {group.icon}
             <span>{group.label}</span>
@@ -907,21 +817,19 @@ export function Board({
               </button>
             )}
           </div>
-          <div className="board-cards">
-            {group.issues.map((issue, index) => {
+          <SortableList
+            className="board-cards"
+            sortGroup={group.key}
+            group="issue-board"
+            onDrop={handleDrop}
+          >
+            {group.issues.map((issue) => {
               const assignee = issue.assigneeId ? users[issue.assigneeId] : null;
               return (
                 <Fragment key={issue.id}>
                   <div
-                    className={`drop-slot${
-                      over?.group === group.key && over.index === index ? ' over' : ''
-                    }`}
-                  />
-                  <div
-                    className={`board-card${dragId === issue.id ? ' dragging' : ''}`}
-                    data-card-group={group.key}
-                    data-card-index={index}
-                    onPointerDown={(e) => startCardDrag(e, issue)}
+                    className="board-card"
+                    data-sort-id={issue.id}
                     onClick={() => navigate(`/issue/${issueKey(issue, teams)}`)}
                     onContextMenu={(e) => {
                       e.preventDefault();
@@ -941,12 +849,7 @@ export function Board({
                 </Fragment>
               );
             })}
-            <div
-              className={`drop-slot${
-                over?.group === group.key && over.index === group.issues.length ? ' over' : ''
-              }`}
-            />
-          </div>
+          </SortableList>
         </div>
       ))}
       {ctxMenu && (

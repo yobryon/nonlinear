@@ -26,9 +26,22 @@ subsystems is a few dozen lines of hand-rolled code rather than a dependency.
 
 ---
 
-## 1. The pointer-based drag engine, and why we abandoned HTML5 DnD
+## 1. The drag engine
 
-### The debugging story
+> **Update (decision log entry 18).** The sections below describe the _original_
+> hand-rolled pointer-drag engine (`dragdrop.ts`). It has since been **replaced
+> by SortableJS**, wrapped in `apps/web/src/sortable.tsx`, because the hand-rolled
+> engine had no real touch story — on a phone a drag fought the page scroll, and
+> long lists couldn't autoscroll while dragging. SortableJS brings both for free:
+> touch long-press activation (a plain touch still scrolls; a short press starts a
+> drag) and autoscroll near an edge. The React contract is "read the dropped
+> neighbors, revert SortableJS's DOM change, let React re-render the authoritative
+> order," and the caller still computes the fractional `keyBetween` from the
+> neighbors' `sortOrder` — so the _ordering_ design below is unchanged; only the
+> _gesture_ layer moved to a library. The HTML5-DnD debugging story is kept
+> because it's still why we don't use native DnD.
+
+### The debugging story (why not native HTML5 DnD)
 
 The obvious way to build drag-and-drop on the web is the native HTML5
 Drag-and-Drop API: set `draggable="true"`, listen for `dragstart` / `dragover` /

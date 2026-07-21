@@ -246,6 +246,10 @@ shortcuts rather than through drag. `elementFromPoint` hit-testing means drop
 targets must be real, hittable DOM elements. The engine is small and dependency-
 free, which was the goal.
 
+> **Superseded by [entry 18](#18-sortablejs-over-the-hand-rolled-drag-engine).**
+> The hand-rolled engine lacked touch support: on a phone, once a list
+> overflowed, a drag fought the page scroll. We replaced it with SortableJS.
+
 ---
 
 ## 7. MCP server in-process, not a separate container
@@ -694,6 +698,54 @@ Docker: GraphQL query + mutation over HTTP against Postgres, and the service
 worker active with the shell cached (installable, opens offline). Icons are
 generated at build-authoring time by a small Node PNG encoder (no image
 dependency in the tree).
+
+---
+
+## 18. SortableJS over the hand-rolled drag engine
+
+**Decision.** Replace the custom pointer-drag engine (entry 6, `dragdrop.ts` +
+`useDragReorder`) with **SortableJS**, wrapped in one small React component
+(`apps/web/src/sortable.tsx`). Every drag surface — the issue board and grouped
+list, plus favorites/workflow-states/milestones reordering — now goes through it.
+
+**Context.** The hand-rolled engine worked on desktop but had no real touch
+story: with `touch-action` untamed, a drag on a phone competed with page scroll,
+and once a list overflowed the viewport, scrolling won — dragging was effectively
+broken on mobile. It also had no autoscroll, so you couldn't drag an item past
+the visible edge of a long list. These are exactly the wheels a DnD library has
+already invented, and re-inventing them (a mobile long-press recognizer, an
+autoscroll loop, touch-action management) is real, bug-prone work.
+
+**Alternatives considered.** (a) _Extend the hand-rolled engine_ with a touch
+long-press recognizer + autoscroll — the "keep owning it" path, but it's the
+fiddly part of DnD and the reason to reach for a library. (b) _dnd-kit_ — modern
+and accessible, but ~18 KB gzipped and its API leans toward you re-implementing
+sortable semantics; our fractional-order + cross-group logic would need
+significant glue. (c) _SortableJS_ — ~12–13 KB gzipped, framework-agnostic, with
+the two things we were missing **built in**: touch activation via
+`delay` + `delayOnTouchOnly` (a short press starts a drag, so a plain touch still
+scrolls) and autoscroll while dragging near an edge.
+
+**Why.** SortableJS solves the actual bug (mobile scroll-vs-drag) out of the box
+and is a smaller, better-fitted dependency than dnd-kit for a codebase that
+already computes its own order. It moves the DOM itself, which conflicts with
+React owning render — so the wrapper reads the intended neighbors from the
+post-drop DOM, then **reverts** SortableJS's mutation so the DOM matches React's
+last render, and hands a logical `{id, toGroup, beforeId, afterId}` to the
+caller. The caller computes the fractional `keyBetween` from the neighbors'
+`sortOrder` and (for cross-group drops) the grouped-field patch — the same
+ordering logic as before, now behind a stable seam. The owner explicitly asked
+to stop hand-rolling DnD; this honors that.
+
+**Consequences.** The SPA grows ~+20 KB gzipped (to ~146 KB) — over the original
+~100 KB target, but that budget was already exceeded by feature growth, and the
+owner chose the trade for robust cross-platform DnD we don't maintain. Drag is
+now genuinely usable on touch: verified in a real browser that a quick touch
+scrolls while a long-press starts a drag, that reorders persist, and that
+cross-status drags reassign the grouped field. Keyboard-accessible reordering is
+still out of scope (as in entry 6). `dragdrop.ts` and `useDragReorder` are
+deleted; the drop indicator is now SortableJS's ghost placeholder styled in
+`styles.css`, not the old custom insertion line.
 
 ---
 

@@ -9,8 +9,6 @@ import {
 import { createPortal } from 'react-dom';
 import { create } from 'zustand';
 import type { User } from '@nonlinear/shared';
-import { keyBetween } from '@nonlinear/shared';
-import { beginPointerDrag } from './dragdrop.js';
 import { userInitials } from './store.js';
 import { CheckIcon, SearchIcon } from './icons.js';
 
@@ -263,79 +261,6 @@ export function Switch({ on, onChange }: { on: boolean; onChange: (on: boolean) 
       onClick={() => onChange(!on)}
     />
   );
-}
-
-/* ---------- Drag reorder ----------
-
-Pointer-based vertical list reordering (no HTML5 DnD — see dragdrop.ts).
-Spread itemProps(index) on each row wrapper (marks it as a hit-target) and
-dragProps(item, label) on the drag source (whole row or a grip handle). An
-insertion line is drawn via the `insertBefore` index (style rows with a top
-border when insertBefore === index). onMove fires with the dragged item and
-the index it should be inserted at (in the pre-drag array). */
-
-export function useDragReorder<T extends { id: string }>(
-  items: T[],
-  onMove: (dragged: T, insertAt: number) => void,
-) {
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [insertBefore, setInsertBefore] = useState<number | null>(null);
-
-  const itemProps = (index: number) => ({ 'data-reorder-index': index });
-
-  const insertionAt = (target: Element | null, ev: PointerEvent): number | null => {
-    const row = target?.closest('[data-reorder-index]') as HTMLElement | null;
-    if (!row) return null;
-    const index = Number(row.dataset.reorderIndex);
-    const rect = row.getBoundingClientRect();
-    return ev.clientY < rect.top + rect.height / 2 ? index : index + 1;
-  };
-
-  const dragProps = (item: T, label: string) => ({
-    onPointerDown: (e: React.PointerEvent) => {
-      if ((e.target as HTMLElement).closest('input, select, textarea')) return;
-      let current: number | null = null;
-      beginPointerDrag({
-        event: e,
-        ghostText: label,
-        onActivate: () => setDragId(item.id),
-        onHover: (target, ev) => {
-          current = insertionAt(target, ev);
-          setInsertBefore(current);
-        },
-        onDrop: (target, ev) => {
-          // Recompute at release; fall back to the last hover position when
-          // the pointer lands between rows.
-          const at = insertionAt(target, ev) ?? current;
-          if (at !== null) onMove(item, at);
-        },
-        onEnd: () => {
-          setDragId(null);
-          setInsertBefore(null);
-        },
-      });
-    },
-  });
-
-  return { dragId, insertBefore, itemProps, dragProps };
-}
-
-/** New fractional sort key for dropping `dragged` at `insertAt` (pre-drag index space). */
-export function sortKeyForInsert<T extends { id: string; sortOrder: string }>(
-  items: T[],
-  dragged: T,
-  insertAt: number,
-): string | null {
-  const from = items.findIndex((i) => i.id === dragged.id);
-  const filtered = items.filter((i) => i.id !== dragged.id);
-  const pos = from !== -1 && from < insertAt ? insertAt - 1 : insertAt;
-  const before = filtered[pos - 1]?.sortOrder ?? null;
-  const after = filtered[pos]?.sortOrder ?? null;
-  try {
-    return keyBetween(before, after);
-  } catch {
-    return null;
-  }
 }
 
 /* ---------- Toasts ---------- */

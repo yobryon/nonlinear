@@ -39,7 +39,7 @@ registration/invite model.
 ## How it's built
 
 pnpm monorepo, TypeScript ESM end-to-end. A single small API process (Fastify)
-over jsonb-on-Postgres, a ~130 KB SPA (React + zustand), nginx standing in for
+over jsonb-on-Postgres, a ~145 KB SPA (React + zustand), nginx standing in for
 Azure Static Web Apps. All persistence goes through swappable storage interfaces
 (`STORAGE=memory|postgres`); every integration is a thin transport adapter over
 one in-process domain.

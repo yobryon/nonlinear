@@ -4,17 +4,8 @@ import type { Project, ProjectStatus, User } from '@nonlinear/shared';
 import { PROJECT_STATUSES } from '@nonlinear/shared';
 import { api } from '../api.js';
 import { formatDate, relativeTime, useStore } from '../store.js';
-import {
-  anchorFromEvent,
-  Avatar,
-  Modal,
-  Picker,
-  Popover,
-  sortKeyForInsert,
-  toastError,
-  useDragReorder,
-  type Anchor,
-} from '../ui.js';
+import { anchorFromEvent, Avatar, Modal, Picker, Popover, toastError, type Anchor } from '../ui.js';
+import { SortableList, keyBetweenNeighbors, type SortableDrop } from '../sortable.js';
 import {
   CalendarIcon,
   DotsIcon,
@@ -677,15 +668,17 @@ function ProjectDetail({ project }: { project: Project }) {
     (f) => f.userId === userId && f.type === 'project' && f.targetId === project.id,
   );
 
-  const milestoneReorder = useDragReorder(projectMilestones, (dragged, insertAt) => {
-    const sortOrder = sortKeyForInsert(projectMilestones, dragged, insertAt);
-    if (!sortOrder) return;
-    useStore.getState().putEntity('projectMilestone', { ...dragged, sortOrder });
+  const milestonesById = Object.fromEntries(projectMilestones.map((m) => [m.id, m]));
+  const handleMilestoneDrop = (drop: SortableDrop) => {
+    const milestone = milestonesById[drop.id];
+    const sortOrder = keyBetweenNeighbors(milestonesById, drop);
+    if (!milestone || !sortOrder) return;
+    useStore.getState().putEntity('projectMilestone', { ...milestone, sortOrder });
     void api
-      .updateMilestone(dragged.id, { sortOrder })
+      .updateMilestone(drop.id, { sortOrder })
       .then((m) => useStore.getState().putEntity('projectMilestone', m))
       .catch(toastError);
-  });
+  };
 
   return (
     <>
@@ -750,19 +743,20 @@ function ProjectDetail({ project }: { project: Project }) {
                 </div>
               )}
               {projectMilestones.length > 0 && (
-                <div style={{ marginTop: project.description ? 12 : 0 }}>
-                  {projectMilestones.map((m, index) => {
+                <SortableList
+                  sortGroup="milestones"
+                  onDrop={handleMilestoneDrop}
+                  style={{ marginTop: project.description ? 12 : 0 }}
+                >
+                  {projectMilestones.map((m) => {
                     const milestoneIssues = projectIssues.filter((i) => i.milestoneId === m.id);
                     const done = milestoneIssues.filter((i) => i.completedAt).length;
                     return (
                       <div
                         key={m.id}
-                        className={`row ${milestoneReorder.insertBefore === index ? 'reorder-before' : ''} ${
-                          milestoneReorder.dragId === m.id ? 'reorder-dragging' : ''
-                        }`.trim()}
+                        data-sort-id={m.id}
+                        className="row"
                         style={{ padding: '3px 0', gap: 8, cursor: 'grab' }}
-                        {...milestoneReorder.itemProps(index)}
-                        {...milestoneReorder.dragProps(m, m.name)}
                       >
                         <ProjectIcon size={13} />
                         <span style={{ fontWeight: 500 }}>{m.name}</span>
@@ -790,7 +784,7 @@ function ProjectDetail({ project }: { project: Project }) {
                       </div>
                     );
                   })}
-                </div>
+                </SortableList>
               )}
               <div className="row" style={{ marginTop: 8, gap: 6 }}>
                 <input
