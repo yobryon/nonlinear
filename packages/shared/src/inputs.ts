@@ -11,6 +11,7 @@ import type {
   ProjectHealth,
   ProjectStatus,
   StateCategory,
+  UserRole,
   ViewDisplay,
   WebhookFormat,
 } from './enums.js';
@@ -392,6 +393,11 @@ export interface UpdateDashboardInput {
   shared?: boolean;
   tiles?: DashboardTile[];
   sortOrder?: string;
+}
+
+export interface CreateInviteInput {
+  email?: string;
+  role?: UserRole;
 }
 
 /** Admin-set workspace AI config. `apiKey` omitted = keep the stored key. */

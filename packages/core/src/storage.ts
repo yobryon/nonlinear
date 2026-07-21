@@ -1,6 +1,7 @@
 import type {
   AiSettings,
   Attachment,
+  Invite,
   AuditEvent,
   Comment,
   Dashboard,
@@ -124,6 +125,19 @@ export interface AiSettingsStore {
   set(settings: AiSettings): Promise<void>;
 }
 
+/** A stored invite; the raw token is kept only as a sha256 hash. */
+export interface StoredInvite extends Invite {
+  hash: string;
+}
+
+export interface InviteStore {
+  create(invite: StoredInvite): Promise<void>;
+  getByHash(hash: string): Promise<StoredInvite | null>;
+  all(): Promise<StoredInvite[]>;
+  markUsed(id: string, usedAt: string): Promise<void>;
+  delete(id: string): Promise<void>;
+}
+
 export interface AuditStore {
   append(event: AuditEvent): Promise<void>;
   /**
@@ -182,6 +196,7 @@ export interface Storage {
   apiTokens: ApiTokenStore;
   auditLog: AuditStore;
   aiSettings: AiSettingsStore;
+  invites: InviteStore;
   syncLog: SyncLogStore;
   /** Close pools/handles. */
   close(): Promise<void>;

@@ -1716,6 +1716,21 @@ body.drag-active * {
   min-width: 150px;
 }
 
+.invite-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+.invite-link code {
+  flex: 1;
+  font-size: 12px;
+  color: var(--accent-text);
+}
+
 /* ============ audit log ============ */
 
 .audit-table {

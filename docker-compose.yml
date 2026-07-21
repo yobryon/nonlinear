@@ -28,7 +28,11 @@ services:
       BLOB_DIR: /data/blobs
       APP_URL: http://localhost:8080
       SMTP_URL: smtp://mailhog:1025
+      # First register creates the workspace + admin. After that, registration is
+      # invite-only (Settings → Members) unless you reopen it:
+      #   ALLOW_SIGNUPS: 'true'   # anyone who can reach the server may register
       # GITHUB_WEBHOOK_SECRET: set to enable the GitHub integration
+      # Full configuration reference: docs/configuration.md
       # Enterprise auth (all optional; unset = feature off):
       #   OIDC_ISSUER: https://login.microsoftonline.com/<tenant>/v2.0
       #   OIDC_CLIENT_ID / OIDC_CLIENT_SECRET / OIDC_LABEL: "Microsoft Entra ID"

@@ -1,4 +1,11 @@
-import type { LoginInput, RegisterInput, SsoUserInfo, User, Workspace } from '@nonlinear/shared';
+import type {
+  LoginInput,
+  RegisterInput,
+  SsoUserInfo,
+  User,
+  UserRole,
+  Workspace,
+} from '@nonlinear/shared';
 import { DomainError, created, type Ctx } from '../domain.js';
 import { DEFAULT_PREFERENCES } from '@nonlinear/shared';
 import { newId, newToken } from '../util/ids.js';
@@ -26,7 +33,10 @@ export class AuthService {
    * First register creates the workspace, an admin user, and a default team.
    * Later registers join the existing workspace as members.
    */
-  async register(input: RegisterInput): Promise<{ user: User; workspace: Workspace }> {
+  async register(
+    input: RegisterInput,
+    opts: { role?: UserRole } = {},
+  ): Promise<{ user: User; workspace: Workspace }> {
     const email = input.email.trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       throw new DomainError('invalid_email', 'Invalid email address');
@@ -66,7 +76,7 @@ export class AuthService {
       name,
       displayName,
       avatarColor: colorFor(email),
-      role: isFirst ? 'admin' : 'member',
+      role: isFirst ? 'admin' : (opts.role ?? 'member'),
       active: true,
       isAgent: false,
       mutedNotificationTypes: [],

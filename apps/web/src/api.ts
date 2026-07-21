@@ -3,7 +3,9 @@ import type {
   Attachment,
   AuditEvent,
   CreateDashboardInput,
+  CreatedInvite,
   Dashboard,
+  Invite,
   LabelSuggestion,
   PulseFeed,
   UpdateAiSettingsInput,
@@ -95,19 +97,30 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
 }
 
 export const api = {
-  meta: () =>
+  meta: (invite?: string) =>
     req<{
       setupRequired: boolean;
       workspaceName: string | null;
+      allowSignups: boolean;
+      inviteValid: boolean;
       sso: { enabled: boolean; label: string } | null;
-    }>('GET', '/api/meta'),
+    }>('GET', `/api/meta${invite ? `?invite=${encodeURIComponent(invite)}` : ''}`),
   audit: (cursor?: string | null) =>
     req<{ events: AuditEvent[]; nextCursor: string | null }>(
       'GET',
       `/api/audit${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`,
     ),
-  register: (input: { email: string; password: string; name: string; workspaceName?: string }) =>
-    req<SessionResponse>('POST', '/api/auth/register', input),
+  register: (input: {
+    email: string;
+    password: string;
+    name: string;
+    workspaceName?: string;
+    inviteToken?: string;
+  }) => req<SessionResponse>('POST', '/api/auth/register', input),
+  invites: () => req<Invite[]>('GET', '/api/invites'),
+  createInvite: (input: { email?: string; role?: 'member' | 'guest' }) =>
+    req<CreatedInvite>('POST', '/api/invites', input),
+  revokeInvite: (id: string) => req<{ ok: true }>('DELETE', `/api/invites/${id}`),
   login: (input: { email: string; password: string }) =>
     req<SessionResponse>('POST', '/api/auth/login', input),
   logout: () => req<{ ok: true }>('POST', '/api/auth/logout'),

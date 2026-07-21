@@ -94,12 +94,18 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   // ---- health & meta ----
   app.get('/healthz', async () => ({ ok: true }));
 
-  app.get('/api/meta', async () => {
+  app.get('/api/meta', async (req) => {
     const userCount = await domain.ctx.storage.users.count();
     const workspace = (await domain.ctx.storage.workspaces.all())[0] ?? null;
+    // A valid ?invite=<token> lets the login page offer registration even when
+    // open signups are off.
+    const inviteToken = (req.query as { invite?: string }).invite;
+    const inviteValid = inviteToken ? Boolean(await domain.invites.validate(inviteToken)) : false;
     return {
       setupRequired: userCount === 0,
       workspaceName: workspace?.name ?? null,
+      allowSignups: config.allowSignups,
+      inviteValid,
       sso: ssoEnabled(config) ? { enabled: true, label: config.sso.label } : null,
     };
   });
@@ -111,8 +117,31 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
       password: string;
       name: string;
       workspaceName?: string;
+      inviteToken?: string;
     };
-    const { user, workspace } = await domain.auth.register(body);
+
+    // Registration gate. The first account always proceeds (it becomes the
+    // workspace owner). After that, a new account requires either open signups
+    // or a valid invite — otherwise reaching the server is NOT enough to get in.
+    const isFirst = (await domain.ctx.storage.users.count()) === 0;
+    let role: 'member' | 'guest' = 'member';
+    if (!isFirst) {
+      const invite = body.inviteToken ? await domain.invites.validate(body.inviteToken) : null;
+      if (invite) {
+        role = invite.role === 'guest' ? 'guest' : 'member';
+      } else if (!config.allowSignups) {
+        throw new DomainError(
+          'registration_closed',
+          body.inviteToken
+            ? 'This invite is invalid or expired'
+            : 'Registration is closed. Ask an admin for an invite.',
+          403,
+        );
+      }
+    }
+
+    const { user, workspace } = await domain.auth.register(body, { role });
+    if (!isFirst && body.inviteToken) await domain.invites.consume(body.inviteToken, user.id);
     const session = await domain.auth.createSession(user.id);
     setSessionCookie(reply, session.token);
     await domain.audit.record({
@@ -122,10 +151,40 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
       targetType: 'user',
       targetId: user.id,
       targetLabel: user.email,
-      metadata: { role: user.role },
+      metadata: { role: user.role, via: body.inviteToken ? 'invite' : 'signup' },
       ip: req.ip,
     });
     return { user, workspaceId: workspace.id };
+  });
+
+  // ---- invites (admin) ----
+  app.get('/api/auth/invite/:token', async (req) => {
+    const invite = await domain.invites.validate((req.params as { token: string }).token);
+    return { valid: Boolean(invite), email: invite?.email ?? null };
+  });
+  app.get('/api/invites', authed, async (req) => {
+    requireAdmin(req);
+    return domain.invites.list();
+  });
+  app.post('/api/invites', authed, async (req) => {
+    requireAdmin(req);
+    const { invite, token } = await domain.invites.create(req.user.id, req.body as never);
+    await domain.audit.record({
+      action: 'member.added',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'invite',
+      targetId: invite.id,
+      targetLabel: invite.email,
+      metadata: { role: invite.role, pending: true },
+      ip: req.ip,
+    });
+    return { invite, url: `${config.appUrl}/?invite=${token}` };
+  });
+  app.delete('/api/invites/:id', authed, async (req) => {
+    requireAdmin(req);
+    await domain.invites.revoke((req.params as { id: string }).id);
+    return { ok: true };
   });
 
   app.post('/api/auth/login', async (req, reply) => {

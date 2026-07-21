@@ -2,6 +2,7 @@ import pg from 'pg';
 import type {
   AiSettings,
   AuditEvent,
+  Invite,
   Issue,
   IssueActivity,
   SyncDelta,
@@ -14,6 +15,8 @@ import type {
   ApiTokenStore,
   AuditPage,
   AuditStore,
+  InviteStore,
+  StoredInvite,
   EntityStore,
   IssueStore,
   Session,
@@ -360,6 +363,36 @@ function splitAuditCursor(cursor: string): [string, string] {
   return i === -1 ? [cursor, ''] : [cursor.slice(0, i), cursor.slice(i + 1)];
 }
 
+class PgInviteStore implements InviteStore {
+  constructor(private pool: pg.Pool) {}
+  async create(invite: StoredInvite): Promise<void> {
+    await this.pool.query('INSERT INTO invites (id, hash, data) VALUES ($1, $2, $3)', [
+      invite.id,
+      invite.hash,
+      JSON.stringify(invite),
+    ]);
+  }
+  async getByHash(hash: string): Promise<StoredInvite | null> {
+    const { rows } = await this.pool.query('SELECT data FROM invites WHERE hash = $1', [hash]);
+    return rows[0]?.data ?? null;
+  }
+  async all(): Promise<StoredInvite[]> {
+    const { rows } = await this.pool.query(
+      "SELECT data FROM invites ORDER BY data->>'createdAt' DESC",
+    );
+    return rows.map((r) => r.data);
+  }
+  async markUsed(id: string, usedAt: string): Promise<void> {
+    await this.pool.query(
+      `UPDATE invites SET data = jsonb_set(data, '{usedAt}', to_jsonb($2::text)) WHERE id = $1`,
+      [id, usedAt],
+    );
+  }
+  async delete(id: string): Promise<void> {
+    await this.pool.query('DELETE FROM invites WHERE id = $1', [id]);
+  }
+}
+
 class PgAiSettingsStore implements AiSettingsStore {
   constructor(private pool: pg.Pool) {}
   async get(): Promise<AiSettings | null> {
@@ -421,6 +454,7 @@ export async function createPostgresStorage(options: PostgresStorageOptions): Pr
     apiTokens: new PgApiTokenStore(pool),
     auditLog: new PgAuditStore(pool),
     aiSettings: new PgAiSettingsStore(pool),
+    invites: new PgInviteStore(pool),
     syncLog: new PgSyncLog(pool),
     close: () => pool.end(),
   };

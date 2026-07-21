@@ -438,6 +438,22 @@ export interface Dashboard {
   updatedAt: string;
 }
 
+/**
+ * An admin-issued invitation to register. The raw token is delivered once as a
+ * link and stored only as a hash (like sessions/API tokens); this public shape
+ * omits it. Consumed on the invitee's register; not synced.
+ */
+export interface Invite {
+  id: string;
+  /** Optional email to bind the invite to (informational; not enforced hard). */
+  email: string | null;
+  role: UserRole;
+  createdById: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt: string | null;
+}
+
 /** Personal "remind me about this issue" at a time. Deleted once fired. */
 export interface IssueReminder {
   id: string;

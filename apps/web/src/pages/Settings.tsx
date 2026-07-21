@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes, useNavigate, useParams } from 'react-
 import type {
   AiSettingsPublic,
   AuditEvent,
+  Invite,
   StateCategory,
   Team,
   UpdateAiSettingsInput,
@@ -407,6 +408,7 @@ function MembersSettings() {
         {rows.filter((u) => u.active).length} active member
         {rows.filter((u) => u.active).length === 1 ? '' : 's'}
       </p>
+      {isAdmin && <InvitePeople />}
       <div className="settings-section">
         {rows.map((user) => (
           <div key={user.id} className="member-row">
@@ -1448,5 +1450,93 @@ function AiSettings() {
         </div>
       </div>
     </>
+  );
+}
+
+function InvitePeople() {
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [role, setRole] = useState<'member' | 'guest'>('member');
+  const [busy, setBusy] = useState(false);
+  const [lastUrl, setLastUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    void api.invites().then(setInvites).catch(toastError);
+  }, []);
+
+  const create = () => {
+    setBusy(true);
+    void api
+      .createInvite({ role })
+      .then((res) => {
+        setInvites((prev) => [res.invite, ...prev]);
+        setLastUrl(res.url);
+        void navigator.clipboard?.writeText(res.url).then(
+          () => toast('Invite link copied to clipboard', 'success'),
+          () => {},
+        );
+      })
+      .catch(toastError)
+      .finally(() => setBusy(false));
+  };
+
+  const revoke = (id: string) => {
+    setInvites((prev) => prev.filter((i) => i.id !== id));
+    void api.revokeInvite(id).catch(toastError);
+  };
+
+  return (
+    <div className="settings-section">
+      <h2>Invite people</h2>
+      <p className="dim" style={{ fontSize: 12.5, marginTop: -4, marginBottom: 12 }}>
+        Registration is closed unless open signups are enabled. Generate a link and share it — it
+        works once and expires in 14 days.
+      </p>
+      <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+        <select
+          className="input"
+          style={{ width: 140 }}
+          value={role}
+          onChange={(e) => setRole(e.target.value as 'member' | 'guest')}
+        >
+          <option value="member">Member</option>
+          <option value="guest">Guest</option>
+        </select>
+        <button className="btn primary" onClick={create} disabled={busy}>
+          Create invite link
+        </button>
+      </div>
+      {lastUrl && (
+        <div className="invite-link">
+          <code className="truncate">{lastUrl}</code>
+          <button
+            className="btn ghost"
+            onClick={() => {
+              void navigator.clipboard?.writeText(lastUrl);
+              toast('Copied', 'success');
+            }}
+          >
+            Copy
+          </button>
+        </div>
+      )}
+      {invites.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          {invites.map((inv) => (
+            <div key={inv.id} className="member-row">
+              <div className="info">
+                <div>Pending invite · {inv.role}</div>
+                <div className="email">
+                  {inv.email ? inv.email + ' · ' : ''}expires{' '}
+                  {new Date(inv.expiresAt).toLocaleDateString()}
+                </div>
+              </div>
+              <button className="btn ghost danger" onClick={() => revoke(inv.id)}>
+                <TrashIcon size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

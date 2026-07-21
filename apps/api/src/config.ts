@@ -23,6 +23,12 @@ export interface Config {
   smtpFrom: string;
   /** Public base URL used in emails and intake links. */
   appUrl: string;
+  /**
+   * Allow anyone who can reach the server to self-register (open signups).
+   * Off by default: after the first (workspace-owner) account, new users join
+   * only via an admin invite or SSO. Set ALLOW_SIGNUPS=true to reopen.
+   */
+  allowSignups: boolean;
   /** OIDC single sign-on. `issuer` + `clientId` empty = SSO disabled. */
   sso: {
     issuer: string;
@@ -56,6 +62,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     smtpUrl: env.SMTP_URL ?? '',
     smtpFrom: env.SMTP_FROM ?? 'nonlinear <no-reply@nonlinear.local>',
     appUrl: (env.APP_URL ?? 'http://localhost:8080').replace(/\/$/, ''),
+    allowSignups: env.ALLOW_SIGNUPS === 'true',
     sso: {
       issuer: (env.OIDC_ISSUER ?? '').replace(/\/$/, ''),
       clientId: env.OIDC_CLIENT_ID ?? '',

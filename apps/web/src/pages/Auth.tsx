@@ -30,18 +30,27 @@ export function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sso, setSso] = useState<{ enabled: boolean; label: string } | null>(null);
+  const [canRegister, setCanRegister] = useState(false);
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const invite = params.get('invite');
+    setInviteToken(invite);
     void api
-      .meta()
+      .meta(invite ?? undefined)
       .then((meta) => {
         setSetupRequired(meta.setupRequired);
         setSso(meta.sso);
-        if (meta.setupRequired) setMode('register');
+        // Registration is only offered during first-run setup, when open
+        // signups are on, or when the visitor arrived with a valid invite.
+        const allowed = meta.setupRequired || meta.allowSignups || meta.inviteValid;
+        setCanRegister(allowed);
+        if (meta.setupRequired || (invite && meta.inviteValid)) setMode('register');
+        else setMode('login');
       })
       .catch(() => {});
     // Surface an SSO failure redirected back as ?sso_error=<code>.
-    const params = new URLSearchParams(window.location.search);
     const ssoError = params.get('sso_error');
     if (ssoError) {
       setError(ssoErrorMessage(ssoError));
@@ -61,6 +70,7 @@ export function AuthPage() {
           password,
           name,
           workspaceName: setupRequired ? workspaceName : undefined,
+          inviteToken: inviteToken ?? undefined,
         });
       } else {
         await api.login({ email, password });
@@ -159,17 +169,23 @@ export function AuthPage() {
                   : 'Sign up'}
           </button>
         </form>
-        {!setupRequired && (
+        {!setupRequired && canRegister && (
           <div className="auth-switch">
             {mode === 'login' ? (
               <>
-                New here? <button onClick={() => setMode('register')}>Create an account</button>
+                {inviteToken ? 'Have an invite? ' : 'New here? '}
+                <button onClick={() => setMode('register')}>Create an account</button>
               </>
             ) : (
               <>
                 Already have an account? <button onClick={() => setMode('login')}>Log in</button>
               </>
             )}
+          </div>
+        )}
+        {!setupRequired && !canRegister && (
+          <div className="auth-switch" style={{ color: 'var(--text-4)' }}>
+            Registration is invite-only. Ask an admin to invite you.
           </div>
         )}
       </div>

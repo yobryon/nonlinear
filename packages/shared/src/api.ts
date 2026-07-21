@@ -1,4 +1,4 @@
-import type { User } from './entities.js';
+import type { Invite, User } from './entities.js';
 import type { AiProvider, ProjectHealth, PulseItemType } from './enums.js';
 
 export interface ApiError {
@@ -17,8 +17,17 @@ export interface SessionResponse {
 export interface MetaResponse {
   setupRequired: boolean;
   workspaceName: string | null;
+  /** Whether anyone may self-register (open signups configured on). */
+  allowSignups: boolean;
   /** SSO sign-in availability + button label (null when OIDC isn't configured). */
   sso: { enabled: boolean; label: string } | null;
+}
+
+/** A freshly created invite plus its one-time link (the token is never shown again). */
+export interface CreatedInvite {
+  invite: Invite;
+  /** Full URL to hand to the invitee, e.g. https://host/?invite=<token>. */
+  url: string;
 }
 
 /** Normalized identity claims from an OIDC provider, consumed by the domain. */
