@@ -99,8 +99,11 @@ export class AuthService {
             .replace(/[^a-zA-Z]/g, 'X')
             .toUpperCase() || 'GEN',
       });
-    } else {
-      // Join every non-private team so new members see the workspace immediately.
+    } else if (user.role !== 'guest') {
+      // Members join every non-private team so they see the workspace
+      // immediately. Guests join nothing automatically — an admin grants them
+      // access team by team, which (with team-scoped visibility) is what keeps a
+      // guest confined to exactly what they're invited to.
       const teams = new TeamService(this.ctx);
       for (const team of await this.ctx.storage.teams.all()) {
         if (!team.private) await teams.addMember(team.id, user.id);

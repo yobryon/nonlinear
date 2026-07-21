@@ -8,6 +8,7 @@ import type {
   User,
   Workspace,
 } from '@nonlinear/shared';
+import { filterPayload, visibilityFor } from './visibility.js';
 import {
   DomainError,
   created,
@@ -318,7 +319,7 @@ export class BootstrapService {
       s.dashboards.all(),
       s.syncLog.currentSyncId(),
     ]);
-    return {
+    const full: BootstrapPayload = {
       syncId,
       userId,
       workspace,
@@ -350,5 +351,9 @@ export class BootstrapService {
       triageRules,
       dashboards: dashboards.filter((d) => d.shared || d.creatorId === userId),
     };
+    // Team-scoped read isolation: a non-admin receives only the teams they
+    // belong to and the entities hanging off them.
+    const vis = await visibilityFor(this.ctx, userId);
+    return filterPayload(full, vis);
   }
 }
