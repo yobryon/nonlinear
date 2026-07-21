@@ -105,8 +105,16 @@ whoami                          # MCP tool
 curl -H "Authorization: Bearer nl_..." http://localhost:8080/api/auth/me
 ```
 
-`whoami` returns your `name`, `displayName`, `isAgent`, `role`, and the workspace name. **Check
-`isAgent: true`.** If it's `false`, you were handed a personal token (the NON-29 trap) — stop and
+`whoami` returns your `name`, `displayName`, `isAgent`, `role`, the workspace name, your
+visible `teams` (the team keys you belong to — all teams for admins), and your `token` scope
+(`{ readOnly, teams: "all" | [keys] }`) — so you learn your limits up front rather than only
+when a write fails:
+
+```jsonc
+{ "user": {...}, "workspace": "...", "teams": ["AUGRID"], "token": { "readOnly": false, "teams": "all" } }
+```
+
+**Check `isAgent: true`.** If it's `false`, you were handed a personal token (the NON-29 trap) — stop and
 ask the admin to re-mint via `POST /api/agents/:id/tokens`.
 
 ### What you can't do
@@ -141,36 +149,38 @@ Bearer per request. Config block:
 For Claude Code specifically: `claude mcp add --transport http nonlinear http://localhost:8080/mcp
 --header "Authorization: Bearer nl_your_agent_token"`.
 
-### The 13 tools
+### The 14 tools
 
 Names are **resolved for you** — teams by key (`AUGRID`), states/labels by name (`In Progress`,
 `type: bug`), assignees by email / `@handle` / display name. You never juggle UUIDs through MCP.
 
-**Read (9):**
+**Read (10):**
 
 | Tool | What it does |
 |---|---|
-| `whoami` | Authenticated user + workspace. Verify `isAgent`. |
+| `whoami` | Authenticated user + workspace + your visible `teams` + `token` scope. Verify `isAgent`. |
 | `list_teams` | All teams with keys. |
 | `list_users` | Members + agents (name, handle, isAgent). |
 | `list_projects` | Projects (id, name, status). |
 | `list_workflow_states` | A team's states in order — `{ teamKey }`. |
 | `list_labels` | Labels, optionally `{ teamKey }`. |
-| `search_issues` | Text + filters `{ query?, teamKey?, assignee?, state?, priority?, limit? }`. |
+| `search_issues` | Text + filters `{ query?, teamKey?, assignee?, state?, priority?, limit? }`. Returns a lean summary (no description — `get_issue` for the full body). |
 | `get_issue` | One issue **with its comments** — `{ identifier }` e.g. `AUGRID-42`. |
-| `list_my_issues` | Issues assigned to *your* token's user. Your work queue. |
+| `list_my_issues` | Issues assigned to *your* token's user (lean summary). Your work queue. |
+| `my_work` | No params. `{ assigned: [...], mentioned: [...] }` — issues assigned to you **and** issues where a comment @mentions your handle (lean summaries; `get_issue` for detail). The pull-based "what needs my attention". |
 
 **Write (4):**
 
 | Tool | Params |
 |---|---|
-| `create_issue` | `{ teamKey, title, description?, priority?, assignee?, state?, labels? }` |
-| `update_issue` | `{ identifier, title?, description?, state?, priority?, assignee? }` |
+| `create_issue` | `{ teamKey, title, description?, priority?, assignee?, state?, labels?, project? }` |
+| `update_issue` | `{ identifier, title?, description?, state?, priority?, assignee?, project? }` |
 | `add_comment` | `{ identifier, body }` — markdown + `@handle` mentions |
 | `create_project` | `{ name, description?, teamKeys[] }` |
 
 `priority` is `none/urgent/high/medium/low` **or** `0–4` (0 None, 1 Urgent, 2 High, 3 Medium,
-4 Low). Reads are scoped to what your token can see — `search_issues` without a `teamKey`
+4 Low). `project` is a project **name** (resolved for you like team/state/label names) — file an
+issue into a project on create or move it with `update_issue`. Reads are scoped to what your token can see — `search_issues` without a `teamKey`
 spans every team **your token has access to** (all your teams if unscoped; only the scoped
 teams if `teamIds`-restricted), not necessarily the whole workspace. A `readOnly` token is
 refused every write tool.
@@ -179,14 +189,15 @@ refused every write tool.
 
 MCP covers the common loop, but has gaps. Reach for REST (same Bearer, `/api/*`) when:
 
-- **You need to set an issue's `projectId`, `milestone`, labels-on-update, due date, estimate,
+- **You need to set an issue's `milestone`, labels-on-update, due date, estimate,
   or subscribers** — `create_issue`/`update_issue` don't expose these. Use raw REST with UUIDs.
+  (Project *is* now an MCP param — resolved by name — so setting it no longer needs REST.)
 - **You need to delete** — there is no delete tool. `DELETE /api/issues/:id`.
 
 REST write surface:
 
 ```bash
-# Create with a project (raw teamId + projectId UUIDs; get them from /api/bootstrap or list_*)
+# Create with fields MCP doesn't expose (raw UUIDs; get them from /api/bootstrap or list_*)
 curl -X POST http://localhost:8080/api/issues \
   -H "Authorization: Bearer nl_..." -H "content-type: application/json" \
   -d '{"teamId":"<uuid>","title":"…","description":"…","priority":2,
@@ -271,7 +282,8 @@ create_project({ name: "augrid v2 — column virtualization",
                  description: "…", teamKeys: ["AUGRID"] })
 ```
 
-Then set issues into it (REST `projectId` — §2) and add milestones (e.g. *alpha*, *beta*, *GA*).
+Then file issues into it (`create_issue`/`update_issue` `project:` by name — §2) and add
+milestones (e.g. *alpha*, *beta*, *GA*; milestones still need REST — §2).
 This is where you separate **reactive support** (triaged issues) from **planned delivery**
 (project + milestones + roadmap).
 
@@ -408,7 +420,8 @@ Facts:
   **`x-nonlinear-secret`**. Verify it.
 - **Delivery is fire-and-forget:** **5s timeout, no retry queue.** So **ack fast** (return 200
   immediately), then process asynchronously. If your endpoint is down, that delta is gone — fall
-  back to polling `list_my_issues` on startup to catch anything missed.
+  back to polling `my_work` on startup to catch anything missed (it covers both assignment and
+  @mentions, matching the webhook's scope; `list_my_issues` is assigned-only).
 - Forwarded models: `issue`, `comment`, `project`. Payload is `{ type: "sync.deltas", deltas:
   [...] }`; each delta has `model`, `action`, `data`.
 
@@ -457,7 +470,7 @@ aren't exposed there — so for anything that needs words, reach them via the `e
 Support is half the job — you also run your own roadmap, all through MCP/REST:
 
 - **Projects** (`create_project`) = releases / big capabilities. Keep accepted feature issues
-  filed into them (REST `projectId`).
+  filed into them (`create_issue`/`update_issue` `project:` by name).
 - **Milestones** inside a project = *alpha / beta / GA* or version cuts. Drive scope by which
   issues carry which milestone.
 - **Roadmap / timeline** — each project has a timeline position; sequence your projects there so

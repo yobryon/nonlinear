@@ -31,8 +31,9 @@ and act within that team, not the provider's whole workspace. That's expected �
 need the rest, and it's how the provider safely hosts several consumers in one instance.
 
 Confirm it immediately with `whoami` (MCP) or `GET /api/auth/me` (REST). It returns the
-user your token resolves to — your agent's name, whether it's an agent, its role. If that
-isn't who you expect, stop and sort out the credential before filing anything.
+user your token resolves to — your agent's name, whether it's an agent, its role — plus the
+`teams` you can see and your `token` scope (read-only? which teams?), so you know your limits
+up front. If that isn't who you expect, stop and sort out the credential before filing anything.
 
 > **The token _is_ the identity.** There is no "act as" selector. A token is minted for
 > exactly one user and every call authenticates as that user. If `whoami` shows a human's
@@ -90,7 +91,15 @@ Then, first call, always:
 whoami
 ```
 
-Returns your user (`name`, `displayName`, `isAgent`, `role`) and the workspace name.
+Returns your user (`name`, `displayName`, `isAgent`, `role`), the workspace name, your visible
+`teams` (the team keys you belong to), and your `token` scope (`{ readOnly, teams: "all" |
+[keys] }`) — so you learn up front whether you're read-only and which teams you can touch,
+rather than only when a write fails:
+
+```jsonc
+{ "user": {...}, "workspace": "...", "teams": ["AUGRID"], "token": { "readOnly": false, "teams": "all" } }
+```
+
 Sanity-check it's your agent identity before you write anything into someone else's tracker.
 
 ### 2.2 Learn the provider's landscape (and SEARCH FIRST)
@@ -131,16 +140,16 @@ create_issue
 ```
 
 Parameters `create_issue` accepts (and nothing else):
-`teamKey`, `title`, `description`, `priority`, `assignee`, `state`, `labels`.
+`teamKey`, `title`, `description`, `priority`, `assignee`, `state`, `labels`, `project`.
 
 Notes and honest limits:
 
 - **Priority** is `none | urgent | high | medium | low` (or `0`–`4`: 0 None, 1 Urgent,
   2 High, 3 Medium, 4 Low). Set it _honestly_ from the consumer's impact, not to jump the
   queue. Urgent means you're blocked/production-down.
-- **`create_issue` has no `project` parameter.** If the provider wants the issue on a
-  project, mention which one in the description, or do it over REST
-  (`POST /api/issues` / `PATCH /api/issues/:id` with `projectId`), or let them file it.
+- **`project`** takes a project **name** (resolved for you like team/state/label names) — but
+  usually leave it unset: which project an issue belongs to is the provider's call to make in
+  triage. Only set it if they told you to.
 - Don't set `assignee`/`state` yourself unless the provider told you to — that's theirs to
   triage. Leaving state unset lands it in their triage/backlog for a human to route.
 
@@ -185,8 +194,9 @@ You have real read-back on this path. Poll:
 get_issue identifier=AUGRID-42     # returns the issue + its full comment thread
 ```
 
-or re-run `search_issues` to sweep several at once. Interpret the workflow **state
-category** (from `list_workflow_states`), which is the signal that survives whatever the
+or re-run `search_issues` to sweep several at once. Note `search_issues` and `list_my_issues`
+return a **lean summary** (no description) — call `get_issue` for the full body + comment
+thread. Interpret the workflow **state category** (from `list_workflow_states`), which is the signal that survives whatever the
 provider names their columns:
 
 | category    | what it means for your report                                  |
@@ -229,8 +239,11 @@ issue to your agent user**. Two ways you'll notice:
   that fires only on deltas that involve your agent — an issue assigned to you (or where
   you're a subscriber), or a comment that @mentions your handle. That's your push signal;
   react to it by reading the issue and commenting back with its token.
-- **Polling (otherwise):** run `list_my_issues` to see issues assigned to you, and
-  `get_issue` on threads you're tracking to catch new comments.
+- **Polling (otherwise):** run `my_work` (no params) — it returns `{ assigned, mentioned }`,
+  catching **both** issues assigned to you and comments that @mention your handle, so it's the
+  pull-based match for the webhook above. (`list_my_issues` is assigned-only, so it misses
+  @mentions.) Both return lean summaries; `get_issue` on a thread you're tracking gives the full
+  body + new comments.
 
 Either way: when they ask for the repro or info, provide it fast. A responsive consumer
 gets its bugs fixed faster.
