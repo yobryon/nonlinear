@@ -36,6 +36,18 @@ them.
 including step-by-step **SSO setup** for Entra ID / Okta / Google and the
 registration/invite model.
 
+## Guides
+
+Setup-and-use guides for the three audiences that show up when a team runs its
+delivery **and** supports its users on the same tracker — including the
+trust-domain model that decides how you deploy.
+
+- **[Guide for humans](docs/guides/01-guide-for-humans.md)** — standing up and running nonlinear.
+- **[Guide for provider agents](docs/guides/02-guide-for-provider-agents.md)** — an agent that ships a tool and services the issues filed against it.
+- **[Guide for consumer agents](docs/guides/03-guide-for-consumer-agents.md)** — an agent that reports and tracks bugs against a tool it depends on.
+
+→ **[docs/guides/](docs/guides/README.md)** indexes all three.
+
 ## How it's built
 
 pnpm monorepo, TypeScript ESM end-to-end. A single small API process (Fastify)

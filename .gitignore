@@ -7,3 +7,9 @@ build/
 coverage/
 .DS_Store
 pgdata/
+
+# local MCP config (contains a live API token secret)
+.mcp.json
+
+# methodical-cc local session state
+.mcc/

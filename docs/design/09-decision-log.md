@@ -749,6 +749,56 @@ deleted; the drop indicator is now SortableJS's ghost placeholder styled in
 
 ---
 
+## 19. Single trust domain, documented — not silently implied
+
+**Decision.** State plainly, in the guides and here, that a nonlinear instance is
+**one trust domain**: every authenticated principal — human member, `guest`, or
+agent token — receives the *entire* workspace on bootstrap (`extras.ts` `payload`)
+and over live sync (`hub.ts` `visibleTo`). The `private` team flag, team
+membership, and the `guest` role exist as data but are **not** enforced as read
+boundaries. Rather than ship a half-isolation that reads as security, we document
+the boundary, give three deployment patterns, and file the closing work as a
+dogfooded backlog (the "Provider ↔ Consumer readiness" project in team `NON`,
+issues NON-27…NON-34).
+
+**Context.** The owner's use case is a shared hub where provider teams (a
+component like `augrid`, a toolset like `dynamics-tools`, nonlinear itself) run
+their delivery *and* let consumers — humans and agents — file and track bugs and
+requests. A red-team of the access model found the isolation primitives are
+cosmetic for reads: bootstrap returns `s.*.all()` unfiltered; the hub's per-owner
+filter only covers notifications/favorites/views/reminders/dashboards. A `private`
+team is only "don't auto-join on registration," and `guest` branches nowhere.
+
+**Alternatives considered.** (a) _Quietly add team-scoped filtering now_ — the
+"just fix it" path, but real isolation touches bootstrap, the sync hub replay,
+every MCP/REST read, and token scoping (NON-28); done hastily it invites partial
+leaks that *look* safe, which is worse than a documented single domain. (b) _Leave
+it undocumented_ — the status quo, which had already produced a live footgun: an
+open "create account" that let anyone see everything (fixed in the registration
+work), and a `private` flag that implies isolation it doesn't provide. (c)
+_Document the boundary, pattern around it, and backlog the fix_ — chosen.
+
+**Why.** The honest boundary is itself useful: for the owner's actual situation —
+their own products and their own agents — one instance is *one trust domain by
+construction*, and everything works (teams-as-products, intake, agent tokens, the
+assign/@mention → webhook → comment-back loop, roadmaps). The gap only bites when
+a *mutually-distrusting third party* needs a credential, and for that the guides
+prescribe Pattern B (one instance per product — cheap on burstable tiers) or
+Pattern C (untrusted consumers use write-only public intake). Naming the boundary
+lets an operator choose correctly; a silent half-measure would not.
+
+**Consequences.** Three audience guides live in `docs/guides/` (humans, provider
+agents, consumer agents), each opening with the trust-domain reality; the README
+and `docs/guides/README.md` index them. The identity model is stated where it
+trips people: **the token is the identity** — an agent's credential must be minted
+via `POST /api/agents/:id/tokens`, not the personal Profile → API tokens flow
+(whose misdirecting UI copy is NON-29). The closing work is real, prioritized, and
+visible in-product: NON-27 (enforce team-scoped isolation), NON-28 (scoped
+tokens), NON-30 (consumer read-back for intake), NON-31 (make `guest` real). Until
+those land, "one instance = one trust domain" is the load-bearing rule.
+
+---
+
 ## How to extend this log
 
 When you make a decision that would be expensive to reverse — a new storage
