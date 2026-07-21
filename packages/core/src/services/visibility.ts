@@ -43,6 +43,18 @@ export function seesTeam(vis: Visibility, teamId: string | null | undefined): bo
   return teamId != null && vis.teamIds.has(teamId);
 }
 
+/**
+ * Narrow a visibility by a token's team scope. A scoped credential can never
+ * widen access — it intersects with what the user could already see (an admin's
+ * `seesAll` collapses to exactly the scoped teams). `null` = no team scope.
+ */
+export function applyScope(vis: Visibility, scopeTeamIds: string[] | null | undefined): Visibility {
+  if (!scopeTeamIds) return vis;
+  const scope = new Set(scopeTeamIds);
+  if (vis.seesAll) return { seesAll: false, teamIds: scope };
+  return { seesAll: false, teamIds: new Set([...vis.teamIds].filter((t) => scope.has(t))) };
+}
+
 export function projectVisible(vis: Visibility, project: Project | undefined | null): boolean {
   if (vis.seesAll) return true;
   if (!project) return false;

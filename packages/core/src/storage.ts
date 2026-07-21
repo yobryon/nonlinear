@@ -99,6 +99,8 @@ export interface StoredApiToken {
   name: string;
   prefix: string;
   hash: string;
+  teamIds: string[] | null;
+  readOnly: boolean;
   createdAt: string;
   lastUsedAt: string | null;
   expiresAt: string | null;

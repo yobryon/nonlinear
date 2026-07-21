@@ -27,7 +27,8 @@ describe('API tokens', () => {
     expect(token.prefix.length).toBeGreaterThan(3);
 
     const authed = await domain.tokens.authenticate(secret);
-    expect(authed?.id).toBe(admin.id);
+    expect(authed?.user.id).toBe(admin.id);
+    expect(authed?.scope).toEqual({ teamIds: null, readOnly: false });
 
     // Listing never exposes the secret.
     const list = await domain.tokens.list(admin.id);

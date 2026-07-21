@@ -8,7 +8,7 @@ import type {
   User,
   Workspace,
 } from '@nonlinear/shared';
-import { filterPayload, visibilityFor } from './visibility.js';
+import { applyScope, filterPayload, visibilityFor } from './visibility.js';
 import {
   DomainError,
   created,
@@ -256,7 +256,7 @@ export class UserService {
 export class BootstrapService {
   constructor(private ctx: Ctx) {}
 
-  async payload(userId: string): Promise<BootstrapPayload> {
+  async payload(userId: string, scopeTeamIds?: string[] | null): Promise<BootstrapPayload> {
     const s = this.ctx.storage;
     const workspace = (await s.workspaces.all())[0];
     if (!workspace) throw notFound('Workspace');
@@ -352,8 +352,9 @@ export class BootstrapService {
       dashboards: dashboards.filter((d) => d.shared || d.creatorId === userId),
     };
     // Team-scoped read isolation: a non-admin receives only the teams they
-    // belong to and the entities hanging off them.
-    const vis = await visibilityFor(this.ctx, userId);
+    // belong to and the entities hanging off them, further narrowed by any
+    // team scope the presented token carries.
+    const vis = applyScope(await visibilityFor(this.ctx, userId), scopeTeamIds);
     return filterPayload(full, vis);
   }
 }

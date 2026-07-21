@@ -10,6 +10,8 @@ interface Vis {
 interface Connection {
   socket: WebSocket;
   userId: string;
+  /** Team scope the presenting token carries (null = all the user's teams). */
+  scopeTeamIds: string[] | null;
   /** Team-scoped read visibility, resolved before the connection joins the
    *  broadcast set. */
   vis: Vis;
@@ -59,13 +61,22 @@ export class SyncHub {
     for (const m of memberships) this.membershipInfo.set(m.id, { userId: m.userId, teamId: m.teamId });
   }
 
-  private async computeVis(userId: string): Promise<Vis> {
+  private async computeVis(userId: string, scopeTeamIds: string[] | null): Promise<Vis> {
     const s = this.domain.ctx.storage;
     const user = await s.users.get(userId);
-    if (user?.role === 'admin') return { seesAll: true, teamIds: new Set() };
-    const teamIds = new Set<string>();
-    for (const m of await s.teamMemberships.all()) if (m.userId === userId) teamIds.add(m.teamId);
-    return { seesAll: false, teamIds };
+    let vis: Vis;
+    if (user?.role === 'admin') {
+      vis = { seesAll: true, teamIds: new Set() };
+    } else {
+      const teamIds = new Set<string>();
+      for (const m of await s.teamMemberships.all()) if (m.userId === userId) teamIds.add(m.teamId);
+      vis = { seesAll: false, teamIds };
+    }
+    if (!scopeTeamIds) return vis;
+    // A scoped token can only narrow: an admin collapses to exactly its scope.
+    const scope = new Set(scopeTeamIds);
+    if (vis.seesAll) return { seesAll: false, teamIds: scope };
+    return { seesAll: false, teamIds: new Set([...vis.teamIds].filter((t) => scope.has(t))) };
   }
 
   /** Keep the resolution indexes current with a create/update delta. */
@@ -198,8 +209,14 @@ export class SyncHub {
       }
       for (const conn of this.connections) {
         if (conn.userId !== userId || conn.vis.seesAll) continue;
-        if (added) conn.vis.teamIds.add(teamId);
-        else conn.vis.teamIds.delete(teamId);
+        if (added) {
+          // A scoped connection ignores teams outside its scope.
+          if (conn.scopeTeamIds && !conn.scopeTeamIds.includes(teamId)) continue;
+          conn.vis.teamIds.add(teamId);
+        } else {
+          if (!conn.vis.teamIds.has(teamId)) continue;
+          conn.vis.teamIds.delete(teamId);
+        }
         reboot.add(conn);
       }
     }
@@ -217,11 +234,11 @@ export class SyncHub {
     }
   }
 
-  add(socket: WebSocket, userId: string): void {
+  add(socket: WebSocket, userId: string, scopeTeamIds: string[] | null = null): void {
     // Resolve visibility before joining the broadcast set. Deltas in the tiny
     // pre-registration window are recovered by the hello replay below.
-    void this.computeVis(userId).then((vis) => {
-      const conn: Connection = { socket, userId, vis, replaying: true, buffer: [] };
+    void this.computeVis(userId, scopeTeamIds).then((vis) => {
+      const conn: Connection = { socket, userId, scopeTeamIds, vis, replaying: true, buffer: [] };
       this.connections.add(conn);
 
       socket.on('message', (raw: Buffer) => {

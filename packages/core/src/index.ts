@@ -30,6 +30,7 @@ export * from './services/docComments.js';
 export * from './services/triageRules.js';
 export * from './services/importer.js';
 export * from './services/tokens.js';
+export * from './services/visibility.js';
 export * from './services/audit.js';
 export * from './services/dashboards.js';
 export * from './services/ai.js';

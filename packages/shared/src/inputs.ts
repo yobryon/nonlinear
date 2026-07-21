@@ -199,6 +199,10 @@ export interface CreateApiTokenInput {
   name: string;
   /** Days until expiry; omitted = never. */
   expiresInDays?: number;
+  /** Restrict the token to these teams; omitted/null = all the owner's teams. */
+  teamIds?: string[] | null;
+  /** A read-only token may not perform mutations. */
+  readOnly?: boolean;
 }
 
 /** Returned once on creation — carries the plaintext secret. */

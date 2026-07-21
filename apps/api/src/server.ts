@@ -3,7 +3,7 @@ import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
 import multipart from '@fastify/multipart';
 import { DomainError, type Domain } from '@nonlinear/core';
-import type { User } from '@nonlinear/shared';
+import type { TokenScope, User } from '@nonlinear/shared';
 import type { Config } from './config.js';
 import { SyncHub } from './hub.js';
 import { registerGithubWebhook } from './github.js';
@@ -21,8 +21,13 @@ const SESSION_COOKIE = 'nl_session';
 declare module 'fastify' {
   interface FastifyRequest {
     user: User;
+    /** Authority the presented credential carries (full for cookie sessions). */
+    tokenScope: TokenScope;
   }
 }
+
+const FULL_SCOPE: TokenScope = { teamIds: null, readOnly: false };
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export async function buildServer(domain: Domain, config: Config): Promise<FastifyInstance> {
   const app = Fastify({ logger: true, bodyLimit: 1024 * 1024 });
@@ -70,22 +75,32 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
 
   // Two ways to authenticate: the browser session cookie, or a personal API
   // token as `Authorization: Bearer <token>` (used by scripts, agents, and MCP).
-  async function resolveUser(req: FastifyRequest): Promise<User | null> {
+  async function resolveAuth(
+    req: FastifyRequest,
+  ): Promise<{ user: User; scope: TokenScope } | null> {
     const auth = req.headers.authorization;
     if (auth?.startsWith('Bearer ')) {
       return domain.tokens.authenticate(auth.slice(7).trim());
     }
     const cookie = req.cookies[SESSION_COOKIE];
-    return cookie ? domain.auth.authenticate(cookie) : null;
+    const user = cookie ? await domain.auth.authenticate(cookie) : null;
+    return user ? { user, scope: FULL_SCOPE } : null;
   }
 
   async function requireUser(req: FastifyRequest, reply: FastifyReply): Promise<void> {
-    const user = await resolveUser(req);
-    if (!user) {
+    const resolved = await resolveAuth(req);
+    if (!resolved) {
       reply.status(401).send({ error: { code: 'unauthorized', message: 'Sign in required' } });
       return;
     }
-    req.user = user;
+    if (resolved.scope.readOnly && !SAFE_METHODS.has(req.method)) {
+      reply
+        .status(403)
+        .send({ error: { code: 'read_only', message: 'This token is read-only' } });
+      return;
+    }
+    req.user = resolved.user;
+    req.tokenScope = resolved.scope;
   }
 
   const authed = { preHandler: requireUser };
@@ -245,11 +260,11 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     for (const team of await domain.ctx.storage.teams.all()) {
       if (team.cyclesEnabled) await domain.cycles.ensureCurrentCycles(team.id);
     }
-    return domain.bootstrap.payload(req.user.id);
+    return domain.bootstrap.payload(req.user.id, req.tokenScope.teamIds);
   });
 
   app.get('/api/ws', { websocket: true, preHandler: requireUser }, (socket, req) => {
-    hub.add(socket, req.user.id);
+    hub.add(socket, req.user.id, req.tokenScope.teamIds);
   });
 
   // ---- issues ----

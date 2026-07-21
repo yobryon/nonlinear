@@ -1,5 +1,11 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import type { ApiToken, CreateApiTokenInput, CreatedApiToken, User } from '@nonlinear/shared';
+import type {
+  ApiToken,
+  CreateApiTokenInput,
+  CreatedApiToken,
+  TokenScope,
+  User,
+} from '@nonlinear/shared';
 import { DomainError, notFound, type Ctx } from '../domain.js';
 import { newId, newToken } from '../util/ids.js';
 import { nowIso } from '../util/time.js';
@@ -17,11 +23,16 @@ function toPublic(t: StoredApiToken): ApiToken {
     userId: t.userId,
     name: t.name,
     prefix: t.prefix,
+    teamIds: t.teamIds,
+    readOnly: t.readOnly,
     createdAt: t.createdAt,
     lastUsedAt: t.lastUsedAt,
     expiresAt: t.expiresAt,
   };
 }
+
+/** Full authority — a session cookie or an unrestricted token. */
+export const FULL_SCOPE: TokenScope = { teamIds: null, readOnly: false };
 
 /**
  * Personal API tokens for programmatic access (REST + MCP). Tokens are
@@ -37,12 +48,16 @@ export class TokenService {
     if (!(await this.ctx.storage.users.get(userId))) throw notFound('User');
 
     const secret = `${TOKEN_PREFIX}${newToken()}`;
+    const teamIds =
+      input.teamIds && input.teamIds.length > 0 ? [...new Set(input.teamIds)] : null;
     const stored: StoredApiToken = {
       id: newId(),
       userId,
       name,
       prefix: secret.slice(0, TOKEN_PREFIX.length + 6),
       hash: hashToken(secret),
+      teamIds,
+      readOnly: input.readOnly === true,
       createdAt: nowIso(),
       lastUsedAt: null,
       expiresAt:
@@ -64,10 +79,11 @@ export class TokenService {
   }
 
   /**
-   * Resolve a raw bearer token to its active user, updating last-used.
-   * Returns null for unknown, expired, or inactive-user tokens.
+   * Resolve a raw bearer token to its active user and the scope the token
+   * carries, updating last-used. Returns null for unknown, expired, or
+   * inactive-user tokens.
    */
-  async authenticate(raw: string): Promise<User | null> {
+  async authenticate(raw: string): Promise<{ user: User; scope: TokenScope } | null> {
     if (!raw.startsWith(TOKEN_PREFIX)) return null;
     const candidateHash = hashToken(raw);
     const stored = await this.ctx.storage.apiTokens.getByHash(candidateHash);
@@ -80,6 +96,6 @@ export class TokenService {
     const user = await this.ctx.storage.users.get(stored.userId);
     if (!user || !user.active) return null;
     await this.ctx.storage.apiTokens.touchLastUsed(stored.id, nowIso());
-    return user;
+    return { user, scope: { teamIds: stored.teamIds, readOnly: stored.readOnly } };
   }
 }

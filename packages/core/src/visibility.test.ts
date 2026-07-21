@@ -103,6 +103,21 @@ describe('team-scoped read isolation', () => {
     expect(view.issues.length).toBe(1);
   });
 
+  it('a scoped token narrows even an admin to its teams', async () => {
+    await domain.issues.create(admin.id, { teamId: teamA.id, title: 'A work' });
+    const teamB = await domain.teams.create(admin.id, { name: 'Beta', key: 'BETA' });
+    await domain.issues.create(admin.id, { teamId: teamB.id, title: 'B work' });
+
+    // Unscoped: the admin sees both teams.
+    const full = await domain.bootstrap.payload(admin.id);
+    expect(full.teams.length).toBe(2);
+
+    // A token scoped to team A collapses the admin's view to just team A.
+    const scoped = await domain.bootstrap.payload(admin.id, [teamA.id]);
+    expect(scoped.teams.map((t) => t.id)).toEqual([teamA.id]);
+    expect(scoped.issues.every((i) => i.teamId === teamA.id)).toBe(true);
+  });
+
   it('webhooks are never sent to non-admins', async () => {
     await domain.webhooks.create(admin.id, 'https://example.com/hook');
     const member = (

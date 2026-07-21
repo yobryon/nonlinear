@@ -342,9 +342,20 @@ export interface ApiToken {
   name: string;
   /** First chars of the token for display ("nl_abc…"). */
   prefix: string;
+  /** Teams the token is restricted to; null = all the owner's teams. */
+  teamIds: string[] | null;
+  /** A read-only token may not perform mutations. */
+  readOnly: boolean;
   createdAt: string;
   lastUsedAt: string | null;
   expiresAt: string | null;
+}
+
+/** The effective authority a credential carries. `null` teamIds = all the
+ *  user's teams; session cookies always carry full authority (a null scope). */
+export interface TokenScope {
+  teamIds: string[] | null;
+  readOnly: boolean;
 }
 
 /** Saved issue view: a named filter/group/display configuration. */

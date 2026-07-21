@@ -2,8 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import type { Domain } from '@nonlinear/core';
-import type { Issue, Priority, User } from '@nonlinear/shared';
+import { applyScope, seesTeam, visibilityFor, type Domain, type Visibility } from '@nonlinear/core';
+import type { Issue, Priority, TokenScope, User } from '@nonlinear/shared';
 import { PRIORITY_LABELS } from '@nonlinear/shared';
 
 /**
@@ -34,21 +34,22 @@ function parsePriority(value: string | number | undefined): Priority | undefined
   return Number.isNaN(n) ? undefined : (Math.max(0, Math.min(4, n)) as Priority);
 }
 
-async function resolveTeam(domain: Domain, teamKey: string) {
+async function resolveTeam(domain: Domain, teamKey: string, vis: Visibility) {
   const team = (await domain.ctx.storage.teams.all()).find(
     (t) => t.key.toUpperCase() === teamKey.toUpperCase(),
   );
-  if (!team) throw new Error(`Unknown team "${teamKey}"`);
+  // A team the credential can't see is reported as unknown (don't leak existence).
+  if (!team || !seesTeam(vis, team.id)) throw new Error(`Unknown team "${teamKey}"`);
   return team;
 }
 
-async function resolveIssue(domain: Domain, identifier: string): Promise<Issue> {
+async function resolveIssue(domain: Domain, identifier: string, vis: Visibility): Promise<Issue> {
   const dash = identifier.lastIndexOf('-');
   if (dash < 1) throw new Error(`Bad issue identifier "${identifier}" (expected e.g. ENG-42)`);
   const key = identifier.slice(0, dash).toUpperCase();
   const number = Number(identifier.slice(dash + 1));
   const team = (await domain.ctx.storage.teams.all()).find((t) => t.key.toUpperCase() === key);
-  if (!team) throw new Error(`Unknown team "${key}"`);
+  if (!team || !seesTeam(vis, team.id)) throw new Error(`Issue ${identifier} not found`);
   const issue = (await domain.ctx.storage.issues.byTeam(team.id)).find((i) => i.number === number);
   if (!issue) throw new Error(`Issue ${identifier} not found`);
   return issue;
@@ -127,9 +128,13 @@ const fail = (message: string) => ({
 });
 
 /** Build a per-request MCP server whose tools act as `user`. */
-function buildServer(domain: Domain, user: User): McpServer {
+function buildServer(domain: Domain, user: User, vis: Visibility, readOnly: boolean): McpServer {
   const server = new McpServer({ name: 'nonlinear', version: '1.0.0' });
   const s = domain.ctx.storage;
+  const guardWrite = () => {
+    if (readOnly) throw new Error('This API token is read-only');
+  };
+  const projectVisible = (teamIds: string[]) => vis.seesAll || teamIds.some((t) => seesTeam(vis, t));
 
   server.registerTool(
     'whoami',
@@ -151,7 +156,12 @@ function buildServer(domain: Domain, user: User): McpServer {
   server.registerTool(
     'list_teams',
     { description: 'List all teams with their keys.', inputSchema: {} },
-    async () => ok((await s.teams.all()).map((t) => ({ key: t.key, name: t.name }))),
+    async () =>
+      ok(
+        (await s.teams.all())
+          .filter((t) => seesTeam(vis, t.id))
+          .map((t) => ({ key: t.key, name: t.name })),
+      ),
   );
 
   server.registerTool(
@@ -169,7 +179,11 @@ function buildServer(domain: Domain, user: User): McpServer {
     'list_projects',
     { description: 'List projects.', inputSchema: {} },
     async () =>
-      ok((await s.projects.all()).map((p) => ({ id: p.id, name: p.name, status: p.status }))),
+      ok(
+        (await s.projects.all())
+          .filter((p) => projectVisible(p.teamIds))
+          .map((p) => ({ id: p.id, name: p.name, status: p.status })),
+      ),
   );
 
   server.registerTool(
@@ -179,7 +193,7 @@ function buildServer(domain: Domain, user: User): McpServer {
       inputSchema: { teamKey: z.string().describe('Team key, e.g. ENG') },
     },
     async ({ teamKey }) => {
-      const team = await resolveTeam(domain, teamKey);
+      const team = await resolveTeam(domain, teamKey, vis);
       const states = (await s.workflowStates.all())
         .filter((x) => x.teamId === team.id)
         .sort((a, b) => a.position - b.position);
@@ -194,9 +208,11 @@ function buildServer(domain: Domain, user: User): McpServer {
       inputSchema: { teamKey: z.string().optional() },
     },
     async ({ teamKey }) => {
-      const team = teamKey ? await resolveTeam(domain, teamKey) : null;
+      const team = teamKey ? await resolveTeam(domain, teamKey, vis) : null;
       const labels = (await s.labels.all()).filter(
-        (l) => !team || l.teamId === null || l.teamId === team.id,
+        (l) =>
+          (l.teamId === null || seesTeam(vis, l.teamId)) &&
+          (!team || l.teamId === null || l.teamId === team.id),
       );
       return ok(labels.map((l) => l.name));
     },
@@ -217,9 +233,9 @@ function buildServer(domain: Domain, user: User): McpServer {
       },
     },
     async ({ query, teamKey, assignee, state, priority, limit }) => {
-      let issues = (await s.issues.all()).filter((i) => !i.archivedAt);
+      let issues = (await s.issues.all()).filter((i) => !i.archivedAt && seesTeam(vis, i.teamId));
       if (teamKey) {
-        const team = await resolveTeam(domain, teamKey);
+        const team = await resolveTeam(domain, teamKey, vis);
         issues = issues.filter((i) => i.teamId === team.id);
       }
       if (assignee) {
@@ -264,7 +280,7 @@ function buildServer(domain: Domain, user: User): McpServer {
       inputSchema: { identifier: z.string() },
     },
     async ({ identifier }) => {
-      const issue = await resolveIssue(domain, identifier);
+      const issue = await resolveIssue(domain, identifier, vis);
       const comments = (await s.comments.all())
         .filter((c) => c.issueId === issue.id)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -285,7 +301,7 @@ function buildServer(domain: Domain, user: User): McpServer {
     { description: 'List issues assigned to the authenticated user.', inputSchema: {} },
     async () => {
       const mine = (await s.issues.all())
-        .filter((i) => i.assigneeId === user.id && !i.archivedAt)
+        .filter((i) => i.assigneeId === user.id && !i.archivedAt && seesTeam(vis, i.teamId))
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       return ok(await Promise.all(mine.map((i) => serializeIssue(domain, i))));
     },
@@ -308,7 +324,8 @@ function buildServer(domain: Domain, user: User): McpServer {
     },
     async ({ teamKey, title, description, priority, assignee, state, labels }) => {
       try {
-        const team = await resolveTeam(domain, teamKey);
+        guardWrite();
+        const team = await resolveTeam(domain, teamKey, vis);
         const issue = await domain.issues.create(user.id, {
           teamId: team.id,
           title,
@@ -340,7 +357,8 @@ function buildServer(domain: Domain, user: User): McpServer {
     },
     async ({ identifier, title, description, state, priority, assignee }) => {
       try {
-        const issue = await resolveIssue(domain, identifier);
+        guardWrite();
+        const issue = await resolveIssue(domain, identifier, vis);
         const updated = await domain.issues.update(user.id, issue.id, {
           title,
           description,
@@ -363,7 +381,8 @@ function buildServer(domain: Domain, user: User): McpServer {
     },
     async ({ identifier, body }) => {
       try {
-        const issue = await resolveIssue(domain, identifier);
+        guardWrite();
+        const issue = await resolveIssue(domain, identifier, vis);
         const comment = await domain.comments.create(user.id, { issueId: issue.id, body });
         return ok({ ok: true, commentId: comment.id });
       } catch (err) {
@@ -384,8 +403,9 @@ function buildServer(domain: Domain, user: User): McpServer {
     },
     async ({ name, description, teamKeys }) => {
       try {
+        guardWrite();
         const teamIds = [];
-        for (const key of teamKeys) teamIds.push((await resolveTeam(domain, key)).id);
+        for (const key of teamKeys) teamIds.push((await resolveTeam(domain, key, vis)).id);
         const project = await domain.projects.create({ name, description, teamIds });
         return ok({ id: project.id, name: project.name });
       } catch (err) {
@@ -400,7 +420,7 @@ function buildServer(domain: Domain, user: User): McpServer {
 export function registerMcp(
   app: FastifyInstance,
   domain: Domain,
-  authenticate: (bearer: string) => Promise<User | null>,
+  authenticate: (bearer: string) => Promise<{ user: User; scope: TokenScope } | null>,
 ): void {
   const handle = async (
     req: import('fastify').FastifyRequest,
@@ -416,15 +436,19 @@ export function registerMcp(
         },
       });
     }
-    const user = await authenticate(auth.slice(7).trim());
-    if (!user) {
+    const resolved = await authenticate(auth.slice(7).trim());
+    if (!resolved) {
       return reply
         .status(401)
         .send({ error: { code: 'unauthorized', message: 'Invalid API token' } });
     }
+    const vis = applyScope(
+      await visibilityFor(domain.ctx, resolved.user.id),
+      resolved.scope.teamIds,
+    );
 
     // Stateless: one server + transport per request, torn down on close.
-    const server = buildServer(domain, user);
+    const server = buildServer(domain, resolved.user, vis, resolved.scope.readOnly);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     reply.raw.on('close', () => {
       void transport.close();

@@ -216,6 +216,8 @@ class PgApiTokenStore implements ApiTokenStore {
     name: string;
     prefix: string;
     hash: string;
+    team_ids: string[] | null;
+    read_only: boolean | null;
     created_at: Date;
     last_used_at: Date | null;
     expires_at: Date | null;
@@ -226,6 +228,8 @@ class PgApiTokenStore implements ApiTokenStore {
       name: row.name,
       prefix: row.prefix,
       hash: row.hash,
+      teamIds: row.team_ids ?? null,
+      readOnly: row.read_only ?? false,
       createdAt: row.created_at.toISOString(),
       lastUsedAt: row.last_used_at ? row.last_used_at.toISOString() : null,
       expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
@@ -234,14 +238,17 @@ class PgApiTokenStore implements ApiTokenStore {
 
   async create(token: StoredApiToken): Promise<void> {
     await this.pool.query(
-      `INSERT INTO api_tokens (id, user_id, name, prefix, hash, created_at, last_used_at, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      `INSERT INTO api_tokens
+         (id, user_id, name, prefix, hash, team_ids, read_only, created_at, last_used_at, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         token.id,
         token.userId,
         token.name,
         token.prefix,
         token.hash,
+        token.teamIds ? JSON.stringify(token.teamIds) : null,
+        token.readOnly,
         token.createdAt,
         token.lastUsedAt,
         token.expiresAt,
