@@ -26,6 +26,10 @@ The provider's admin created an **agent user** for you and minted a **Bearer tok
 it. With that token you get the full loop: file issues, search, poll status, comment,
 and respond when the provider @mentions or assigns you. This is MCP + REST.
 
+Your token is usually **scoped to the provider's team** (and may be **read-only**): you see
+and act within that team, not the provider's whole workspace. That's expected — you don't
+need the rest, and it's how the provider safely hosts several consumers in one instance.
+
 Confirm it immediately with `whoami` (MCP) or `GET /api/auth/me` (REST). It returns the
 user your token resolves to — your agent's name, whether it's an agent, its role. If that
 isn't who you expect, stop and sort out the credential before filing anything.
@@ -35,28 +39,30 @@ isn't who you expect, stop and sort out the credential before filing anything.
 > name, someone handed you a personal token bound to that human — you'll be acting as them,
 > not as your own agent. Get the right token (see §6 gotcha).
 
-### (b) You only have a public intake URL — the anonymous, write-only path
+### (b) You only have a public intake URL — the anonymous path
 
 The provider gave you a link like `http://provider-host/api/public/intake/AUGRID` and
-nothing else. You can POST a report. **You cannot read status back — the intake channel is
-write-only.** The POST returns an identifier (`AUGRID-123`) and that's the last thing you
-ever learn through this channel. There is no anonymous endpoint to poll it.
+nothing else. You can POST a report and get **limited read-back**: the POST returns an
+identifier (`AUGRID-123`) **and a signed `statusUrl`**. Fetching that URL shows the issue's
+state/category — but nothing else (no comments), and you can't file follow-ups or converse
+through it.
 
 What to do when you're on this path:
 
-- **Capture the returned `identifier`** (`AUGRID-123`) the instant you get it. It is your
-  only handle on the issue. Log it, store it, echo it to your user.
-- **Expect status out-of-band.** The provider will reach you (or your human) some other
-  way — email, a shared channel, a release note. nonlinear will not tell you.
-- **If you actually need to track outcomes, ask for an account.** Request that the
-  provider create an agent user + token for you. Then you're on path (a) and everything in
-  §2 opens up.
+- **Capture the returned `identifier` and `statusUrl`** the instant you get them. The
+  identifier is your handle; the `statusUrl` is how you check progress. Log and store both.
+- **Poll `statusUrl` for state, expect the rest out-of-band.** It tells you accepted /
+  in-progress / fixed; for questions or detail the provider reaches you another way — email,
+  a shared channel, a release note.
+- **If you need to comment or be @mentioned back, ask for an account.** Request that the
+  provider create an agent user + token for you (usually scoped to their team). Then you're
+  on path (a) and everything in §2 opens up.
 
-Why the split exists: in nonlinear today, **any authenticated principal sees the entire
-workspace** — every team, issue, project, comment. So providers hand out accounts only to
-consumers they're willing to let read everything, and route everyone else through
-write-only intake. Don't take it personally if you're on intake; it's a trust-domain
-decision, not a judgment. More on this in §5.
+Why the split exists: nonlinear enforces **team-scoped isolation** — a member/guest/token
+sees only the teams it's in. Providers give trusted consumers a guest account or a
+team-scoped token (so you see their team, not their whole workspace), and route everyone
+else through anonymous intake. Being on intake isn't a judgment — it's just the lightest
+trust level. More on this in §5.
 
 ---
 
@@ -233,29 +239,33 @@ gets its bugs fixed faster.
 
 ## 3. If you only have an intake URL — the anonymous path
 
-This is the write-only channel. Exact contract, verified against the code.
+This is the anonymous channel: write in, plus a signed status link to read state back. Exact
+contract, verified against the code.
 
 ### 3.1 The endpoints
 
 ```
-GET  /api/public/intake/:teamKey/meta   -> { "teamName": "...", "enabled": true|false }
-POST /api/public/intake/:teamKey        -> creates an issue
+GET  /api/public/intake/:teamKey/meta         -> { "teamName": "...", "enabled": true|false }
+POST /api/public/intake/:teamKey              -> creates an issue, returns { ok, identifier, statusUrl }
+GET  /api/public/intake/status/:id/:sig       -> submitter-facing status (state/category, no comments)
 ```
 
 - Check `meta` first. If `enabled` is `false` (or the team doesn't exist), the POST returns
   `404` — the form isn't accepting requests and you should fall back to asking for an
   account or another channel.
-- **POST body is JSON:** `{ "title": "...", "description": "...", "email": "..." }`.
-  `title` is required; `description` and `email` are optional. (The same endpoint also
-  accepts Slack slash-command form payloads, but as an agent you'll send JSON.)
+- **POST body is JSON:** `{ "title", "description"?, "email"?, "labels"?, "type"?, "reporter"? }`.
+  `title` is required; the rest are optional (`labels[]`, a `type`, and a `reporter` name that
+  gets recorded on the issue). The same endpoint also accepts Slack slash-command form
+  payloads, but as an agent you'll send JSON.
 - **Optional intake token:** if the provider gave you one, pass it as `?token=…`, header
   `X-Intake-Token: …`, or body `token`. It only marks your request "trusted" to **skip
   rate limiting** — it is a rate-limit bypass, **not** a requirement and **not** a login.
-- **Rate limit:** anonymous posts are limited to **10 requests per 60 seconds per IP**
-  (in-process). Batch sensibly; don't hammer it.
-- **The response is all you get:** `{ "ok": true, "identifier": "AUGRID-123" }`. There is
-  **no** way to read that issue's status back through intake afterward. Capture the
-  identifier.
+- **Abuse controls:** a honeypot field and a per-team daily quota, plus a **10 requests per
+  60 seconds per IP** anonymous rate limit (in-process). Batch sensibly; don't hammer it.
+- **The response gives you read-back:** `{ "ok": true, "identifier": "AUGRID-123",
+  "statusUrl": "/api/public/intake/status/<id>/<sig>" }`. Capture **both** — GET the
+  `statusUrl` later to see the issue's current state/category (no comments). For anything
+  more (commenting, being @mentioned back) you need an account.
 
 ### 3.2 Put everything in the body — attribution is otherwise blank
 
@@ -280,7 +290,8 @@ curl -sX POST http://provider-host:8080/api/public/intake/AUGRID \
     "email": "agent@orderflow.example",
     "description": "augrid 3.2.1 / React 18.3 / Chrome 126.\n\nExpected: deleting a row returns focus to the next row.\nActual: focus jumps to the deleted row'\''s drag handle; keyboard nav dead until click.\n\nRepro:\n1. Render <AugridGrid> 5 rows, focus row 3.\n2. Cmd+Backspace to delete.\n3. ArrowDown -> nothing.\n\nImpact: blocks keyboard/AT users of our order table. Filed by agent @orderflow-bot, project orderflow-web."
   }'
-# -> { "ok": true, "identifier": "AUGRID-124" }
+# -> { "ok": true, "identifier": "AUGRID-124", "statusUrl": "/api/public/intake/status/<id>/<sig>" }
+# Later, check status:  curl -s http://provider-host:8080<statusUrl>   # -> state + category
 ```
 
 ### 3.4 fetch
@@ -302,8 +313,8 @@ const res = await fetch("http://provider-host:8080/api/public/intake/AUGRID", {
       "Impact: blocks keyboard/AT users. Agent @orderflow-bot, project orderflow-web.",
   }),
 });
-const { ok, identifier } = await res.json();
-console.log("filed", identifier); // <- store this; it's your only handle
+const { ok, identifier, statusUrl } = await res.json();
+console.log("filed", identifier, "track at", statusUrl); // <- store both; statusUrl gives read-back
 ```
 
 ---
@@ -379,10 +390,10 @@ You're a guest in someone else's tracker. Behave like one.
   new evidence instead. No tight polling loops. No pinging assignees repeatedly.
 - **Keep secrets out of issue bodies.** No API keys, tokens, customer PII, or internal
   URLs in titles/descriptions/comments — sanitize repros. And know the trust reality:
-  **if you have an account, you can read the _entire_ workspace** — every team, issue,
-  project, comment, customer. That's not a bug you should exploit; it's a reason to behave.
-  Don't exfiltrate the provider's roadmap or other consumers' reports, and don't leak your
-  own secrets into a space others can read.
+  with an account you can read **everything in the team(s) you're in** — every issue,
+  comment, and customer there, including other consumers' reports (isolation is at the team
+  boundary). That's not a bug you should exploit; it's a reason to behave. Don't harvest
+  other consumers' reports, and don't leak your own secrets into a space the team can read.
 - **Close the loop.** When asked to verify a fix, actually run your repro and report the
   result — confirm it works, or say precisely why it doesn't. Silence makes you the reason
   the issue lingers.
@@ -393,16 +404,16 @@ You're a guest in someone else's tracker. Behave like one.
 
 Get the **right** token. There is a real trap here:
 
-- An **agent token** authenticates AS your agent user. It's minted **only** via
-  `POST /api/agents/:id/tokens` (admin-only). Put _that_ secret in your `.mcp.json`.
+- An **agent token** authenticates AS your agent user. The admin mints it from Settings →
+  Members → Agents → **"Mint token"**, or via `POST /api/agents/:id/tokens` (the API route is
+  also how they scope it to their team / make it read-only). Put _that_ secret in your
+  `.mcp.json`.
 - A **personal token** (Profile → API tokens) is bound to the human who minted it. If the
   provider's admin mints one of those and hands it to you, every call you make will act as
   **that human**, not your agent — and @mentions/assignment routing to your handle won't
   work.
-- The Members → Agents help text currently (mis)directs admins to "mint one in Profile →
-  API tokens," which produces the wrong (personal) token. There's no UI button for agent
-  tokens yet. So: **`whoami` on day one.** If it isn't your agent, ask the admin to run
-  `POST /api/agents/:id/tokens` and give you that token instead.
+- So: **`whoami` on day one.** If it isn't your agent, ask the admin to re-mint via the
+  Agents "Mint token" button (or `POST /api/agents/:id/tokens`) and give you that token.
 
 ---
 
@@ -435,8 +446,9 @@ curl -sX POST http://provider-host:8080/api/public/intake/AUGRID \
   -d '{"title":"Grid drag-handle steals keyboard focus after row delete",
        "email":"agent@orderflow.example",
        "description":"augrid 3.2.1/React 18.3/Chrome 126. Expected focus to next row; actual traps on drag handle. Repro: 5 rows, focus row 3, Cmd+Backspace, ArrowDown. Impact: blocks keyboard/AT users. Agent @orderflow-bot, project orderflow-web."}'
-# -> {"ok":true,"identifier":"AUGRID-124"}   <- store it; you can't read status back.
-# Expect the provider to reach you out-of-band. Need to track it? Ask for an agent account.
+# -> {"ok":true,"identifier":"AUGRID-124","statusUrl":"/api/public/intake/status/<id>/<sig>"}
+curl -s http://provider-host:8080/api/public/intake/status/<id>/<sig>   # <- state read-back (no comments)
+# Need to comment or be @mentioned back? Ask for a (team-scoped) agent account.
 ```
 
 ---

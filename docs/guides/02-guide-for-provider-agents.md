@@ -14,37 +14,40 @@ Related guides:
   against you. Hand them that one.
 - `docs/configuration.md` — every env var (storage, SSO, SCIM, SMTP, AI, blob backend).
 
-Before anything else, internalize the **one trust-domain reality** in
-[§0](#0-the-trust-domain-reality-read-this-first). It changes how you onboard consumers.
+Before anything else, internalize the **trust-domain model** in
+[§0](#0-the-trust-domain-model-read-this-first). It changes how you onboard consumers.
 
 ---
 
-## 0. The trust-domain reality (read this first)
+## 0. The trust-domain model (read this first)
 
-nonlinear today is a **single trust domain**. Every authenticated principal — human member,
-guest, *or* agent token — receives the **entire workspace** on bootstrap (`/api/bootstrap`) and
-over live sync: all teams, all issues, all projects, all comments, all documents, all customers.
+nonlinear enforces **team-scoped isolation**. A non-admin principal — human member, guest,
+*or* agent token — receives **only the teams it belongs to** on bootstrap (`/api/bootstrap`)
+and over live sync: their issues, projects, comments, documents, customers. (Admins receive
+the whole workspace.)
 
-- The `private` team flag only controls auto-join-on-registration. It does **not** hide a
-  team's data from reads. Team membership and the `guest` role are cosmetic for reads.
-- There is **no per-team or per-token read scoping** anywhere.
-- Therefore: anyone you hand an account or token to can read everything.
+- The `private` team flag now genuinely **gates reads** as well as auto-join: non-members
+  can't see a team's data. Team membership and the `guest` role are **enforced**.
+- Tokens can be **scoped** (`teamIds`) and/or **read-only** (`readOnly`) — narrow-only.
+- So a consumer you add to just your team sees only your team, not other teams or your roadmap.
 
-This dictates how you onboard consumers. Three deployment patterns:
+Isolation is at the **team boundary**, not per-issue. This shapes how you onboard consumers.
+Deployment patterns:
 
-- **Pattern A — one instance, one trust domain (recommended default).** You and all your own
-  products/agents live in one instance as separate teams. Everyone with a credential is trusted.
-  Best when an owner runs several of their *own* tools/components/agents.
-- **Pattern B — one instance per product.** If your consumers are mutually-distrusting third
-  parties who must not see each other (or your roadmap), run a **separate nonlinear per
+- **Pattern A — one shared instance (recommended default).** Host trusted teammates *and*
+  mutually-distrusting consumers together. Give each consumer a **guest account** added only
+  to your team, or a **scoped token** limited to your team — they see only that team, not your
+  other teams/roadmap or each other. Covers most cases now.
+- **Pattern B — one instance per product (maximum isolation).** Only when consumers must not
+  even know other teams *exist*, or for regulatory separation: run a **separate nonlinear per
   product**. It's cheap — burstable Postgres, one small API process.
-- **Pattern C — untrusted consumers use public intake only.** Third parties you don't want
-  reading the workspace get **no account and no token** — they file through the unauthenticated,
-  write-only intake form (§4). Only trusted teammates/agents get credentials.
+- **Pattern C — untrusted anonymous consumers use public intake.** Parties who get no account
+  or token file through the unauthenticated intake form (§4) — which now returns a signed
+  status link so they can still track their submission.
 
-The roadmap to close this gap is dogfooded in the **"Provider ↔ Consumer readiness"** project in
-team `NON` (issues NON-27 team-scoped isolation, NON-28 scoped tokens, NON-30 consumer read-back,
-NON-31 real guest role). Until those land, treat every credential as full read access.
+How this model was built is dogfooded in the **"Provider ↔ Consumer readiness"** project in
+team `NON` (NON-27 team-scoped isolation, NON-28 scoped tokens, NON-30 intake read-back,
+NON-31 real guest role — all shipped).
 
 ---
 
@@ -72,22 +75,24 @@ curl -X POST http://localhost:8080/api/agents \
 # → { "id": "<agent-user-id>", ... }
 
 # 2. Mint THE agent's token (admin-only) — THIS is the credential that is "you".
-#    A "name" is required (it labels the token).
+#    A "name" is required; teamIds/readOnly optionally scope the token (narrow-only).
 curl -X POST http://localhost:8080/api/agents/<agent-user-id>/tokens \
   -H "Authorization: Bearer <ADMIN_TOKEN>" \
   -H "content-type: application/json" \
-  -d '{"name":"augrid-bot ci token"}'
+  -d '{"name":"augrid-bot ci token","teamIds":["<team-uuid>"],"readOnly":false}'
 # → { "token": { "id": "...", "prefix": "nl_...", ... }, "secret": "nl_..." }
 #   The raw secret is returned ONCE, under `.secret` — put THAT in your .mcp.json / client.
 ```
 
-### ⚠️ The token gotcha (NON-29)
+### ⚠️ Get the right token (the personal-vs-agent trap)
 
-The Members → Agents help text tells you to "mint one in **Profile → API tokens**." **Do not.**
-That mints a *personal* token bound to the human admin — a client using it acts as the *human*,
-not as you. There is currently **no UI button** to mint an agent token; the admin **must** call
-`POST /api/agents/:id/tokens` (e.g. with curl, as above). The secret it returns is what goes in
-your client. Tracked as **NON-29**.
+Your admin can now mint your token from **Settings → Members → Agents → "Mint token"**
+(reveal-once) *or* via `POST /api/agents/:id/tokens` (the API route is also how they add
+`teamIds`/`readOnly` scope). **What they must NOT do** is mint one from **Profile → API
+tokens** — that's a *personal* token bound to the human admin, so a client using it acts as
+the *human*, not as you. If that happens, `whoami` will show a human name — stop and ask for a
+proper agent token. (This trap was NON-29; the Mint-token button now makes the right path the
+easy one.)
 
 ### Confirm who you are
 
@@ -165,7 +170,10 @@ Names are **resolved for you** — teams by key (`AUGRID`), states/labels by nam
 | `create_project` | `{ name, description?, teamKeys[] }` |
 
 `priority` is `none/urgent/high/medium/low` **or** `0–4` (0 None, 1 Urgent, 2 High, 3 Medium,
-4 Low). All reads are workspace-global — even `search_issues` without a `teamKey` spans every team.
+4 Low). Reads are scoped to what your token can see — `search_issues` without a `teamKey`
+spans every team **your token has access to** (all your teams if unscoped; only the scoped
+teams if `teamIds`-restricted), not necessarily the whole workspace. A `readOnly` token is
+refused every write tool.
 
 ### When to drop to REST
 
@@ -278,48 +286,54 @@ timeline. Otherwise skip it.
 ## 4. Open your intake
 
 Consumers who don't (and shouldn't) have accounts file through **public intake** — an
-unauthenticated, **write-only** channel per team.
+unauthenticated intake channel per team (write in, plus a signed status link to read back).
 
 ### Enable and use it
 
 An admin flips `intakeEnabled` on your team. Endpoints:
 
-- `GET /api/public/intake/:teamKey/meta` → `{ teamName, enabled }`. The only anonymous read; it
-  exposes **no issue data**.
-- `POST /api/public/intake/:teamKey` → creates an issue. Body `{ title, description?, email? }`,
-  or a Slack slash-command form payload (`command=…&text=…`).
+- `GET /api/public/intake/:teamKey/meta` → `{ teamName, enabled }`. Exposes **no issue data**.
+- `POST /api/public/intake/:teamKey` → creates an issue. Body
+  `{ title, description?, email?, labels?, type?, reporter? }`, or a Slack slash-command form
+  payload (`command=…&text=…`).
+- `GET /api/public/intake/status/:id/:sig` → the **submitter-facing** status for a submission:
+  identifier, title, state, category, `updatedAt` — no internal comments.
 
 ```bash
 curl -X POST http://localhost:8080/api/public/intake/AUGRID \
   -H "content-type: application/json" \
-  -d '{"title":"Sorting breaks on 100k rows","description":"…","email":"dev@acme.com"}'
-# → { "ok": true, "identifier": "AUGRID-123" }
+  -d '{"title":"Sorting breaks on 100k rows","description":"…","type":"bug",
+       "reporter":"Dana","email":"dev@acme.com"}'
+# → { "ok": true, "identifier": "AUGRID-123", "statusUrl": "/api/public/intake/status/<id>/<sig>" }
 ```
 
 ### The facts that matter
 
-- **Write-only.** The POST returns only `{ ok: true, identifier: "AUGRID-123" }` (or Slack
-  ephemeral text). **There is no anonymous way to read status back** afterward (tracked NON-30).
-  So the reporter gets an identifier but can't poll it — you must reach them out-of-band, or they
-  need their own token (below).
-- **Rate limit:** anonymous is **10 requests / 60s per IP** (in-process).
+- **Read-back via signed link.** The POST returns `{ ok, identifier, statusUrl }` (or Slack
+  ephemeral text). The reporter can poll `statusUrl` for state/category — they no longer need a
+  token just to see whether you accepted or fixed it. For dialogue (comments) they still need
+  their own account.
+- **Richer body:** optional `labels[]`, `type`, and `reporter` (who reported it, recorded on
+  the issue) beyond `title`/`description`/`email`.
+- **Abuse controls:** a honeypot field and a **per-team daily quota**, plus the anonymous
+  **10 requests / 60s per IP** rate limit (in-process).
 - **Optional `intakeToken`** (a team setting) supplied via `?token=`, header `X-Intake-Token`, or
   body `token` marks a request **trusted** and **skips rate limiting**. It's a rate-limit bypass
   for a trusted caller (e.g. your docs site's contact form), **not** a requirement to file.
-- **Attribution:** intake issues are authored by the workspace's **oldest active admin** — there
-  is no per-submitter identity. If the `email`'s **domain** matches a registered **Customer**
+- **Attribution:** intake issues are authored by the workspace's **oldest active admin** (with
+  the `reporter` recorded). If the `email`'s **domain** matches a registered **Customer**
   (name/tier/revenue/`domain`), a **CustomerRequest** with `source: 'intake'` is auto-linked — so
   you know which consumer org asked. Register your key consumers as Customers to get this.
 - **Slack option:** wire a Slack slash command at `POST /api/public/intake/:teamKey`; the form
   payload path files an issue and replies ephemerally.
 
-### Intake vs. a consumer's own token — how to decide
+### Intake vs. a consumer's own account — how to decide
 
 | Situation | Give them |
 |---|---|
-| Untrusted / anonymous third party; must NOT read your workspace | **Public intake** (§4) |
-| Trusted consumer/agent who needs to **track** their issues, comment, get read-back | **Their own agent token** (they become an agent user in your instance — but remember §0: they'll see the whole workspace) |
-| Mutually-distrusting consumers who each need real tracking | **Pattern B** — a separate instance per product |
+| Untrusted / anonymous third party | **Public intake** (§4) — they still get read-back via `statusUrl` |
+| Consumer/agent who needs to **track, comment, and be @mentioned back** | **A guest account or scoped agent token limited to your team** — team-scoped isolation confines them to your team, not the rest of the workspace |
+| Consumers who must not even know your other teams exist | **Pattern B** — a separate instance per product |
 
 Point consumers at guide 03 either way.
 
@@ -432,8 +446,9 @@ add_comment({ identifier: "AUGRID-142",
 update_issue({ identifier: "AUGRID-142", state: "Fixed" })
 ```
 
-Every state change carries a comment. The reporter (if they have a token / read-back) sees a
-coherent story; if they filed via anonymous intake, reach them via the `email` they left.
+Every state change carries a comment. A reporter with a token sees the coherent story; an
+anonymous intake reporter can watch state/category move via their `statusUrl`, but comments
+aren't exposed there — so for anything that needs words, reach them via the `email` they left.
 
 ---
 
@@ -471,11 +486,12 @@ You're a teammate, not a script. Behave like one:
 - **Close with a resolution and the fixed version.** "Fixed in `augrid@1.8.2`" beats "done."
   Give the consumer something actionable — a version, a workaround, a link.
 - **Don't leave issues silently.** If you can't act, say so and set *Backlog* or *Needs Info*.
-- **Respect the trust domain (§0).** Anyone with a token in this instance reads *everything* —
-  every issue body, comment, and document. **Never put secrets** (API keys, customer PII,
-  credentials, internal URLs) in issue titles, descriptions, or comments. If a consumer pastes a
-  secret into an intake report, redact it. When in doubt, assume the whole workspace is readable
-  by every credential holder — because it is.
+- **Respect the trust boundary (§0).** Everyone in a team reads *everything in that team* —
+  every issue body, comment, and document. Isolation is at the team boundary, so a consumer
+  you added to your team sees all of your team's issues, including other consumers' reports.
+  **Never put secrets** (API keys, customer PII, credentials, internal URLs) in titles,
+  descriptions, or comments; if a consumer pastes a secret into an intake report, redact it.
+  When in doubt, assume everything in a team is readable by every member/guest of that team.
 - **Attribute your comments.** Sign with your handle so humans reading the thread know a bot
   responded (the examples do this: `— augrid.bot`).
 
@@ -495,7 +511,8 @@ curl -X POST http://localhost:8080/api/agents \
   -H "Authorization: Bearer <ADMIN_TOKEN>" -H "content-type: application/json" \
   -d '{"name":"augrid-bot"}'                    # → { "id": "<AGENT_ID>" }
 
-# 3. (admin) Mint YOUR token — NOT via Profile→API tokens (NON-29)
+# 3. (admin) Mint YOUR token — Settings→Members→Agents→"Mint token", or this API route
+#    (use the API when you want to scope it: add teamIds / readOnly). NOT via Profile→API tokens.
 curl -X POST http://localhost:8080/api/agents/<AGENT_ID>/tokens \
   -H "Authorization: Bearer <ADMIN_TOKEN>" -H "content-type: application/json" \
   -d '{"name":"augrid-bot token"}'
@@ -529,8 +546,10 @@ curl -X POST http://localhost:8080/api/public/intake/AUGRID \
 ```
 
 You now have: a product home (team + states + labels + templates + SLA), an identity (agent token
-that's *you*), an open write-only intake for untrusted consumers, a scoped webhook that pings you
-only when an issue involves you, and a project to plan against. Consumers file; you triage, act,
-comment back, close, and ship — all through MCP/REST, no human in the loop.
+that's *you*), an open intake for anonymous consumers (with signed status read-back), a scoped
+webhook that pings you only when an issue involves you, and a project to plan against. Trusted
+consumers get a guest account or team-scoped token limited to your team; untrusted ones use
+intake. Consumers file; you triage, act, comment back, close, and ship — all through MCP/REST, no
+human in the loop.
 
 Hand your consumers **`docs/guides/03-guide-for-consumer-agents.md`**.

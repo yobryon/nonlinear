@@ -20,6 +20,7 @@ is **off unless configured** — the default `docker compose up` needs none of t
 | `APP_URL`        | `http://localhost:8080`                                  | Public base URL — used in emails, intake links, invite links, and the OIDC redirect URI |
 | `SECURE_COOKIES` | `false`                                                  | Set `true` when serving over HTTPS so the session cookie is `Secure`                    |
 | `BLOB_DIR`       | `./blobs`                                                | Filesystem directory for attachment blobs (when Azure Blob is off)                      |
+| `INTAKE_SECRET`  | _(per-boot random)_                                      | Signs public-intake status links. Set a stable value so a submitter's status URL survives restarts; unset regenerates each boot |
 
 > **Production:** put HTTPS in front, set `SECURE_COOKIES=true`, and decide your
 > registration policy (below). There is no built-in rate limiting.

@@ -799,6 +799,60 @@ those land, "one instance = one trust domain" is the load-bearing rule.
 
 ---
 
+## 20. Team-scoped isolation and scoped tokens — the trust boundary, enforced
+
+**Decision.** Turn entry 19's *documented* boundary into an *enforced* one. A
+non-admin now reads only the teams they are a member of; admins still see the
+whole workspace. Team membership and the `private` flag gate reads (they were
+cosmetic). The `guest` role is real (guests auto-join nothing; an admin grants
+teams one by one). API tokens carry a scope — a subset of the owner's teams
+and/or read-only — that can only *narrow* authority. Filtering lives in one
+place (`packages/core/src/services/visibility.ts`) and is applied by both the
+bootstrap snapshot and the live sync hub.
+
+**Context.** Entry 19 named nonlinear a single trust domain and chose to
+document + backlog rather than ship a half-isolation. The owner then asked to
+close the backlog (issues NON-27, NON-28, NON-31). The load-bearing risk was the
+sync system: bootstrap returned `.all()` and the hub broadcast every delta, so
+any change had to cover the full snapshot, live deltas, replay-on-reconnect, and
+membership changes — without reordering deltas or breaking the client.
+
+**Alternatives considered.** (a) _Per-delta async membership lookups in the hub_
+— correct but adds a DB round-trip per delta per connection and makes the
+broadcast async, risking reordering. (b) _Row-level filtering pushed into
+storage queries_ — spreads the visibility rules across every store method and
+both storage engines. (c) _One visibility module + synchronous hub indexes_ —
+chosen: `visibilityFor` resolves a user's team set once; `filterPayload` narrows
+the snapshot with in-memory maps; the hub keeps small indexes (issue→team,
+comment→issue, project→teams, doc→project, membership) fed from the delta stream,
+so filtering stays synchronous and ordered. A connection resolves its visible
+teams *before* joining the broadcast; a membership change to a connected user
+triggers a clean rebootstrap.
+
+**Why.** The visibility rules are subtle (comments resolve through their issue,
+milestones through their project, labels may be workspace-global) and must be
+identical on the snapshot and the stream — one module keeps them honest and
+testable. Synchronous hub indexes preserve the existing ordering guarantees that
+the sync protocol depends on. Scoped tokens compose by intersection, so an
+admin's scoped token is safe to hand a consumer. Enforcing at the read boundary
+(bootstrap + hub + MCP), rather than per-write, targets the actual exposure the
+red-team found.
+
+**Consequences.** nonlinear can now host mutually-distrusting consumers in one
+instance: give a consumer a guest account added only to your team, or a token
+scoped to it — they see that team and nothing else. Running one instance per
+product is now a maximum-isolation option, not the only way. New surfaces to
+keep in sync when adding a synced model: add its visibility rule to
+`filterPayload` *and* the hub's `visibleTo`/indexes (a model that resolves to a
+team through a parent needs an index). Deferred: write-side membership
+enforcement (a non-member creating an issue in a team they can't see) — not an
+exposure path, so left for later. Public intake gained a signed status link, so
+anonymous submitters can now track without an account (entry 19's write-only
+caveat no longer holds). The three audience guides were updated to describe the
+enforced model.
+
+---
+
 ## How to extend this log
 
 When you make a decision that would be expensive to reverse — a new storage
