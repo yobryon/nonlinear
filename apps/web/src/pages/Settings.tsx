@@ -7,7 +7,6 @@ import type {
   StateCategory,
   Team,
   UpdateAiSettingsInput,
-  User,
   WorkflowState,
 } from '@nonlinear/shared';
 import { ESTIMATE_SCALES, STATE_CATEGORIES } from '@nonlinear/shared';
@@ -22,7 +21,7 @@ import { api } from '../api.js';
 import { relativeTime, useStore } from '../store.js';
 import { anchorFromEvent, Avatar, Picker, Switch, toast, toastError, type Anchor } from '../ui.js';
 import { SortableList, type SortableDrop } from '../sortable.js';
-import { ArrowLeftIcon, CopyIcon, MenuIcon, PlusIcon, StateIcon, TrashIcon } from '../icons.js';
+import { ArrowLeftIcon, MenuIcon, PlusIcon, StateIcon, TrashIcon } from '../icons.js';
 
 const SWATCHES = [
   '#5e6ad2',
@@ -393,16 +392,6 @@ function MembersSettings() {
   const rows = Object.values(users).sort((a, b) => a.name.localeCompare(b.name));
 
   const [agentName, setAgentName] = useState('');
-  const [minted, setMinted] = useState<{ agentId: string; name: string; secret: string } | null>(
-    null,
-  );
-
-  const mintAgentToken = (agent: User) => {
-    void api
-      .createAgentToken(agent.id, `token ${new Date().toISOString().slice(0, 10)}`)
-      .then((res) => setMinted({ agentId: agent.id, name: agent.name, secret: res.secret }))
-      .catch(toastError);
-  };
 
   return (
     <>
@@ -412,40 +401,6 @@ function MembersSettings() {
         {rows.filter((u) => u.active).length === 1 ? '' : 's'}
       </p>
       {isAdmin && <InvitePeople />}
-      {minted && (
-        <div
-          className="auth-error"
-          style={{
-            background: 'rgba(76,183,130,0.1)',
-            borderColor: 'rgba(76,183,130,0.35)',
-            color: 'var(--success)',
-            marginBottom: 12,
-          }}
-        >
-          <div style={{ marginBottom: 6 }}>
-            Token for <b>{minted.name}</b> — this <b>is</b> the agent's identity. Copy it now; it
-            won't be shown again. Put it in the agent's client (e.g. <code>.mcp.json</code>) as{' '}
-            <code>Authorization: Bearer &lt;token&gt;</code>.
-          </div>
-          <div className="row" style={{ gap: 8 }}>
-            <code style={{ flex: 1, wordBreak: 'break-all', color: 'var(--text-1)' }}>
-              {minted.secret}
-            </code>
-            <button
-              className="btn"
-              onClick={() => {
-                void navigator.clipboard.writeText(minted.secret);
-                toast('Token copied');
-              }}
-            >
-              <CopyIcon size={13} /> Copy
-            </button>
-            <button className="btn ghost" onClick={() => setMinted(null)}>
-              Done
-            </button>
-          </div>
-        </div>
-      )}
       <div className="settings-section">
         {rows.map((user) => (
           <div key={user.id} className="member-row">
@@ -469,15 +424,6 @@ function MembersSettings() {
             </div>
             {isAdmin && user.id !== me?.id ? (
               <>
-                {user.isAgent && (
-                  <button
-                    className="btn ghost"
-                    title="Mint a Bearer token that authenticates as this agent"
-                    onClick={() => mintAgentToken(user)}
-                  >
-                    Mint token
-                  </button>
-                )}
                 <button
                   className="chip"
                   onClick={(e) => setRoleAnchor({ anchor: anchorFromEvent(e), userId: user.id })}
@@ -507,10 +453,11 @@ function MembersSettings() {
           <h2>Agents</h2>
           <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
             Agents are non-human teammates you can assign issues to and @mention. They can't log in;
-            they act through a Bearer token over REST or the MCP server. Mint that token with the{' '}
-            <b>Mint token</b> button on the agent's row above — <em>not</em> your personal token in
-            Profile → API tokens, which would make the agent act as you. See{' '}
-            <code>examples/agent</code> for a runnable reference.
+            they act through a Bearer token over REST or the MCP server. Mint and manage each
+            agent's tokens below — <em>not</em> your personal token in Profile → API tokens, which
+            would make the agent act as you. Tokens can be scoped to specific teams or made
+            read-only via <code>POST /api/agents/:id/tokens</code>. See <code>examples/agent</code>{' '}
+            for a runnable reference.
           </p>
           <div className="row" style={{ gap: 8, maxWidth: 420 }}>
             <input
@@ -536,6 +483,25 @@ function MembersSettings() {
               <PlusIcon size={13} /> Add agent
             </button>
           </div>
+          {rows
+            .filter((u) => u.isAgent && u.active)
+            .map((agentUser) => (
+              <div
+                key={agentUser.id}
+                style={{
+                  marginTop: 14,
+                  paddingTop: 12,
+                  borderTop: '1px solid var(--border)',
+                }}
+              >
+                <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                  <Avatar user={agentUser} size={22} />
+                  <b>{agentUser.name}</b>
+                  <span className="dim">@{agentUser.displayName}</span>
+                </div>
+                <ApiTokens agent={{ id: agentUser.id, name: agentUser.name }} />
+              </div>
+            ))}
         </div>
       )}
       {roleAnchor && (
@@ -772,6 +738,26 @@ function TeamSettingsInner({ team }: { team: Team }) {
       </div>
 
       <div className="settings-section">
+        <h2>Visibility &amp; access</h2>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+          This team is a <b>read boundary</b>. Its members (below) see its issues, projects, and
+          comments; non-members don't see the team at all. Admins always see every team. To grant
+          someone access, add them under <b>Members</b>; to give a scoped agent access, mint a
+          team-scoped token (Settings → Members → Agents).
+        </p>
+        <div className="setting-row">
+          <div className="info">
+            <div className="label">Private team</div>
+            <div className="desc">
+              When on, new people are <b>not</b> auto-added on sign-up — you grant access
+              explicitly under Members. When off, every new member joins automatically.
+            </div>
+          </div>
+          <Switch on={team.private} onChange={(on) => patchTeam({ private: on })} />
+        </div>
+      </div>
+
+      <div className="settings-section">
         <h2>Estimates</h2>
         <div className="setting-row">
           <div className="info">
@@ -923,6 +909,10 @@ function TeamSettingsInner({ team }: { team: Team }) {
 
       <div className="settings-section">
         <h2>Members</h2>
+        <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
+          Everyone listed here can see this team's issues, projects, and comments. Removing someone
+          revokes their access to the team. (Admins see every team regardless.)
+        </p>
         {teamMembers.map((m) => {
           const user = users[m.userId];
           if (!user) return null;

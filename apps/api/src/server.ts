@@ -743,6 +743,23 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     }
     return domain.tokens.list((req.params as { id: string }).id);
   });
+  app.delete('/api/agents/:id/tokens/:tokenId', authed, async (req) => {
+    if (req.user.role !== 'admin') {
+      throw new DomainError('forbidden', 'Only admins can manage agent tokens', 403);
+    }
+    const { id, tokenId } = req.params as { id: string; tokenId: string };
+    await domain.tokens.revoke(id, tokenId);
+    await domain.audit.record({
+      action: 'token.revoked',
+      actorId: req.user.id,
+      actorLabel: req.user.name,
+      targetType: 'token',
+      targetId: tokenId,
+      targetLabel: null,
+      ip: req.ip,
+    });
+    return { ok: true };
+  });
 
   // ---- profile, users, workspace ----
   app.patch('/api/profile', authed, async (req) =>

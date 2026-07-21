@@ -228,6 +228,10 @@ export const api = {
     req<User>('POST', '/api/agents', { name, displayName }),
   createAgentToken: (agentId: string, name: string) =>
     req<CreatedApiToken>('POST', `/api/agents/${agentId}/tokens`, { name }),
+  listAgentTokens: (agentId: string) =>
+    req<ApiToken[]>('GET', `/api/agents/${agentId}/tokens`),
+  revokeAgentToken: (agentId: string, tokenId: string) =>
+    req<{ ok: true }>('DELETE', `/api/agents/${agentId}/tokens/${tokenId}`),
 
   createWebhook: (url: string, format?: 'json' | 'slack', agentUserId?: string | null) =>
     req<Webhook>('POST', '/api/webhooks', { url, format, agentUserId }),
