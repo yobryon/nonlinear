@@ -132,6 +132,7 @@ export function Sidebar() {
   const users = useStore((s) => s.users);
   const userId = useStore((s) => s.userId);
   const teams = useStore((s) => s.teams);
+  const teamMemberships = useStore((s) => s.teamMemberships);
   const notifications = useStore((s) => s.notifications);
   const favorites = useStore((s) => s.favorites);
   const issues = useStore((s) => s.issues);
@@ -162,7 +163,18 @@ export function Sidebar() {
   const workflowStates = useStore((s) => s.workflowStates);
   const me = userId ? users[userId] : null;
   const unread = Object.values(notifications).filter((n) => !n.readAt).length;
-  const teamList = Object.values(teams).sort((a, b) => a.name.localeCompare(b.name));
+  // The "Teams" nav lists teams you're a full member of (admins see all). Teams
+  // you only have internal-intake access to arrive in the store as shells but
+  // aren't "your" teams — they're filing targets, not nav sections.
+  const isAdmin = userId ? users[userId]?.role === 'admin' : false;
+  const memberTeamIds = new Set(
+    Object.values(teamMemberships)
+      .filter((m) => m.userId === userId)
+      .map((m) => m.teamId),
+  );
+  const teamList = Object.values(teams)
+    .filter((t) => isAdmin || memberTeamIds.has(t.id))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const triageCounts: Record<string, number> = {};
   for (const issue of Object.values(issues)) {
     if (issue.archivedAt) continue;

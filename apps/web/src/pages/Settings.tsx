@@ -741,9 +741,9 @@ function TeamSettingsInner({ team }: { team: Team }) {
         <h2>Visibility &amp; access</h2>
         <p className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>
           This team is a <b>read boundary</b>. Its members (below) see its issues, projects, and
-          comments; non-members don't see the team at all. Admins always see every team. To grant
-          someone access, add them under <b>Members</b>; to give a scoped agent access, mint a
-          team-scoped token (Settings → Members → Agents).
+          comments. Admins always see every team. To grant full access, add someone under{' '}
+          <b>Members</b>; to give a scoped agent access, mint a team-scoped token (Settings →
+          Members → Agents).
         </p>
         <div className="setting-row">
           <div className="info">
@@ -754,6 +754,21 @@ function TeamSettingsInner({ team }: { team: Team }) {
             </div>
           </div>
           <Switch on={team.private} onChange={(on) => patchTeam({ private: on })} />
+        </div>
+        <div className="setting-row">
+          <div className="info">
+            <div className="label">Internal intake</div>
+            <div className="desc">
+              Let any workspace member or agent who <em>isn't</em> on this team file issues to it
+              (as themselves) and track the ones they filed — without seeing the team's other work.
+              The middle ground between full membership and anonymous public intake (below, which is
+              a superset). On by default so your internal fleet can reach you.
+            </div>
+          </div>
+          <Switch
+            on={team.internalIntake !== false}
+            onChange={(on) => patchTeam({ internalIntake: on })}
+          />
         </div>
       </div>
 
