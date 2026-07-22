@@ -16,15 +16,52 @@ exact endpoints, copy-pasteable blocks.
 
 ---
 
-## 1. First, know which of two ways you're plugged in
+## 1. First, know which of three ways you're plugged in
 
-Everything downstream depends on this. Figure it out before you do anything else.
+Everything downstream depends on this. Figure it out before you do anything else. There are
+**three** ways you relate to the provider's team — two use a Bearer token (MCP/REST, §2), the
+third is an anonymous URL (§3):
 
-### (a) You have your own agent account + Bearer token — the trusted path
+- **Member** — you have a token *in* the provider's team; full read/write of it (path (b)).
+- **Intake access** — you're in the provider's *workspace* but not a member of their team, and
+  their team has **internal intake** on (the default). You can file to it and track **your own**
+  issues, as yourself — no membership, no admin provisioning (path (a)). **For an authenticated
+  fleet this is the usual path.**
+- **Anonymous** — you have only a public intake URL and no account (path (c)).
 
-The provider's admin created an **agent user** for you and minted a **Bearer token** for
-it. With that token you get the full loop: file issues, search, poll status, comment,
-and respond when the provider @mentions or assigns you. This is MCP + REST.
+Call `whoami` first and it tells you which: `teams` lists teams you're a **member** of, and
+**`intakeTeams`** lists teams you can **file to but aren't a member of**. `list_teams` marks each
+`access: "member" | "intake"`. If the provider's team is in neither, you're anonymous (§3) — or
+need to ask for access.
+
+### (a) You have intake access — the zero-setup path for a workspace fleet
+
+If you already have a token in the *same workspace* as the provider (because you own your own
+tool there, or an admin gave your agent an account), you can very likely file to their team
+**without being added to it**. Internal intake is on by default and grants every workspace
+member/agent this third tier. The provider's team then shows up under `whoami`'s `intakeTeams`
+and as `access:"intake"` in `list_teams`. On this path:
+
+- **File as yourself:** `create_issue teamKey=THEIRS …` — attributed to your real identity (no
+  anonymous admin attribution, no signed status URL). No special token, no provisioning.
+- **Track only what you filed:** `my_work` has a **`filed`** bucket for the issues you filed in an
+  intake team; `search_issues` and `get_issue` in an intake team return **only your own filed
+  issues**, not the team's other work.
+- **Comment, don't edit:** `add_comment` on an issue you filed works; `update_issue` on an intake
+  team is refused ("view but not edit" — `403` over REST/GraphQL). Routing/triage is the team's
+  call, even on your own issue.
+
+You **cannot** see the team's other issues, projects, or docs — only its shell (name, roster,
+states, labels) and the issues you filed. Need to read the whole team or be assigned/@mentioned
+back? Ask the provider to make you a **member** (path (b)). Everything in §2 (the MCP path)
+applies to you, within these limits.
+
+### (b) You're a member of the provider's team — the full path
+
+The provider's admin added your **agent user** to their team and minted a **Bearer token** for
+it. With that token you get the full loop: file issues, search *all* the team's issues, poll
+status, comment anywhere you can read, and respond when the provider @mentions or assigns you.
+This is MCP + REST; `whoami` lists their team under `teams`, `list_teams` shows `access:"member"`.
 
 Your token is usually **scoped to the provider's team** (and may be **read-only**): you see
 and act within that team, not the provider's whole workspace. That's expected — you don't
@@ -32,15 +69,15 @@ need the rest, and it's how the provider safely hosts several consumers in one i
 
 Confirm it immediately with `whoami` (MCP) or `GET /api/auth/me` (REST). It returns the
 user your token resolves to — your agent's name, whether it's an agent, its role — plus the
-`teams` you can see and your `token` scope (read-only? which teams?), so you know your limits
-up front. If that isn't who you expect, stop and sort out the credential before filing anything.
+`teams`/`intakeTeams` you can reach and your `token` scope (read-only? which teams?), so you know
+your limits up front. If that isn't who you expect, stop and sort out the credential before filing anything.
 
 > **The token _is_ the identity.** There is no "act as" selector. A token is minted for
 > exactly one user and every call authenticates as that user. If `whoami` shows a human's
 > name, someone handed you a personal token bound to that human — you'll be acting as them,
 > not as your own agent. Get the right token (see §6 gotcha).
 
-### (b) You only have a public intake URL — the anonymous path
+### (c) You only have a public intake URL — the anonymous path
 
 The provider gave you a link like `http://provider-host/api/public/intake/AUGRID` and
 nothing else. You can POST a report and get **limited read-back**: the POST returns an
@@ -55,23 +92,29 @@ What to do when you're on this path:
 - **Poll `statusUrl` for state, expect the rest out-of-band.** It tells you accepted /
   in-progress / fixed; for questions or detail the provider reaches you another way — email,
   a shared channel, a release note.
-- **If you need to comment or be @mentioned back, ask for an account.** Request that the
-  provider create an agent user + token for you (usually scoped to their team). Then you're
-  on path (a) and everything in §2 opens up.
+- **If you need to comment on issues or be @mentioned back, ask for an account.** If your agent
+  can be added to the provider's *workspace* at all, internal intake alone lets you file and
+  comment on **your own** issues (path (a)) with no team membership. To be assigned/@mentioned
+  back or read the whole team, ask to be made a **member** of their team (path (b)). Either way
+  everything in §2 opens up.
 
-Why the split exists: nonlinear enforces **team-scoped isolation** — a member/guest/token
-sees only the teams it's in. Providers give trusted consumers a guest account or a
-team-scoped token (so you see their team, not their whole workspace), and route everyone
-else through anonymous intake. Being on intake isn't a judgment — it's just the lightest
-trust level. More on this in §5.
+Why the split exists: nonlinear enforces **team-scoped isolation** — a member sees only the
+teams it's in. **Internal intake** (on by default) softens that with a middle tier: any workspace
+member/agent can file to — and track their own issues in — an intake-enabled team without being a
+member. So providers make full collaborators **members** of their team, let the rest of the
+workspace file via **intake access**, and route true outsiders through **anonymous public
+intake**. Being on intake access isn't a judgment — it's just the lightest authenticated trust
+level. More on this in §5.
 
-> **You file into the *provider's* team, so you need access to *that* team.** Filing is not
-> "post anywhere" — you can only create issues/comments in a team you can see. Over MCP, a
-> team you lack access to resolves to `Unknown team`; over REST/GraphQL it's a `403`. Being a
-> member of your *own* team grants nothing on someone else's. So to report to a provider you
-> need either the access they gave you **in their team** (a guest account or a token scoped to
-> it) or **their public intake URL** (§3) — which needs no membership at all. If you own one
-> tool and consume another, you'll hold access to *both* teams (or use the other's intake).
+> **You file into the *provider's* team, so you need some access to *that* team — and if you're
+> in their workspace, internal intake already IS that access.** Filing isn't "post anywhere": you
+> create issues in a team you can either *see* (member) or *file to* (intake access). Because
+> internal intake is on by default, any workspace member/agent can file into any internal-intake
+> team directly — no membership needed — and track what they filed. You only hit a wall (`Unknown
+> team` over MCP, `403` over REST/GraphQL) if the team has internal intake **off** and you're not
+> a member. Truly external outsiders — not in the workspace at all — use the **public intake URL**
+> (§3), which needs no account. If you own one tool and consume another, you'll be a **member** of
+> your own team and have at least **intake access** to the other's.
 
 ---
 
@@ -99,13 +142,14 @@ Then, first call, always:
 whoami
 ```
 
-Returns your user (`name`, `displayName`, `isAgent`, `role`), the workspace name, your visible
-`teams` (the team keys you belong to), and your `token` scope (`{ readOnly, teams: "all" |
-[keys] }`) — so you learn up front whether you're read-only and which teams you can touch,
-rather than only when a write fails:
+Returns your user (`name`, `displayName`, `isAgent`, `role`), the workspace name, your `teams`
+(keys you're a **member** of), your `intakeTeams` (keys you can **file to but aren't a member**
+of — internal-intake teams), and your `token` scope (`{ readOnly, teams: "all" | [keys] }`) — so
+you learn up front whether you're read-only and which teams you can touch, rather than only when
+a write fails:
 
 ```jsonc
-{ "user": {...}, "workspace": "...", "teams": ["AUGRID"], "token": { "readOnly": false, "teams": "all" } }
+{ "user": {...}, "workspace": "...", "teams": ["AUGRID"], "intakeTeams": ["PULSAR"], "token": { "readOnly": false, "teams": "all" } }
 ```
 
 Sanity-check it's your agent identity before you write anything into someone else's tracker.

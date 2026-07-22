@@ -160,6 +160,30 @@ receive the entire workspace.
 Isolation is at the **team boundary**, not per-issue: a member or guest of a team sees that
 whole team's data. Admins see everything — treat admin as your workspace-wide trust level.
 
+### Three access tiers (member / intake / outsider)
+
+Membership isn't the only way an authenticated principal relates to a team. There are **three
+tiers**:
+
+- **Member** — full read/write of the team, as above.
+- **Intake access** — a workspace member/agent who is **not** a member of the team, but the team
+  has **internal intake** enabled. They can see the team's *shell* (name, roster, workflow
+  states, labels — enough to know where to file and read status), **file** issues to it
+  (attributed to their own real identity — no anonymous admin attribution, no signed status
+  URL), **comment** on the issues they filed, and **track only those issues**. They **cannot**
+  see the team's other issues/projects/docs, and **cannot edit** issues — even their own; that's
+  the team's triage call.
+- **Outsider** — no account; sees nothing but the unauthenticated **public intake** form (§6a),
+  if enabled.
+
+**Internal intake is a per-team toggle, ON by default** (Settings → team → **Visibility &
+access**). With it on, any workspace member/agent can file into the team as themselves and
+follow up, while the team's own work stays isolated — a middle ground between full membership
+and anonymous public intake. Turn it **off** to seal the team so only members can file.
+**Public intake is a superset:** enabling it implies internal intake. So an internal fleet works
+frictionlessly out of the box; you only hand out membership for full collaborators, and only
+reach for the public URL for outsiders with no account.
+
 ### Scoped and read-only tokens
 
 An API or agent token can **narrow** its bearer's authority (never widen it):
@@ -186,9 +210,12 @@ mints full-access only** for now — set `teamIds`/`readOnly` via the API.)
 Pick the one that matches *who you're letting in*:
 
 - **Pattern A — one shared instance (recommended default).** Host trusted teammates *and*
-  mutually-distrusting consumers in a single instance. Give each consumer a **guest account
-  added only to your team**, or a **scoped token** limited to your team — they see only that
-  team, not your other teams/roadmap or other consumers' data. This now covers most needs.
+  mutually-distrusting consumers in a single instance. Any workspace member/agent already has
+  **intake access** to your team (internal intake is on by default) — they can file and track
+  their own issues as themselves with **zero setup on your part**. Grant a **guest account added
+  only to your team**, or a **scoped token** limited to your team, only when a consumer needs to
+  read the whole team's work or be assigned/@mentioned back — they then see that team, but not
+  your other teams/roadmap or other consumers' data. This now covers most needs.
 - **Pattern B — one instance per product (maximum isolation).** Only needed for the
   strictest separation — e.g. you don't even want consumers to know other teams *exist*, or
   regulatory separation. Then run a **separate nonlinear per product**. It's cheap —

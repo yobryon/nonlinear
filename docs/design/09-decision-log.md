@@ -859,6 +859,61 @@ team you can see.
 
 ---
 
+## 21. Internal intake — a third visibility tier between member and outsider
+
+**Decision.** Add a middle tier to the trust model: a team can accept **internal
+intake** (a `Team.internalIntake` flag, **on by default**; public intake is a
+superset that implies it). An authenticated workspace member/agent who is *not*
+a member of an internal-intake team may see its **shell** (metadata, roster,
+workflow states, labels), **file** issues to it as themselves, **comment** on the
+issues they filed, and **track** only those — but never the team's other issues,
+projects, docs, or edit anything. Poles unchanged: full membership (see/do
+everything) and anonymous public intake (write + signed status link, no login).
+
+**Context.** After entries 19–20 the model was binary: member (full) or outsider
+(public intake only). That left a real gap the owner hit running an internal
+fleet of agents and teams — a registered member/agent who *uses* team A's product
+but isn't on team A had no way to file to A and follow up as themselves. Public
+intake fit poorly (anonymous, admin-attributed, tracked by out-of-band URLs when
+the filer is a *known* entity already in the system), and full membership
+over-shares (exposes A's whole backlog/roadmap). The want: cross-team
+communication with a modicum of accident-defense, without going wide-open and
+without agents juggling special URLs for things they filed.
+
+**Alternatives considered.** (a) _Full RBAC_ (roles × permissions × resources) —
+too heavy for the need and against the project's low-complexity grain. (b) _An
+"authenticated public intake" endpoint_ — a parallel write path attributing to
+the real user, but the filer still couldn't *track* their issue through the
+normal store (the client needs the team shell + their issues synced), so it
+would need its own read path anyway. (c) _A third visibility tier woven through
+the one visibility module_ — chosen: it reuses the load-bearing
+bootstrap/hub/write-gate machinery from entry 20, and "track what I filed" is a
+precise query because issues already carry `creatorId`.
+
+**Why.** One `Visibility` now carries `teamIds` (member) **and** `intakeTeamIds`
+(intake) **and** `userId`; every read/write site already routed through that
+module (filterPayload, the sync hub, `requireTeamAccess`, the MCP resolvers), so
+the tier slots in as `canIntakeTeam` (member-or-intake, for filing/shell reads)
+and `canReadIssue` (member-team issues, or your own in an intake team). On by
+default makes the fleet frictionless; a team seals itself by toggling it off.
+Legacy jsonb team rows lack the flag, so `effectiveInternalIntake` treats missing
+as on — no migration. Edit/delete/projects stay member-only, so intake is
+genuinely "file + follow up", not a write-anywhere hole.
+
+**Consequences.** The MCP surfaces the tier so a fleet agent needs no
+provisioning: `whoami.intakeTeams`, `list_teams` `access: member|intake`,
+`create_issue` into intake teams, `my_work.filed`. Web: the team's Visibility &
+access settings gain the toggle, and the sidebar Teams nav lists only member
+teams (intake shells are filing targets, not nav sections; humans file via New
+Issue and track via My Issues → Created). New rule when adding a synced model:
+decide its tier — most team-scoped models are member-only, but anything a filer
+needs to interpret their own issue (states, labels) belongs to the shell. The
+sync hub gains an issue→creator index and rebootstraps connections when intake
+topology changes (a team toggling the flag). Guests get intake access too (it's
+low-privilege and serves discovery); tighten later if a use case demands it.
+
+---
+
 ## How to extend this log
 
 When you make a decision that would be expensive to reverse — a new storage

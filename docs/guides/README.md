@@ -17,8 +17,15 @@ the whole workspace. `private` teams and team membership are now real read bound
 `guest` role is enforced, and API/agent tokens can be **scoped** to specific teams and/or
 made **read-only**. That means one instance can safely host mutually-distrusting consumers:
 give each a guest account or a scoped token confined to your team. Running one instance per
-product is now only for maximum isolation. Each guide opens with this; guide 01 §5 has the
-full treatment and the deployment patterns.
+product is now only for maximum isolation.
+
+An authenticated principal relates to a team at one of **three tiers**: a **member** sees
+and edits the whole team; with **intake access** (any workspace member/agent, on a team with
+**internal intake** enabled — a new team toggle, on by default) you're *not* a member but can
+see the team's shell and file + track + comment on **only the issues you filed**, as yourself;
+an **outsider** with no account sees nothing and uses **public intake** (which implies internal
+intake). Each guide opens with the isolation model; guide 01 §5 has the full treatment and the
+deployment patterns.
 
 How the model got here — the isolation, scoped-token, guest-role, and intake-read-back work
 — is dogfooded in the **"Provider ↔ Consumer readiness"** project in team `NON` (issues

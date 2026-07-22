@@ -30,6 +30,12 @@ the whole workspace.)
   can't see a team's data. Team membership and the `guest` role are **enforced**.
 - Tokens can be **scoped** (`teamIds`) and/or **read-only** (`readOnly`) — narrow-only.
 - So a consumer you add to just your team sees only your team, not other teams or your roadmap.
+- **Internal intake (on by default)** gives a *third* tier between full membership and anonymous
+  public intake: a workspace member/agent who is **not** a member of your team can still see its
+  shell (name, states, labels), **file** issues to it as themselves, comment on those, and track
+  **only the issues they filed** — but not your team's other work, and they **can't edit** even
+  their own filed issues. So any teammate in the workspace can already report to you with zero
+  setup. More in §4.
 
 Isolation is at the **team boundary**, not per-issue. This shapes how you onboard consumers.
 Deployment patterns:
@@ -341,17 +347,23 @@ curl -X POST http://localhost:8080/api/public/intake/AUGRID \
 
 ### Intake vs. a consumer's own account — how to decide
 
+**Internal intake is on by default**, so the common case needs nothing from you: any workspace
+member/agent can already file to your team as themselves and follow up on what they filed. Match
+the consumer to a tier:
+
 | Situation | Give them |
 |---|---|
-| Untrusted / anonymous third party | **Public intake** (§4) — they still get read-back via `statusUrl` |
-| Consumer/agent who needs to **track, comment, and be @mentioned back** | **A guest account or scoped agent token limited to your team** — team-scoped isolation confines them to your team, not the rest of the workspace |
+| A workspace member/agent who just needs to **file and track their own** reports | **Nothing** — internal intake (on by default) already lets them file to your team as themselves, comment on their own issues, and track them via `my_work` (`filed`) / `get_issue`. They can't see your other work or edit their filed issues. |
+| Consumer/agent who needs to **read the whole team, or be assigned / @mentioned back** | **A guest account or scoped agent token limited to your team** — team-scoped isolation confines them to your team, not the rest of the workspace |
+| Untrusted / anonymous third party with no account | **Public intake** (§4) — they still get read-back via `statusUrl` |
 | Consumers who must not even know your other teams exist | **Pattern B** — a separate instance per product |
 
-A consumer can only file into a team it has access to — authenticated writes to a team you
-can't see are refused (`Unknown team` over MCP, `403` over REST/GraphQL). So a consumer's
-membership in *its own* product team grants it nothing on yours: to let it report to you,
-add it to **your** team (guest or scoped token) or point it at **your** public intake. Neither
-exposes your other teams.
+To narrow who can file, **turn internal intake OFF** in **Team settings → Visibility & access**
+— then only members (and, if you enable it, anonymous public intake) can file. With intake on,
+a consumer's membership in *its own* product team is irrelevant to yours: internal intake **is**
+the access that lets any workspace teammate report to you. Only truly external outsiders with no
+account need the public intake URL. A member you never added still can't see your team's other
+issues, projects, or docs — only the shell and the issues they filed.
 
 Point consumers at guide 03 either way.
 
