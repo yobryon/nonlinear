@@ -411,21 +411,43 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     });
     return { ok: true };
   });
-  app.post('/api/states', authed, async (req) => domain.teams.createState(req.body as never));
-  app.patch('/api/states/:id', authed, async (req) =>
-    domain.teams.updateState((req.params as { id: string }).id, req.body as never),
-  );
+  // Workflow states, labels, and templates are a team's own workflow config —
+  // a member of the team (or an admin) may manage them, not just workspace admins.
+  app.post('/api/states', authed, async (req) => {
+    await requireTeamAccess(req, (req.body as { teamId: string }).teamId);
+    return domain.teams.createState(req.body as never);
+  });
+  app.patch('/api/states/:id', authed, async (req) => {
+    const state = await domain.ctx.storage.workflowStates.get((req.params as { id: string }).id);
+    if (state) await requireTeamAccess(req, state.teamId);
+    return domain.teams.updateState((req.params as { id: string }).id, req.body as never);
+  });
   app.delete('/api/states/:id', authed, async (req) => {
+    const state = await domain.ctx.storage.workflowStates.get((req.params as { id: string }).id);
+    if (state) await requireTeamAccess(req, state.teamId);
     await domain.teams.removeState((req.params as { id: string }).id);
     return { ok: true };
   });
 
   // ---- labels ----
-  app.post('/api/labels', authed, async (req) => domain.labels.create(req.body as never));
-  app.patch('/api/labels/:id', authed, async (req) =>
-    domain.labels.update((req.params as { id: string }).id, req.body as never),
-  );
+  // Team labels: a member of the team may manage. Workspace labels (teamId
+  // null): admin only.
+  const requireLabelAccess = async (req: FastifyRequest, teamId: string | null | undefined) => {
+    if (teamId) await requireTeamAccess(req, teamId);
+    else requireAdmin(req);
+  };
+  app.post('/api/labels', authed, async (req) => {
+    await requireLabelAccess(req, (req.body as { teamId?: string | null }).teamId);
+    return domain.labels.create(req.body as never);
+  });
+  app.patch('/api/labels/:id', authed, async (req) => {
+    const label = await domain.ctx.storage.labels.get((req.params as { id: string }).id);
+    if (label) await requireLabelAccess(req, label.teamId);
+    return domain.labels.update((req.params as { id: string }).id, req.body as never);
+  });
   app.delete('/api/labels/:id', authed, async (req) => {
+    const label = await domain.ctx.storage.labels.get((req.params as { id: string }).id);
+    if (label) await requireLabelAccess(req, label.teamId);
     await domain.labels.remove((req.params as { id: string }).id);
     return { ok: true };
   });
@@ -624,11 +646,18 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   });
 
   // ---- issue templates ----
-  app.post('/api/templates', authed, async (req) => domain.templates.create(req.body as never));
-  app.patch('/api/templates/:id', authed, async (req) =>
-    domain.templates.update((req.params as { id: string }).id, req.body as never),
-  );
+  app.post('/api/templates', authed, async (req) => {
+    await requireTeamAccess(req, (req.body as { teamId: string }).teamId);
+    return domain.templates.create(req.body as never);
+  });
+  app.patch('/api/templates/:id', authed, async (req) => {
+    const tpl = await domain.ctx.storage.issueTemplates.get((req.params as { id: string }).id);
+    if (tpl) await requireTeamAccess(req, tpl.teamId);
+    return domain.templates.update((req.params as { id: string }).id, req.body as never);
+  });
   app.delete('/api/templates/:id', authed, async (req) => {
+    const tpl = await domain.ctx.storage.issueTemplates.get((req.params as { id: string }).id);
+    if (tpl) await requireTeamAccess(req, tpl.teamId);
     await domain.templates.remove((req.params as { id: string }).id);
     return { ok: true };
   });

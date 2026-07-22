@@ -9,13 +9,14 @@ import {
   applyScope,
   canIntakeTeam,
   canReadIssue,
+  colorFor,
   seesTeam,
   visibilityFor,
   type Domain,
   type Visibility,
 } from '@nonlinear/core';
-import type { Issue, Priority, TokenScope, User } from '@nonlinear/shared';
-import { PRIORITY_LABELS } from '@nonlinear/shared';
+import type { Issue, Priority, StateCategory, TokenScope, User } from '@nonlinear/shared';
+import { PRIORITY_LABELS, STATE_CATEGORIES } from '@nonlinear/shared';
 
 /**
  * HTTP MCP server, mounted in-process at /mcp (Streamable HTTP). It is a
@@ -614,6 +615,101 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
         }
         const project = await domain.projects.create({ name, description, teamIds });
         return ok({ id: project.id, name: project.name });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  // ---- team configuration (members of the team may shape its workflow) ----
+
+  server.registerTool(
+    'create_label',
+    {
+      description: 'Create a label on a team you belong to (e.g. "area: rendering", "type: bug").',
+      inputSchema: {
+        teamKey: z.string(),
+        name: z.string(),
+        color: z.string().optional().describe('Hex like #4c9. Defaults to one derived from the name.'),
+      },
+    },
+    async ({ teamKey, name, color }) => {
+      try {
+        guardWrite();
+        const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
+        const label = await domain.labels.create({
+          teamId: team.id,
+          name,
+          color: color ?? colorFor(name),
+        });
+        return ok({ id: label.id, name: label.name, color: label.color });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    'create_workflow_state',
+    {
+      description:
+        'Add a workflow state to a team you belong to. category is one of: ' +
+        STATE_CATEGORIES.join(', ') +
+        ' (e.g. category "triage" for a state where consumer-filed issues land).',
+      inputSchema: {
+        teamKey: z.string(),
+        name: z.string(),
+        category: z.string(),
+        color: z.string().optional(),
+      },
+    },
+    async ({ teamKey, name, category, color }) => {
+      try {
+        guardWrite();
+        if (!STATE_CATEGORIES.includes(category as StateCategory)) {
+          throw new Error(`category must be one of: ${STATE_CATEGORIES.join(', ')}`);
+        }
+        const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
+        const state = await domain.teams.createState({
+          teamId: team.id,
+          name,
+          color: color ?? colorFor(name),
+          category: category as StateCategory,
+        });
+        return ok({ id: state.id, name: state.name, category: state.category });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    'create_issue_template',
+    {
+      description:
+        'Create an issue template on a team you belong to — a reusable skeleton (e.g. a bug-report form) that pre-fills new issues.',
+      inputSchema: {
+        teamKey: z.string(),
+        name: z.string(),
+        description: z.string().optional().describe('Markdown body the template pre-fills.'),
+        titlePrefix: z.string().optional(),
+        priority: z.string().optional(),
+        labels: z.array(z.string()).optional(),
+      },
+    },
+    async ({ teamKey, name, description, titlePrefix, priority, labels }) => {
+      try {
+        guardWrite();
+        const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
+        const template = await domain.templates.create({
+          teamId: team.id,
+          name,
+          description,
+          titlePrefix,
+          priority: parsePriority(priority),
+          labelIds: await resolveLabels(domain, team.id, labels),
+        });
+        return ok({ id: template.id, name: template.name });
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
