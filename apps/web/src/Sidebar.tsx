@@ -420,6 +420,13 @@ export function Sidebar() {
                       <ListIcon size={14} />
                       <span className="grow">Issues</span>
                     </NavLink>
+                    <NavLink
+                      to={`/team/${team.key}/projects`}
+                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                    >
+                      <ProjectIcon size={14} />
+                      <span className="grow">Projects</span>
+                    </NavLink>
                     {team.triageEnabled && (
                       <NavLink
                         to={`/team/${team.key}/triage`}

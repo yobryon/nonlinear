@@ -430,21 +430,27 @@ export function projectProgress(projectId: string): { done: number; total: numbe
 }
 
 export function ProjectsPage() {
+  const { teamKey } = useParams<{ teamKey?: string }>();
   const projects = useStore((s) => s.projects);
+  const teams = useStore((s) => s.teams);
   const issues = useStore((s) => s.issues);
   const workflowStates = useStore((s) => s.workflowStates);
   const users = useStore((s) => s.users);
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
 
+  const team = teamKey ? Object.values(teams).find((t) => t.key === teamKey) : null;
+
   const rows = useMemo(
     () =>
-      Object.values(projects).sort(
-        (a, b) =>
-          PROJECT_STATUSES.indexOf(a.status) - PROJECT_STATUSES.indexOf(b.status) ||
-          (a.sortOrder < b.sortOrder ? -1 : 1),
-      ),
-    [projects],
+      Object.values(projects)
+        .filter((p) => !team || p.teamIds.includes(team.id))
+        .sort(
+          (a, b) =>
+            PROJECT_STATUSES.indexOf(a.status) - PROJECT_STATUSES.indexOf(b.status) ||
+            (a.sortOrder < b.sortOrder ? -1 : 1),
+        ),
+    [projects, team],
   );
 
   return (
@@ -452,7 +458,7 @@ export function ProjectsPage() {
       <div className="topbar">
         <div className="title">
           <ProjectIcon size={16} />
-          Projects
+          {team ? `${team.name} · Projects` : 'Projects'}
         </div>
         <span className="spacer" />
         <button className="btn primary" onClick={() => setCreating(true)}>
@@ -511,17 +517,27 @@ export function ProjectsPage() {
           );
         })}
       </div>
-      {creating && <NewProjectDialog onClose={() => setCreating(false)} />}
+      {creating && (
+        <NewProjectDialog onClose={() => setCreating(false)} defaultTeamId={team?.id} />
+      )}
     </>
   );
 }
 
-function NewProjectDialog({ onClose }: { onClose: () => void }) {
+function NewProjectDialog({
+  onClose,
+  defaultTeamId,
+}: {
+  onClose: () => void;
+  defaultTeamId?: string;
+}) {
   const teams = useStore((s) => s.teams);
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [teamIds, setTeamIds] = useState<string[]>(Object.keys(teams).slice(0, 1));
+  const [teamIds, setTeamIds] = useState<string[]>(
+    defaultTeamId ? [defaultTeamId] : Object.keys(teams).slice(0, 1),
+  );
   const [targetDate, setTargetDate] = useState('');
   const [saving, setSaving] = useState(false);
   const [teamAnchor, setTeamAnchor] = useState<Anchor | null>(null);

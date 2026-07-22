@@ -150,6 +150,7 @@ function AppShell() {
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/my-issues" element={<MyIssuesPage />} />
             <Route path="/team/:teamKey/issues" element={<TeamIssuesPage />} />
+            <Route path="/team/:teamKey/projects" element={<ProjectsPage />} />
             <Route path="/team/:teamKey/triage" element={<TriagePage />} />
             <Route path="/team/:teamKey/archive" element={<ArchivePage />} />
             <Route path="/search" element={<SearchPage />} />
