@@ -54,6 +54,7 @@ export class TeamService {
       slaHighHours: null,
       estimateScale: 'exponential',
       intakeEnabled: false,
+      internalIntake: input.internalIntake ?? true,
       intakeToken: null,
       issueCounter: 0,
       createdAt: now,
@@ -101,6 +102,7 @@ export class TeamService {
     if (input.icon !== undefined) team.icon = input.icon;
     if (input.color !== undefined) team.color = input.color;
     if (input.private !== undefined) team.private = input.private;
+    if (input.internalIntake !== undefined) team.internalIntake = input.internalIntake;
     if (input.timezone !== undefined) team.timezone = input.timezone;
     if (input.cyclesEnabled !== undefined) team.cyclesEnabled = input.cyclesEnabled;
     if (input.cycleDurationWeeks !== undefined) {

@@ -10,7 +10,14 @@ import {
   GraphQLSchema,
   GraphQLString,
 } from 'graphql';
-import { applyScope, seesTeam, visibilityFor, type Domain, type Visibility } from '@nonlinear/core';
+import {
+  applyScope,
+  canIntakeTeam,
+  canReadIssue,
+  visibilityFor,
+  type Domain,
+  type Visibility,
+} from '@nonlinear/core';
 import type {
   Comment,
   Cycle,
@@ -371,8 +378,8 @@ const MutationType = new GraphQLObjectType<unknown, Ctx>({
       type: new GraphQLNonNull(IssueType),
       args: { input: { type: new GraphQLNonNull(IssueInput) } },
       resolve: (_s, { input }: { input: Record<string, unknown> }, ctx) => {
-        if (!seesTeam(ctx.vis, input.teamId as string)) {
-          throw new Error('You do not have access to that team');
+        if (!canIntakeTeam(ctx.vis, input.teamId as string)) {
+          throw new Error('You cannot file into that team');
         }
         return ctx.domain.issues.create(ctx.viewer.id, input as never);
       },
@@ -402,8 +409,8 @@ const MutationType = new GraphQLObjectType<unknown, Ctx>({
       },
       resolve: (_s, { issueId, body }: { issueId: string; body: string }, ctx) => {
         const issue = ctx.issues.get(issueId);
-        if (issue && !seesTeam(ctx.vis, issue.teamId)) {
-          throw new Error('You do not have access to that team');
+        if (issue && !canReadIssue(ctx.vis, issue)) {
+          throw new Error('You cannot comment on that issue');
         }
         return ctx.domain.comments.create(ctx.viewer.id, { issueId, body });
       },

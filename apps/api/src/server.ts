@@ -2,7 +2,15 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import cookie from '@fastify/cookie';
 import websocket from '@fastify/websocket';
 import multipart from '@fastify/multipart';
-import { applyScope, DomainError, seesTeam, visibilityFor, type Domain } from '@nonlinear/core';
+import {
+  applyScope,
+  canIntakeTeam,
+  canReadIssue,
+  DomainError,
+  seesTeam,
+  visibilityFor,
+  type Domain,
+} from '@nonlinear/core';
 import type { TokenScope, User } from '@nonlinear/shared';
 import type { Config } from './config.js';
 import { SyncHub } from './hub.js';
@@ -106,13 +114,21 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   const authed = { preHandler: requireUser };
   type Body<T> = FastifyRequest & { body: T };
 
-  // Writes must target a team the caller can see (team membership ∩ token
-  // scope) — the same rule the MCP enforces via resolveTeam. Reads are already
-  // isolated in the bootstrap/hub; this closes the write side.
+  // The caller's effective read/write visibility (membership + intake ∩ scope).
+  const visFor = (req: FastifyRequest) =>
+    visibilityFor(domain.ctx, req.user.id).then((v) => applyScope(v, req.tokenScope.teamIds));
+
+  // Full member access to a team (edit/delete issues, projects, team settings).
   async function requireTeamAccess(req: FastifyRequest, teamId: string): Promise<void> {
-    const vis = applyScope(await visibilityFor(domain.ctx, req.user.id), req.tokenScope.teamIds);
-    if (!seesTeam(vis, teamId)) {
+    if (!seesTeam(await visFor(req), teamId)) {
       throw new DomainError('forbidden', 'You do not have access to that team', 403);
+    }
+  }
+  // May file into a team: a member, or via internal intake (non-member of an
+  // intake-enabled team). The created issue is attributed to the real user.
+  async function requireTeamIntake(req: FastifyRequest, teamId: string): Promise<void> {
+    if (!canIntakeTeam(await visFor(req), teamId)) {
+      throw new DomainError('forbidden', 'You cannot file into that team', 403);
     }
   }
 
@@ -279,13 +295,21 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
 
   // ---- issues ----
   app.post('/api/issues', authed, async (req) => {
-    await requireTeamAccess(req, (req.body as { teamId: string }).teamId);
+    // Members and internal-intake filers may create; the issue is attributed to
+    // the real user, so they can then track it as one they filed.
+    await requireTeamIntake(req, (req.body as { teamId: string }).teamId);
     return domain.issues.create(req.user.id, (req as Body<never>).body);
   });
-  app.patch('/api/issues/:id', authed, async (req) =>
-    domain.issues.update(req.user.id, (req.params as { id: string }).id, req.body as never),
-  );
+  app.patch('/api/issues/:id', authed, async (req) => {
+    // Editing an issue (state/assignee/fields) is a member operation, not an
+    // intake filer's — so require full team access on the issue's team.
+    const issue = await domain.ctx.storage.issues.get((req.params as { id: string }).id);
+    if (issue) await requireTeamAccess(req, issue.teamId);
+    return domain.issues.update(req.user.id, (req.params as { id: string }).id, req.body as never);
+  });
   app.delete('/api/issues/:id', authed, async (req) => {
+    const issue = await domain.ctx.storage.issues.get((req.params as { id: string }).id);
+    if (issue) await requireTeamAccess(req, issue.teamId);
     await domain.issues.remove((req.params as { id: string }).id);
     return { ok: true };
   });
@@ -295,8 +319,12 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
 
   // ---- comments & reactions ----
   app.post('/api/comments', authed, async (req) => {
+    // You may comment on any issue you can read — a member team's issue, or one
+    // you filed into an intake team (to answer questions / read responses).
     const issue = await domain.ctx.storage.issues.get((req.body as { issueId: string }).issueId);
-    if (issue) await requireTeamAccess(req, issue.teamId);
+    if (issue && !canReadIssue(await visFor(req), issue)) {
+      throw new DomainError('forbidden', 'You cannot comment on that issue', 403);
+    }
     return domain.comments.create(req.user.id, req.body as never);
   });
   app.patch('/api/comments/:id', authed, async (req) =>

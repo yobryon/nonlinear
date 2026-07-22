@@ -38,6 +38,8 @@ export interface CreateTeamInput {
   description?: string | null;
   cyclesEnabled?: boolean;
   cycleDurationWeeks?: number;
+  /** Accept internal intake from non-members. Defaults to true. */
+  internalIntake?: boolean;
 }
 
 export interface UpdateTeamInput {
@@ -55,6 +57,7 @@ export interface UpdateTeamInput {
   slaHighHours?: number | null;
   estimateScale?: EstimateScale;
   intakeEnabled?: boolean;
+  internalIntake?: boolean;
 }
 
 export interface CreateIssueInput {

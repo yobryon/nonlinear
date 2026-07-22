@@ -121,6 +121,14 @@ export interface Team {
   estimateScale: EstimateScale;
   /** Public intake form + inbound Slack/webhook issue creation. */
   intakeEnabled: boolean;
+  /**
+   * Internal intake: any authenticated workspace member/agent (not just team
+   * members) may file issues to this team as themselves and track the ones they
+   * filed, without seeing the team's other work. Public intake (`intakeEnabled`)
+   * is a superset — it implies internal intake plus anonymous filing.
+   * Absent on legacy rows = treated as enabled (see `effectiveInternalIntake`).
+   */
+  internalIntake: boolean;
   /** Shared secret for inbound intake posts; regenerated on enable. */
   intakeToken: string | null;
   /** Next issue number to hand out (server-side concern, synced for display only). */

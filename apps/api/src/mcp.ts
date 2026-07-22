@@ -5,7 +5,15 @@ import type { FastifyInstance } from 'fastify';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import { applyScope, seesTeam, visibilityFor, type Domain, type Visibility } from '@nonlinear/core';
+import {
+  applyScope,
+  canIntakeTeam,
+  canReadIssue,
+  seesTeam,
+  visibilityFor,
+  type Domain,
+  type Visibility,
+} from '@nonlinear/core';
 import type { Issue, Priority, TokenScope, User } from '@nonlinear/shared';
 import { PRIORITY_LABELS } from '@nonlinear/shared';
 
@@ -87,7 +95,7 @@ for (const g of GUIDES) {
   if (text) GUIDE_TEXT.set(g.uri, { meta: g, text });
 }
 
-const MCP_INSTRUCTIONS = `You are connected to nonlinear (a self-hostable Linear clone) over MCP, authenticated as one specific user. Call the \`whoami\` tool FIRST — it returns who you are (name, isAgent, role), your workspace, the teams you can see, and your token's scope (read-only? which teams?). Every write is attributed to you, and you only see the teams you belong to.
+const MCP_INSTRUCTIONS = `You are connected to nonlinear (a self-hostable Linear clone) over MCP, authenticated as one specific user. Call the \`whoami\` tool FIRST — it returns who you are (name, isAgent, role), your workspace, your member \`teams\`, your \`intakeTeams\` (teams you can file into but aren't a member of), and your token's scope (read-only? which teams?). Every write is attributed to you. You see your member teams in full; for an intake team you can file issues and track the ones you filed (via \`my_work\`), but not see the team's other work. \`list_teams\` marks each team member vs intake.
 
 If this is your first time, read the guide resources (list them with resources/list, then resources/read):
 - nonlinear://guides/for-consumer-agents — you USE a tool another team provides and want to file & track bugs/requests.
@@ -114,12 +122,18 @@ function parsePriority(value: string | number | undefined): Priority | undefined
   return Number.isNaN(n) ? undefined : (Math.max(0, Math.min(4, n)) as Priority);
 }
 
-async function resolveTeam(domain: Domain, teamKey: string, vis: Visibility) {
+async function resolveTeam(
+  domain: Domain,
+  teamKey: string,
+  vis: Visibility,
+  opts: { requireMember?: boolean } = {},
+) {
   const team = (await domain.ctx.storage.teams.all()).find(
     (t) => t.key.toUpperCase() === teamKey.toUpperCase(),
   );
-  // A team the credential can't see is reported as unknown (don't leak existence).
-  if (!team || !seesTeam(vis, team.id)) throw new Error(`Unknown team "${teamKey}"`);
+  // A team the credential can't see (or can't file to) is reported as unknown.
+  const ok = team && (opts.requireMember ? seesTeam(vis, team.id) : canIntakeTeam(vis, team.id));
+  if (!team || !ok) throw new Error(`Unknown team "${teamKey}"`);
   return team;
 }
 
@@ -129,9 +143,10 @@ async function resolveIssue(domain: Domain, identifier: string, vis: Visibility)
   const key = identifier.slice(0, dash).toUpperCase();
   const number = Number(identifier.slice(dash + 1));
   const team = (await domain.ctx.storage.teams.all()).find((t) => t.key.toUpperCase() === key);
-  if (!team || !seesTeam(vis, team.id)) throw new Error(`Issue ${identifier} not found`);
+  if (!team || !canIntakeTeam(vis, team.id)) throw new Error(`Issue ${identifier} not found`);
   const issue = (await domain.ctx.storage.issues.byTeam(team.id)).find((i) => i.number === number);
-  if (!issue) throw new Error(`Issue ${identifier} not found`);
+  // In an intake team you can only resolve issues you filed.
+  if (!issue || !canReadIssue(vis, issue)) throw new Error(`Issue ${identifier} not found`);
   return issue;
 }
 
@@ -264,6 +279,9 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
       const visibleKeys = vis.seesAll
         ? allTeams.map((t) => t.key)
         : [...vis.teamIds].map(keyOf).filter((k): k is string => Boolean(k));
+      const intakeKeys = [...vis.intakeTeamIds]
+        .map(keyOf)
+        .filter((k): k is string => Boolean(k));
       const tokenTeams =
         scope.teamIds === null
           ? 'all'
@@ -276,8 +294,11 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
           role: user.role,
         },
         workspace: workspace?.name,
-        // The teams you can read/act in. Admins see every team.
+        // Teams you're a member of — full read/write. Admins see every team.
         teams: visibleKeys,
+        // Teams you can file intake into (not a member): create issues + track
+        // the ones you filed, but you don't see their other work.
+        intakeTeams: intakeKeys,
         // What the presenting credential is allowed to do.
         token: { readOnly: scope.readOnly, teams: tokenTeams },
       });
@@ -286,12 +307,20 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
 
   server.registerTool(
     'list_teams',
-    { description: 'List all teams with their keys.', inputSchema: {} },
+    {
+      description:
+        'List teams you can act in. access="member" (full) or "intake" (you can file issues and track the ones you filed, but not see the team\'s other work).',
+      inputSchema: {},
+    },
     async () =>
       ok(
         (await s.teams.all())
-          .filter((t) => seesTeam(vis, t.id))
-          .map((t) => ({ key: t.key, name: t.name })),
+          .filter((t) => canIntakeTeam(vis, t.id))
+          .map((t) => ({
+            key: t.key,
+            name: t.name,
+            access: seesTeam(vis, t.id) ? 'member' : 'intake',
+          })),
       ),
   );
 
@@ -364,7 +393,7 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
       },
     },
     async ({ query, teamKey, assignee, state, priority, limit }) => {
-      let issues = (await s.issues.all()).filter((i) => !i.archivedAt && seesTeam(vis, i.teamId));
+      let issues = (await s.issues.all()).filter((i) => !i.archivedAt && canReadIssue(vis, i));
       if (teamKey) {
         const team = await resolveTeam(domain, teamKey, vis);
         issues = issues.filter((i) => i.teamId === team.id);
@@ -432,7 +461,7 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
     { description: 'List issues assigned to the authenticated user.', inputSchema: {} },
     async () => {
       const mine = (await s.issues.all())
-        .filter((i) => i.assigneeId === user.id && !i.archivedAt && seesTeam(vis, i.teamId))
+        .filter((i) => i.assigneeId === user.id && !i.archivedAt && canReadIssue(vis, i))
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       return ok(await Promise.all(mine.map((i) => serializeIssue(domain, i, { summary: true }))));
     },
@@ -442,11 +471,11 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
     'my_work',
     {
       description:
-        'What needs your attention: issues assigned to you and issues where a comment @mentions your handle. A pull-based alternative to a webhook.',
+        'What needs your attention: issues assigned to you, issues where a comment @mentions your handle, and issues you filed (incl. via intake into other teams — to track responses). A pull-based alternative to a webhook.',
       inputSchema: {},
     },
     async () => {
-      const visible = (await s.issues.all()).filter((i) => !i.archivedAt && seesTeam(vis, i.teamId));
+      const visible = (await s.issues.all()).filter((i) => !i.archivedAt && canReadIssue(vis, i));
       const byUpdated = (a: Issue, b: Issue) => b.updatedAt.localeCompare(a.updatedAt);
       const assigned = visible.filter((i) => i.assigneeId === user.id).sort(byUpdated);
 
@@ -460,12 +489,16 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
       const mentioned = visible
         .filter((i) => mentionedIds.has(i.id) && i.assigneeId !== user.id)
         .sort(byUpdated);
+      const filed = visible
+        .filter((i) => i.creatorId === user.id && i.assigneeId !== user.id)
+        .sort(byUpdated);
 
+      const summarize = (arr: Issue[]) =>
+        Promise.all(arr.map((i) => serializeIssue(domain, i, { summary: true })));
       return ok({
-        assigned: await Promise.all(assigned.map((i) => serializeIssue(domain, i, { summary: true }))),
-        mentioned: await Promise.all(
-          mentioned.map((i) => serializeIssue(domain, i, { summary: true })),
-        ),
+        assigned: await summarize(assigned),
+        mentioned: await summarize(mentioned),
+        filed: await summarize(filed),
       });
     },
   );
@@ -525,6 +558,10 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
       try {
         guardWrite();
         const issue = await resolveIssue(domain, identifier, vis);
+        // Intake access is view-and-comment on your own filed issues, not edit.
+        if (!seesTeam(vis, issue.teamId)) {
+          throw new Error(`You can view ${identifier} but not edit it (intake access, not a member)`);
+        }
         const updated = await domain.issues.update(user.id, issue.id, {
           title,
           description,
@@ -572,7 +609,9 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
       try {
         guardWrite();
         const teamIds = [];
-        for (const key of teamKeys) teamIds.push((await resolveTeam(domain, key, vis)).id);
+        for (const key of teamKeys) {
+          teamIds.push((await resolveTeam(domain, key, vis, { requireMember: true })).id);
+        }
         const project = await domain.projects.create({ name, description, teamIds });
         return ok({ id: project.id, name: project.name });
       } catch (err) {
