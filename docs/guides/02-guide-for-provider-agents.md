@@ -128,8 +128,9 @@ ask the admin to re-mint via `POST /api/agents/:id/tokens`.
 You're role `member`, not `admin`. You **cannot**: create teams, create other agents, create
 webhooks, manage members, read the audit log, change AI settings, or touch SCIM. You also can't
 log in to the web UI or use SSO. Anything admin-gated has to go through a human admin — the
-provisioning in §1, the webhook in §6, and team/label/SLA setup in §3 are all admin actions.
-Plan to ask your operator (guide 01) for those.
+provisioning in §1, the webhook in §6, and team-creation / SLAs are admin actions. But your own
+team's **states, labels, and templates you set up yourself** (§3) — you're a member of it.
+Plan to ask your operator (guide 01) for the admin-only bits.
 
 ---
 
@@ -155,7 +156,7 @@ Bearer per request. Config block:
 For Claude Code specifically: `claude mcp add --transport http nonlinear http://localhost:8080/mcp
 --header "Authorization: Bearer nl_your_agent_token"`.
 
-### The 14 tools
+### The 17 tools
 
 Names are **resolved for you** — teams by key (`AUGRID`), states/labels by name (`In Progress`,
 `type: bug`), assignees by email / `@handle` / display name. You never juggle UUIDs through MCP.
@@ -175,7 +176,7 @@ Names are **resolved for you** — teams by key (`AUGRID`), states/labels by nam
 | `list_my_issues` | Issues assigned to *your* token's user (lean summary). Your work queue. |
 | `my_work` | No params. `{ assigned: [...], mentioned: [...] }` — issues assigned to you **and** issues where a comment @mentions your handle (lean summaries; `get_issue` for detail). The pull-based "what needs my attention". |
 
-**Write (4):**
+**Write (7):**
 
 | Tool | Params |
 |---|---|
@@ -183,6 +184,14 @@ Names are **resolved for you** — teams by key (`AUGRID`), states/labels by nam
 | `update_issue` | `{ identifier, title?, description?, state?, priority?, assignee?, project? }` |
 | `add_comment` | `{ identifier, body }` — markdown + `@handle` mentions |
 | `create_project` | `{ name, description?, teamKeys[] }` |
+| `create_label` | `{ teamKey, name, color? }` — shape your own team's labels |
+| `create_workflow_state` | `{ teamKey, name, category, color? }` — category ∈ triage/backlog/unstarted/started/completed/canceled |
+| `create_issue_template` | `{ teamKey, name, description?, titlePrefix?, priority?, labels? }` |
+
+The last three configure **your own team's** workflow — they require you be a **member** of
+`teamKey` (not just intake access), so you can set up your team yourself: a Triage state for
+consumer-filed issues, `area:`/`type:` labels for routing, a bug-report template. `create_project`
+also requires membership.
 
 `priority` is `none/urgent/high/medium/low` **or** `0–4` (0 None, 1 Urgent, 2 High, 3 Medium,
 4 Low). `project` is a project **name** (resolved for you like team/state/label names) — file an
@@ -245,12 +254,15 @@ Each team owns its workflow states, grouped by **category**: `triage`, `backlog`
 - **Needs Info** (`started`) — waiting on the reporter.
 - **Fixed / Released** (`completed`), **Won't Fix / Duplicate** (`canceled`).
 
-Check them with `list_workflow_states({ teamKey: "AUGRID" })` and transition with
-`update_issue({ identifier, state: "In Progress" })`.
+Check them with `list_workflow_states({ teamKey: "AUGRID" })`, add ones you're missing —
+`create_workflow_state({ teamKey: "AUGRID", name: "Triage", category: "triage" })` — and
+transition with `update_issue({ identifier, state: "In Progress" })`. (You're a member of your
+own team, so you can shape its states yourself.)
 
 ### Label taxonomy for incoming reports
 
-Labels are how you route and report. Establish two axes up front (admin creates labels):
+Labels are how you route and report. Establish two axes up front — create them with
+`create_label({ teamKey: "AUGRID", name: "area: rendering" })`:
 
 - **Type**: `type: bug`, `type: feature`, `type: question`, `type: docs`.
 - **Area**: your product's surfaces — for `augrid`: `area: rendering`, `area: sorting`,
@@ -263,8 +275,9 @@ Apply on create: `create_issue({ teamKey: "AUGRID", title: "…", labels: ["type
 ### Issue templates
 
 Templates pre-fill a body so reporters give you repro steps, versions, and expected/actual up
-front. Create a **Bug report** and a **Feature request** template per team (admin, via the team
-settings UI — guide 01). They dramatically raise the quality of what lands in triage.
+front. Create a **Bug report** and a **Feature request** template with
+`create_issue_template({ teamKey: "AUGRID", name: "Bug report", description: "…" })` (or an admin
+via the team settings UI — guide 01). They dramatically raise the quality of what lands in triage.
 
 ### SLAs
 
