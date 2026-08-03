@@ -20,6 +20,7 @@ import {
   LabelIcon,
 } from './icons.js';
 import { AssigneePicker, LabelPicker, PriorityPicker, StatePicker, usePicker } from './pickers.js';
+import { originState, useCurrentOrigin } from './nav.js';
 import {
   deleteIssue,
   patchIssue,
@@ -272,6 +273,7 @@ export function IssueRow({
   const users = useStore((s) => s.users);
   const labels = useStore((s) => s.labels);
   const navigate = useNavigate();
+  const origin = useCurrentOrigin();
   const [ctxAnchor, setCtxAnchor] = useState<Anchor | null>(null);
   const selected = useSelection((s) => s.ids.has(issue.id));
 
@@ -298,7 +300,7 @@ export function IssueRow({
             return;
           }
           useSelection.getState().clear();
-          navigate(`/issue/${key}`);
+          navigate(`/issue/${key}`, { state: originState(origin) });
         }}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -773,6 +775,7 @@ export function Board({
   const labels = useStore((s) => s.labels);
   const issuesById = useStore((s) => s.issues);
   const navigate = useNavigate();
+  const origin = useCurrentOrigin();
   const [ctxMenu, setCtxMenu] = useState<{ issue: Issue; anchor: Anchor } | null>(null);
 
   // Present each column in manual (sortOrder) order so reordering is stable.
@@ -830,7 +833,11 @@ export function Board({
                   <div
                     className="board-card"
                     data-sort-id={issue.id}
-                    onClick={() => navigate(`/issue/${issueKey(issue, teams)}`)}
+                    onClick={() =>
+                      navigate(`/issue/${issueKey(issue, teams)}`, {
+                        state: originState(origin),
+                      })
+                    }
                     onContextMenu={(e) => {
                       e.preventDefault();
                       setCtxMenu({ issue, anchor: anchorFromMouse(e) });

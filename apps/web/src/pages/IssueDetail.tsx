@@ -42,6 +42,7 @@ import {
 import { deleteIssue, patchIssue, toggleFavorite, toggleLabel } from '../actions.js';
 import { openNewIssue } from '../NewIssueDialog.js';
 import { IssueRow } from '../issueViews.js';
+import { OriginCrumb } from '../nav.js';
 
 export function IssueDetailPage() {
   const { key } = useParams<{ key: string }>();
@@ -188,11 +189,15 @@ function IssueDetail({ issueId }: { issueId: string }) {
     <>
       <div className="topbar">
         <div className="title">
-          {team && (
-            <Link to={`/team/${team.key}/issues`} className="crumb">
-              {team.name}
-            </Link>
-          )}
+          <OriginCrumb
+            fallback={
+              team && (
+                <Link to={`/team/${team.key}/issues`} className="crumb">
+                  {team.name}
+                </Link>
+              )
+            }
+          />
           <span className="crumb">›</span>
           <span>{kid}</span>
         </div>

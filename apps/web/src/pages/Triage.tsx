@@ -4,6 +4,7 @@ import { issueKey, relativeTime, sortedStates, useStore } from '../store.js';
 import { Avatar } from '../ui.js';
 import { CheckIcon, CloseIcon, PriorityIcon } from '../icons.js';
 import { patchIssue } from '../actions.js';
+import { originState } from '../nav.js';
 
 /**
  * Triage inbox: issues sitting in the team's triage state, with one-click
@@ -68,7 +69,14 @@ export function TriagePage() {
             <div
               key={issue.id}
               className="inbox-row unread"
-              onClick={() => navigate(`/issue/${issueKey(issue, teams)}`)}
+              onClick={() =>
+                navigate(`/issue/${issueKey(issue, teams)}`, {
+                  state: originState({
+                    label: `${team.name} · Triage`,
+                    to: `/team/${team.key}/triage`,
+                  }),
+                })
+              }
             >
               <PriorityIcon priority={issue.priority} />
               <div className="msg">

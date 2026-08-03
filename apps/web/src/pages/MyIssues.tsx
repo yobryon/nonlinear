@@ -10,13 +10,14 @@ import {
   type IssueFilters,
 } from '../issueViews.js';
 import { UserIcon } from '../icons.js';
+import { OriginProvider, useUrlTab } from '../nav.js';
 
 type Tab = 'assigned' | 'created' | 'subscribed';
 
 export function MyIssuesPage() {
   const issues = useStore((s) => s.issues);
   const userId = useStore((s) => s.userId);
-  const [tab, setTab] = useState<Tab>('assigned');
+  const [tab, setTab] = useUrlTab(['assigned', 'created', 'subscribed'] as const, 'assigned');
   const [grouping, setGrouping] = useState<Grouping>('state');
   const [filters, setFilters] = useState<IssueFilters>(EMPTY_FILTERS);
 
@@ -61,9 +62,16 @@ export function MyIssuesPage() {
         grouping={grouping}
         onGrouping={setGrouping}
       />
-      <div className="content">
-        <GroupedIssueList groups={grouped} grouping={grouping} />
-      </div>
+      <OriginProvider
+        value={{
+          label: 'My Issues',
+          to: `/my-issues${tab !== 'assigned' ? `?tab=${tab}` : ''}`,
+        }}
+      >
+        <div className="content">
+          <GroupedIssueList groups={grouped} grouping={grouping} />
+        </div>
+      </OriginProvider>
     </>
   );
 }

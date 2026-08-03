@@ -628,6 +628,27 @@ textarea.input {
   color: var(--text-3);
   font-weight: 500;
 }
+a.crumb {
+  text-decoration: none;
+  border-radius: 5px;
+}
+a.crumb:hover {
+  color: var(--text-1);
+}
+/* Origin "back" crumb: reads as a return to where you came from. */
+.topbar .title .crumb-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.topbar .title .crumb-back > span[aria-hidden] {
+  font-size: 15px;
+  line-height: 1;
+  color: var(--text-4);
+}
+a.crumb-back:hover > span[aria-hidden] {
+  color: var(--text-2);
+}
 .topbar .spacer {
   flex: 1;
 }

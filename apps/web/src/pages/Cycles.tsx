@@ -13,6 +13,7 @@ import {
 } from '../issueViews.js';
 import { toggleFavorite } from '../actions.js';
 import { BurnupChart } from '../components/BurnupChart.js';
+import { OriginCrumb, OriginProvider } from '../nav.js';
 
 function cyclePhase(cycle: Cycle): 'past' | 'active' | 'upcoming' {
   const now = new Date().toISOString();
@@ -153,9 +154,13 @@ export function CycleDetailPage() {
     <>
       <div className="topbar">
         <div className="title">
-          <Link to={`/team/${team.key}/cycles`} className="crumb">
-            {team.name} cycles
-          </Link>
+          <OriginCrumb
+            fallback={
+              <Link to={`/team/${team.key}/cycles`} className="crumb">
+                {team.name} cycles
+              </Link>
+            }
+          />
           <span className="crumb">›</span>
           <CycleIcon size={15} />
           {cycle.name || `Cycle ${cycle.number}`}
@@ -187,7 +192,11 @@ export function CycleDetailPage() {
           <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Burn-up</div>
           <BurnupChart cycleId={cycle.id} />
         </div>
-        <GroupedIssueList groups={grouped} grouping="state" />
+        <OriginProvider
+          value={{ label: cycle.name || `Cycle ${cycle.number}`, to: `/cycle/${cycle.id}` }}
+        >
+          <GroupedIssueList groups={grouped} grouping="state" />
+        </OriginProvider>
       </div>
     </>
   );

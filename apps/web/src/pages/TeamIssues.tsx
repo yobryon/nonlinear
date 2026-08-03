@@ -16,6 +16,7 @@ import {
 } from '../issueViews.js';
 import { BoardIcon, ListIcon, PlusIcon } from '../icons.js';
 import { openNewIssue } from '../NewIssueDialog.js';
+import { OriginProvider, useUrlTab } from '../nav.js';
 
 type Tab = 'all' | 'active' | 'backlog';
 
@@ -94,7 +95,7 @@ export function TeamIssuesPage() {
   const issues = useStore((s) => s.issues);
   const states = useStore((s) => s.workflowStates);
 
-  const [tab, setTab] = useState<Tab>('all');
+  const [tab, setTab] = useUrlTab(['all', 'active', 'backlog'] as const, 'all');
   const [display, setDisplay] = useState<'list' | 'board'>('list');
   const [grouping, setGrouping] = useState<Grouping>('state');
   const [filters, setFilters] = useState<IssueFilters>(EMPTY_FILTERS);
@@ -204,18 +205,25 @@ export function TeamIssuesPage() {
           ) : undefined
         }
       />
-      <div className="content">
-        {display === 'list' ? (
-          <GroupedIssueList
-            groups={grouped}
-            grouping={grouping}
-            showState={grouping !== 'state'}
-            onQuickAdd={quickAdd}
-          />
-        ) : (
-          <Board groups={grouped} onQuickAdd={quickAdd} />
-        )}
-      </div>
+      <OriginProvider
+        value={{
+          label: team.name,
+          to: `/team/${team.key}/issues${tab !== 'all' ? `?tab=${tab}` : ''}`,
+        }}
+      >
+        <div className="content">
+          {display === 'list' ? (
+            <GroupedIssueList
+              groups={grouped}
+              grouping={grouping}
+              showState={grouping !== 'state'}
+              onQuickAdd={quickAdd}
+            />
+          ) : (
+            <Board groups={grouped} onQuickAdd={quickAdd} />
+          )}
+        </div>
+      </OriginProvider>
     </>
   );
 }

@@ -5,6 +5,7 @@ import { api } from '../api.js';
 import { issueKey, relativeTime, useStore } from '../store.js';
 import { toastError } from '../ui.js';
 import { TrashIcon } from '../icons.js';
+import { originState } from '../nav.js';
 
 export function ArchivePage() {
   const { teamKey } = useParams<{ teamKey: string }>();
@@ -79,7 +80,14 @@ export function ArchivePage() {
           <div
             key={issue.id}
             className="issue-row"
-            onClick={() => navigate(`/issue/${issueKey(issue, teams)}`)}
+            onClick={() =>
+              navigate(`/issue/${issueKey(issue, teams)}`, {
+                state: originState({
+                  label: `${team.name} · Archive`,
+                  to: `/team/${team.key}/archive`,
+                }),
+              })
+            }
           >
             <span className="identifier dim">{issueKey(issue, teams)}</span>
             <span className="title">{issue.title}</span>

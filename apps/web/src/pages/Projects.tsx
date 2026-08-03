@@ -26,6 +26,7 @@ import {
 } from '../issueViews.js';
 import { openNewIssue } from '../NewIssueDialog.js';
 import { toggleFavorite } from '../actions.js';
+import { OriginCrumb, OriginProvider, originState, useUrlTab } from '../nav.js';
 import { Markdown } from '../markdown.js';
 import { usePicker, AssigneePicker } from '../pickers.js';
 
@@ -493,7 +494,14 @@ export function ProjectsPage() {
             <div
               key={project.id}
               className="project-row"
-              onClick={() => navigate(`/project/${project.id}`)}
+              onClick={() =>
+                navigate(`/project/${project.id}`, {
+                  state: originState({
+                    label: team ? `${team.name} · Projects` : 'Projects',
+                    to: team ? `/team/${team.key}/projects` : '/projects',
+                  }),
+                })
+              }
             >
               <ProjectStatusIcon status={project.status} />
               <span className="name">{project.name}</span>
@@ -517,9 +525,7 @@ export function ProjectsPage() {
           );
         })}
       </div>
-      {creating && (
-        <NewProjectDialog onClose={() => setCreating(false)} defaultTeamId={team?.id} />
-      )}
+      {creating && <NewProjectDialog onClose={() => setCreating(false)} defaultTeamId={team?.id} />}
     </>
   );
 }
@@ -659,7 +665,7 @@ function ProjectDetail({ project }: { project: Project }) {
   const userId = useStore((s) => s.userId);
   const teams = useStore((s) => s.teams);
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'overview' | 'issues'>('overview');
+  const [tab, setTab] = useUrlTab(['overview', 'issues'] as const, 'overview');
   const [filters, setFilters] = useState<IssueFilters>(EMPTY_FILTERS);
   const [statusAnchor, setStatusAnchor] = useState<Anchor | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<Anchor | null>(null);
@@ -700,9 +706,13 @@ function ProjectDetail({ project }: { project: Project }) {
     <>
       <div className="topbar">
         <div className="title">
-          <Link to="/projects" className="crumb">
-            Projects
-          </Link>
+          <OriginCrumb
+            fallback={
+              <Link to="/projects" className="crumb">
+                Projects
+              </Link>
+            }
+          />
           <span className="crumb">›</span>
           <ProjectStatusIcon status={project.status} />
           {project.name}
@@ -847,7 +857,11 @@ function ProjectDetail({ project }: { project: Project }) {
             }
           />
           <div className="content">
-            <GroupedIssueList groups={grouped} grouping="state" />
+            <OriginProvider
+              value={{ label: project.name, to: `/project/${project.id}?tab=issues` }}
+            >
+              <GroupedIssueList groups={grouped} grouping="state" />
+            </OriginProvider>
           </div>
         </>
       )}
