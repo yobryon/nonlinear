@@ -15,7 +15,13 @@ import { Link, useSearchParams, useLocation } from 'react-router-dom';
  * labeled "back" to exactly that spot — falling back to the canonical crumb on
  * deep-links or refresh, so nothing regresses.
  */
-export type NavOrigin = { label: string; to: string };
+/**
+ * Where a user was when they opened a detail view. `from` is that origin's own
+ * origin — the chain that lets a back-link restore not just the parent view but
+ * *its* breadcrumb too (e.g. issue → back to a project → the project still
+ * remembers it came from "Plank · Projects", not the workspace list).
+ */
+export type NavOrigin = { label: string; to: string; from?: NavOrigin };
 
 const OriginContext = createContext<NavOrigin | null>(null);
 
@@ -47,7 +53,13 @@ export function OriginCrumb({ fallback }: { fallback: React.ReactNode }) {
   const origin = useNavOrigin();
   if (!origin) return <>{fallback}</>;
   return (
-    <Link to={origin.to} className="crumb crumb-back" title={`Back to ${origin.label}`}>
+    <Link
+      to={origin.to}
+      // Replay the parent's own origin so its breadcrumb survives the trip back.
+      state={originState(origin.from)}
+      className="crumb crumb-back"
+      title={`Back to ${origin.label}`}
+    >
       <span aria-hidden="true">‹</span> {origin.label}
     </Link>
   );

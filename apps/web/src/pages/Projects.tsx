@@ -26,7 +26,7 @@ import {
 } from '../issueViews.js';
 import { openNewIssue } from '../NewIssueDialog.js';
 import { toggleFavorite } from '../actions.js';
-import { OriginCrumb, OriginProvider, originState, useUrlTab } from '../nav.js';
+import { OriginCrumb, OriginProvider, originState, useNavOrigin, useUrlTab } from '../nav.js';
 import { Markdown } from '../markdown.js';
 import { usePicker, AssigneePicker } from '../pickers.js';
 
@@ -665,6 +665,7 @@ function ProjectDetail({ project }: { project: Project }) {
   const userId = useStore((s) => s.userId);
   const teams = useStore((s) => s.teams);
   const navigate = useNavigate();
+  const projectOrigin = useNavOrigin();
   const [tab, setTab] = useUrlTab(['overview', 'issues'] as const, 'overview');
   const [filters, setFilters] = useState<IssueFilters>(EMPTY_FILTERS);
   const [statusAnchor, setStatusAnchor] = useState<Anchor | null>(null);
@@ -858,7 +859,11 @@ function ProjectDetail({ project }: { project: Project }) {
           />
           <div className="content">
             <OriginProvider
-              value={{ label: project.name, to: `/project/${project.id}?tab=issues` }}
+              value={{
+                label: project.name,
+                to: `/project/${project.id}?tab=issues`,
+                from: projectOrigin ?? undefined,
+              }}
             >
               <GroupedIssueList groups={grouped} grouping="state" />
             </OriginProvider>
