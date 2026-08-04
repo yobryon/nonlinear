@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { IssueActivity, IssueRelationType } from '@nonlinear/shared';
 import { PRIORITY_LABELS } from '@nonlinear/shared';
@@ -97,6 +97,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
   const [reminderAnchor, setReminderAnchor] = useState<Anchor | null>(null);
   const [relAnchor, setRelAnchor] = useState<Anchor | null>(null);
   const [relType, setRelType] = useState<IssueRelationType>('blocks');
+  const titleRef = useRef<HTMLTextAreaElement>(null);
 
   const statePicker = usePicker();
   const priorityPicker = usePicker();
@@ -117,6 +118,19 @@ function IssueDetail({ issueId }: { issueId: string }) {
   useEffect(() => {
     if (liveTitle !== undefined) setTitleDraft(liveTitle);
   }, [liveTitle]);
+  // Grow the title box to fit a wrapped title — on load, on edits, and when the
+  // pane's width changes (which reflows how many lines the title needs).
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [titleDraft]);
   useEffect(() => {
     if (!editingDesc && liveDescription !== undefined) setDescDraft(liveDescription);
   }, [liveDescription, editingDesc]);
@@ -237,14 +251,11 @@ function IssueDetail({ issueId }: { issueId: string }) {
         <div className="detail-main">
           <div className="container">
             <textarea
+              ref={titleRef}
               className="detail-title"
               value={titleDraft}
               rows={1}
-              onChange={(e) => {
-                setTitleDraft(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = `${e.target.scrollHeight}px`;
-              }}
+              onChange={(e) => setTitleDraft(e.target.value)}
               onBlur={saveTitle}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
