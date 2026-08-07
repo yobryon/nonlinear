@@ -838,8 +838,11 @@ a.crumb-back:hover > span[aria-hidden] {
 .issue-row .identifier {
   color: var(--text-3);
   font-size: 12px;
-  width: 64px;
+  /* Reserve a column for alignment, but grow (never wrap) for longer keys
+     like PLANK-103 once a team passes 100 issues. */
+  min-width: 64px;
   flex-shrink: 0;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .issue-row .title {
