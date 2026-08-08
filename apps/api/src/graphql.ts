@@ -45,6 +45,8 @@ import { PRIORITY_LABELS, type Priority } from '@nonlinear/shared';
 export interface GraphqlContext {
   domain: Domain;
   viewer: User;
+  /** Attribution identity (viewer, or a persona under it via X-Agent-ID). */
+  actor: User;
   vis: Visibility;
   teams: Map<string, Team>;
   states: Map<string, WorkflowState>;
@@ -64,6 +66,7 @@ export async function graphqlContext(
   domain: Domain,
   viewer: User,
   scope: TokenScope,
+  actor: User = viewer,
 ): Promise<GraphqlContext> {
   const s = domain.ctx.storage;
   const [teams, states, users, labels, projects, issues, comments, cycles, updates, baseVis] =
@@ -82,6 +85,7 @@ export async function graphqlContext(
   return {
     domain,
     viewer,
+    actor,
     vis: applyScope(baseVis, scope.teamIds),
     teams: byId(teams),
     states: byId(states),
@@ -381,7 +385,7 @@ const MutationType = new GraphQLObjectType<unknown, Ctx>({
         if (!canIntakeTeam(ctx.vis, input.teamId as string)) {
           throw new Error('You cannot file into that team');
         }
-        return ctx.domain.issues.create(ctx.viewer.id, input as never);
+        return ctx.domain.issues.create(ctx.actor.id, input as never);
       },
     },
     updateIssue: {
@@ -391,7 +395,7 @@ const MutationType = new GraphQLObjectType<unknown, Ctx>({
         input: { type: new GraphQLNonNull(IssueUpdateInput) },
       },
       resolve: (_s, { id, input }: { id: string; input: Record<string, unknown> }, ctx) =>
-        ctx.domain.issues.update(ctx.viewer.id, id, input as never),
+        ctx.domain.issues.update(ctx.actor.id, id, input as never),
     },
     deleteIssue: {
       type: new GraphQLNonNull(GraphQLBoolean),
@@ -412,7 +416,7 @@ const MutationType = new GraphQLObjectType<unknown, Ctx>({
         if (issue && !canReadIssue(ctx.vis, issue)) {
           throw new Error('You cannot comment on that issue');
         }
-        return ctx.domain.comments.create(ctx.viewer.id, { issueId, body });
+        return ctx.domain.comments.create(ctx.actor.id, { issueId, body });
       },
     },
   }),

@@ -48,8 +48,7 @@ export class TokenService {
     if (!(await this.ctx.storage.users.get(userId))) throw notFound('User');
 
     const secret = `${TOKEN_PREFIX}${newToken()}`;
-    const teamIds =
-      input.teamIds && input.teamIds.length > 0 ? [...new Set(input.teamIds)] : null;
+    const teamIds = input.teamIds && input.teamIds.length > 0 ? [...new Set(input.teamIds)] : null;
     const stored: StoredApiToken = {
       id: newId(),
       userId,

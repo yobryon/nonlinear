@@ -79,21 +79,39 @@ export class WebhookService {
    * issue's subscribers include them, or a comment @mentions their handle.
    * This is the trigger half of the assign/mention → agent loop.
    */
-  private async involvesAgent(delta: SyncDelta, agentId: string): Promise<boolean> {
+  private involvesAgent(
+    delta: SyncDelta,
+    identity: { ids: Set<string>; handles: string[] },
+  ): boolean {
     if (delta.action === 'delete') return false;
     if (delta.model === 'issue') {
       const issue = delta.data as { assigneeId?: string | null; subscriberIds?: string[] };
-      return issue.assigneeId === agentId || (issue.subscriberIds ?? []).includes(agentId);
+      if (issue.assigneeId && identity.ids.has(issue.assigneeId)) return true;
+      return (issue.subscriberIds ?? []).some((id) => identity.ids.has(id));
     }
     if (delta.model === 'comment') {
-      const comment = delta.data as { body?: string };
-      const agent = await this.ctx.storage.users.get(agentId);
-      if (!agent) return false;
-      const handle = agent.displayName.toLowerCase();
-      const body = (comment.body ?? '').toLowerCase();
-      return new RegExp(`(^|[^\\w])@${handle}(?![\\w.-])`).test(body);
+      const body = ((delta.data as { body?: string }).body ?? '').toLowerCase();
+      return identity.handles.some((h) => new RegExp(`(^|[^\\w])@${h}(?![\\w.-])`).test(body));
     }
     return false;
+  }
+
+  /**
+   * The agent's own id + handle plus those of every persona acting under it, so
+   * a webhook registered for an agent also fires when one of its personas is
+   * assigned or @mentioned.
+   */
+  private async agentIdentity(agentId: string): Promise<{ ids: Set<string>; handles: string[] }> {
+    const users = await this.ctx.storage.users.all();
+    const ids = new Set<string>([agentId]);
+    const handles: string[] = [];
+    for (const u of users) {
+      if (u.id === agentId || u.parentAgentId === agentId) {
+        ids.add(u.id);
+        handles.push(u.displayName.toLowerCase());
+      }
+    }
+    return { ids, handles };
   }
 
   private async scopeDeltas(
@@ -101,11 +119,8 @@ export class WebhookService {
     deltas: SyncDelta[],
   ): Promise<SyncDelta[]> {
     if (!webhook.agentUserId) return deltas;
-    const kept: SyncDelta[] = [];
-    for (const d of deltas) {
-      if (await this.involvesAgent(d, webhook.agentUserId)) kept.push(d);
-    }
-    return kept;
+    const identity = await this.agentIdentity(webhook.agentUserId);
+    return deltas.filter((d) => this.involvesAgent(d, identity));
   }
 
   private async dispatch(deltas: SyncDelta[], log: (message: string) => void): Promise<void> {

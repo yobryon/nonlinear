@@ -1081,6 +1081,12 @@ a.crumb-back:hover > span[aria-hidden] {
   font-family: inherit;
 }
 
+.persona-parent {
+  color: var(--text-4);
+  font-size: 11.5px;
+  font-weight: 400;
+  white-space: nowrap;
+}
 .prop-row {
   display: flex;
   align-items: center;

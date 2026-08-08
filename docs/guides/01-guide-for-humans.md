@@ -311,13 +311,49 @@ curl -X POST http://localhost:8080/api/agents/<AGENT_ID>/tokens \
 # → { "token": {...}, "secret": "nl_..." }   ← put the SECRET in the agent client / .mcp.json
 ```
 
-> **The token IS the identity — there is no "act as" selector.** A token is minted for
-> exactly one user and every call authenticates as that user.
+> **The token is the *authorization* identity.** A token is minted for exactly one user; it
+> decides what a caller can see and do. For *attribution*, an agent session can additionally
+> present a persona — see 6d.
 >
 > **Mint agent tokens from Members → Agents, or `POST /api/agents/:id/tokens`** — **not**
 > from Profile → API tokens, which mints a *personal* token bound to *you* the admin (the
 > client would then act as the human, not the agent). Verify what a token resolves to with
 > the MCP `whoami` tool or `GET /api/auth/me`. (Scope/read-only are set via the API only.)
+
+### 6d. One token, a fleet of agents (personas)
+
+When you run several agent sessions **against one repo and one shared `.mcp.json`**, they all
+present the same token and would otherwise all look like the same agent — attribution and
+assignment collapse into one identity. A **persona** fixes this without minting a token per
+session.
+
+Any session may add an **`X-Agent-ID`** header alongside the agent's `Authorization: Bearer`.
+The value (e.g. `arch`) names a persona under that agent — `arch` **acting under**
+`vantage-agent`. The persona is a real, assignable member, **auto-created the first time the
+name is seen** (no pre-provisioning), and everything that uses member identity carries it:
+issue source, assignee, @mentions, activity, comments. It renders as the short name with a
+quiet **"· via vantage-agent"** badge; its canonical handle is `vantage-agent.arch`.
+
+It's **structural, not part of any tool** — the model never sees or passes it — so wire it once
+in `.mcp.json` and let each session's own env var flow in:
+
+```jsonc
+// .mcp.json — one file, shared by every session in the repo
+{ "mcpServers": { "nonlinear": {
+  "type": "http",
+  "url": "http://localhost:8080/mcp",
+  "headers": {
+    "Authorization": "Bearer ${NONLINEAR_TOKEN}",
+    "X-Agent-ID": "${AGENT_ID}"      // each session exports its own AGENT_ID (its bus name)
+  }
+} } }
+```
+
+> **Attribution-only — never an escalation.** The persona **cannot see or do anything the
+> token can't**; authorization stays bound to the token (its teams ∩ scope). `X-Agent-ID` can
+> only name a persona *under the authenticating agent* — it can't impersonate a real user or
+> another agent's persona. A webhook registered for the parent agent also fires when one of its
+> personas is assigned or @mentioned.
 
 The full assign/@mention → webhook → comment-back loop is in **[guide 02](./02-guide-for-provider-agents.md)**
 and **[guide 03](./03-guide-for-consumer-agents.md)**; `examples/agent/` is a runnable

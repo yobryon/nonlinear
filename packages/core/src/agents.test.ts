@@ -82,6 +82,59 @@ describe('agent users', () => {
   });
 });
 
+describe('agent personas', () => {
+  it('provisions a persona under an agent, mirroring its teams, and reuses it', async () => {
+    const agent = await domain.auth.createAgent({ name: 'Vantage Agent' });
+
+    const p1 = await domain.auth.findOrProvisionAgentPersona(agent, 'arch');
+    expect(p1.isAgent).toBe(true);
+    expect(p1.parentAgentId).toBe(agent.id);
+    expect(p1.agentPersonaKey).toBe('arch');
+    expect(p1.name).toBe('arch');
+    // Handle is the composite parent.persona; parent is vantage.agent.
+    expect(p1.displayName).toBe(`${agent.displayName}.arch`);
+    // Mirrors the parent's memberships, so it's assignable in the same teams.
+    const memberships = await domain.ctx.storage.teamMemberships.all();
+    expect(memberships.some((m) => m.userId === p1.id && m.teamId === team.id)).toBe(true);
+
+    // Same key resolves to the same persona (no duplicate).
+    const p1again = await domain.auth.findOrProvisionAgentPersona(agent, 'arch');
+    expect(p1again.id).toBe(p1.id);
+    const personas = (await domain.ctx.storage.users.all()).filter(
+      (u) => u.parentAgentId === agent.id,
+    );
+    expect(personas).toHaveLength(1);
+  });
+
+  it('attributes authored work to the persona, and it can be assigned', async () => {
+    const agent = await domain.auth.createAgent({ name: 'Vantage Agent' });
+    const arch = await domain.auth.findOrProvisionAgentPersona(agent, 'arch');
+
+    const issue = await domain.issues.create(arch.id, { teamId: team.id, title: 'From arch' });
+    expect(issue.creatorId).toBe(arch.id);
+
+    const assigned = await domain.issues.create(admin.id, {
+      teamId: team.id,
+      title: 'For arch',
+      assigneeId: arch.id,
+    });
+    expect(assigned.assigneeId).toBe(arch.id);
+  });
+
+  it('normalizes the key and falls back to the parent for empty/non-agent', async () => {
+    const agent = await domain.auth.createAgent({ name: 'Vantage Agent' });
+
+    // Dots (our separator) and unsafe chars are stripped; case-folded.
+    const p = await domain.auth.findOrProvisionAgentPersona(agent, '  Arch.Planner!! ');
+    expect(p.agentPersonaKey).toBe('arch-planner');
+
+    // Empty-after-normalization → no persona, attribute to the agent itself.
+    expect((await domain.auth.findOrProvisionAgentPersona(agent, '...')).id).toBe(agent.id);
+    // A non-agent user never spawns a persona.
+    expect((await domain.auth.findOrProvisionAgentPersona(admin, 'arch')).id).toBe(admin.id);
+  });
+});
+
 describe('agent-scoped webhooks', () => {
   it('only forwards events involving the agent (assignee or @mention)', async () => {
     const agent = await domain.auth.createAgent({ name: 'Scoped Bot' });

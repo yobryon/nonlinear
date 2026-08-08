@@ -29,6 +29,13 @@ const SESSION_COOKIE = 'nl_session';
 declare module 'fastify' {
   interface FastifyRequest {
     user: User;
+    /**
+     * Who the request is *attributed* to. Equals `user`, except an agent that
+     * presents an `X-Agent-ID` header acts as a persona under itself — then
+     * authored content (issues, comments, …) is credited to the persona while
+     * authorization stays bound to `user` + `tokenScope`.
+     */
+    actor: User;
     /** Authority the presented credential carries (full for cookie sessions). */
     tokenScope: TokenScope;
   }
@@ -102,13 +109,23 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
       return;
     }
     if (resolved.scope.readOnly && !SAFE_METHODS.has(req.method)) {
-      reply
-        .status(403)
-        .send({ error: { code: 'read_only', message: 'This token is read-only' } });
+      reply.status(403).send({ error: { code: 'read_only', message: 'This token is read-only' } });
       return;
     }
     req.user = resolved.user;
     req.tokenScope = resolved.scope;
+    req.actor = await resolveActor(resolved.user, req);
+  }
+
+  /**
+   * Attribution identity: an agent presenting `X-Agent-ID: <name>` acts as a
+   * persona under itself. Never changes authorization — only who authored work.
+   */
+  async function resolveActor(user: User, req: FastifyRequest): Promise<User> {
+    const raw = req.headers['x-agent-id'];
+    const agentId = Array.isArray(raw) ? raw[0] : raw;
+    if (!agentId || !user.isAgent) return user;
+    return domain.auth.findOrProvisionAgentPersona(user, agentId);
   }
 
   const authed = { preHandler: requireUser };
@@ -298,14 +315,14 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     // Members and internal-intake filers may create; the issue is attributed to
     // the real user, so they can then track it as one they filed.
     await requireTeamIntake(req, (req.body as { teamId: string }).teamId);
-    return domain.issues.create(req.user.id, (req as Body<never>).body);
+    return domain.issues.create(req.actor.id, (req as Body<never>).body);
   });
   app.patch('/api/issues/:id', authed, async (req) => {
     // Editing an issue (state/assignee/fields) is a member operation, not an
     // intake filer's — so require full team access on the issue's team.
     const issue = await domain.ctx.storage.issues.get((req.params as { id: string }).id);
     if (issue) await requireTeamAccess(req, issue.teamId);
-    return domain.issues.update(req.user.id, (req.params as { id: string }).id, req.body as never);
+    return domain.issues.update(req.actor.id, (req.params as { id: string }).id, req.body as never);
   });
   app.delete('/api/issues/:id', authed, async (req) => {
     const issue = await domain.ctx.storage.issues.get((req.params as { id: string }).id);
@@ -325,24 +342,24 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     if (issue && !canReadIssue(await visFor(req), issue)) {
       throw new DomainError('forbidden', 'You cannot comment on that issue', 403);
     }
-    return domain.comments.create(req.user.id, req.body as never);
+    return domain.comments.create(req.actor.id, req.body as never);
   });
   app.patch('/api/comments/:id', authed, async (req) =>
     domain.comments.update(
-      req.user.id,
+      req.actor.id,
       (req.params as { id: string }).id,
       (req.body as { body: string }).body,
     ),
   );
   app.delete('/api/comments/:id', authed, async (req) => {
-    await domain.comments.remove(req.user.id, (req.params as { id: string }).id);
+    await domain.comments.remove(req.actor.id, (req.params as { id: string }).id);
     return { ok: true };
   });
   app.post('/api/reactions', authed, async (req) =>
-    domain.comments.addReaction(req.user.id, req.body as never),
+    domain.comments.addReaction(req.actor.id, req.body as never),
   );
   app.delete('/api/reactions/:id', authed, async (req) => {
-    await domain.comments.removeReaction(req.user.id, (req.params as { id: string }).id);
+    await domain.comments.removeReaction(req.actor.id, (req.params as { id: string }).id);
     return { ok: true };
   });
 
@@ -537,7 +554,7 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
         .send({ error: { code: 'no_file', message: 'Attach a file as multipart form data' } });
     }
     const data = await file.toBuffer();
-    return domain.attachments.create(req.user.id, (req.params as { id: string }).id, {
+    return domain.attachments.create(req.actor.id, (req.params as { id: string }).id, {
       filename: file.filename,
       contentType: file.mimetype,
       data,
@@ -569,7 +586,7 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
 
   // ---- documents ----
   app.post('/api/documents', authed, async (req) =>
-    domain.documents.create(req.user.id, req.body as never),
+    domain.documents.create(req.actor.id, req.body as never),
   );
   app.patch('/api/documents/:id', authed, async (req) =>
     domain.documents.update((req.params as { id: string }).id, req.body as never),
@@ -664,13 +681,17 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
 
   // ---- project updates (health) ----
   app.post('/api/project-updates', authed, async (req) =>
-    domain.projectUpdates.create(req.user.id, req.body as never),
+    domain.projectUpdates.create(req.actor.id, req.body as never),
   );
   app.patch('/api/project-updates/:id', authed, async (req) =>
-    domain.projectUpdates.update(req.user.id, (req.params as { id: string }).id, req.body as never),
+    domain.projectUpdates.update(
+      req.actor.id,
+      (req.params as { id: string }).id,
+      req.body as never,
+    ),
   );
   app.delete('/api/project-updates/:id', authed, async (req) => {
-    await domain.projectUpdates.remove(req.user.id, (req.params as { id: string }).id);
+    await domain.projectUpdates.remove(req.actor.id, (req.params as { id: string }).id);
     return { ok: true };
   });
 
@@ -713,13 +734,13 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
 
   // ---- document comments ----
   app.post('/api/document-comments', authed, async (req) =>
-    domain.docComments.create(req.user.id, req.body as never),
+    domain.docComments.create(req.actor.id, req.body as never),
   );
   app.patch('/api/document-comments/:id', authed, async (req) =>
-    domain.docComments.update(req.user.id, (req.params as { id: string }).id, req.body as never),
+    domain.docComments.update(req.actor.id, (req.params as { id: string }).id, req.body as never),
   );
   app.delete('/api/document-comments/:id', authed, async (req) => {
-    await domain.docComments.remove(req.user.id, (req.params as { id: string }).id);
+    await domain.docComments.remove(req.actor.id, (req.params as { id: string }).id);
     return { ok: true };
   });
 
@@ -744,7 +765,7 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
         .send({ error: { code: 'no_file', message: 'Attach a CSV file as multipart form data' } });
     }
     const text = (await file.toBuffer()).toString('utf8');
-    return domain.csv.importIssues(req.user.id, (req.params as { id: string }).id, text);
+    return domain.csv.importIssues(req.actor.id, (req.params as { id: string }).id, text);
   });
   app.get('/api/teams/:id/export.csv', authed, async (req, reply) => {
     const csv = await domain.csv.exportIssues((req.params as { id: string }).id);
@@ -934,7 +955,7 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
       source: params.query,
       variableValues: params.variables,
       operationName: params.operationName,
-      contextValue: await graphqlContext(domain, req.user, req.tokenScope),
+      contextValue: await graphqlContext(domain, req.user, req.tokenScope, req.actor),
     });
   };
   app.post('/api/graphql', authed, async (req) =>

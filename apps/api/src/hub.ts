@@ -65,7 +65,8 @@ export class SyncHub {
     for (const c of comments) this.commentIssue.set(c.id, c.issueId);
     for (const p of projects) this.projectTeams.set(p.id, p.teamIds);
     for (const d of documents) this.docProject.set(d.id, d.projectId);
-    for (const m of memberships) this.membershipInfo.set(m.id, { userId: m.userId, teamId: m.teamId });
+    for (const m of memberships)
+      this.membershipInfo.set(m.id, { userId: m.userId, teamId: m.teamId });
     for (const t of teams) this.teamIntake.set(t.id, effectiveInternalIntake(t));
   }
 
@@ -110,7 +111,11 @@ export class SyncHub {
   }
 
   /** Issue-level read: any issue of a member team, or one you filed in an intake team. */
-  private canReadIssue(vis: Visibility, teamId: string | undefined, creatorId: string | undefined): boolean {
+  private canReadIssue(
+    vis: Visibility,
+    teamId: string | undefined,
+    creatorId: string | undefined,
+  ): boolean {
     if (vis.seesAll) return true;
     if (teamId == null) return false;
     if (vis.teamIds.has(teamId)) return true;
@@ -122,8 +127,7 @@ export class SyncHub {
     const vis = conn.vis;
     const d = delta.data as Record<string, unknown>;
     const shell = (teamId: string | null | undefined) =>
-      vis.seesAll ||
-      (teamId != null && (vis.teamIds.has(teamId) || vis.intakeTeamIds.has(teamId)));
+      vis.seesAll || (teamId != null && (vis.teamIds.has(teamId) || vis.intakeTeamIds.has(teamId)));
     switch (delta.model) {
       case 'notification':
       case 'favorite':

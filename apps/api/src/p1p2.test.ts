@@ -211,7 +211,9 @@ describe('P1/P2 over HTTP', () => {
 
     // Attribution is recorded on the issue.
     const number = Number(identifier.split('-')[1]);
-    const issue = (await domain.ctx.storage.issues.byTeam(team.id)).find((i) => i.number === number);
+    const issue = (await domain.ctx.storage.issues.byTeam(team.id)).find(
+      (i) => i.number === number,
+    );
     expect(issue?.description).toContain('orderflow-web');
 
     // The honeypot field silently drops bot submissions (no issue created).

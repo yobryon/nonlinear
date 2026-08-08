@@ -126,6 +126,15 @@ class PgUserStore extends PgEntityStore<User> implements UserStore {
     return rows[0]?.data ?? null;
   }
 
+  async getPersona(parentAgentId: string, personaKey: string): Promise<User | null> {
+    const { rows } = await this.pool.query(
+      `SELECT data FROM users
+       WHERE data->>'parentAgentId' = $1 AND data->>'agentPersonaKey' = $2`,
+      [parentAgentId, personaKey],
+    );
+    return rows[0]?.data ?? null;
+  }
+
   async linkSsoSubject(userId: string, subject: string): Promise<void> {
     await this.pool.query(
       `INSERT INTO sso_identities (subject, user_id) VALUES ($1, $2)

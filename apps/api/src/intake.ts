@@ -153,7 +153,8 @@ export function registerIntake(app: FastifyInstance, domain: Domain, config: Con
     if (Array.isArray(body.labels)) {
       for (const l of body.labels) if (typeof l === 'string') requested.add(l.trim().toLowerCase());
     }
-    if (typeof body.type === 'string' && body.type.trim()) requested.add(body.type.trim().toLowerCase());
+    if (typeof body.type === 'string' && body.type.trim())
+      requested.add(body.type.trim().toLowerCase());
     const labelIds = requested.size
       ? (await domain.ctx.storage.labels.all())
           .filter(

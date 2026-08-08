@@ -9,12 +9,29 @@ import {
 import { createPortal } from 'react-dom';
 import { create } from 'zustand';
 import type { User } from '@nonlinear/shared';
-import { userInitials } from './store.js';
+import { userInitials, useStore } from './store.js';
 import { CheckIcon, SearchIcon } from './icons.js';
 
 /* ---------- Avatar ---------- */
 
+/**
+ * For an agent persona (e.g. `arch` acting under `vantage-agent`), a subtle
+ * "· via vantage-agent" tag so attribution reads as the short name while its
+ * parent agent stays visible. Renders nothing for ordinary users.
+ */
+export function PersonaBadge({ user }: { user: User | null | undefined }) {
+  const users = useStore((s) => s.users);
+  const parent = user?.parentAgentId ? users[user.parentAgentId] : null;
+  if (!parent) return null;
+  return (
+    <span className="persona-parent" title={`Persona of ${parent.name}`}>
+      · via {parent.name}
+    </span>
+  );
+}
+
 export function Avatar({ user, size = 18 }: { user: User | null | undefined; size?: number }) {
+  const users = useStore((s) => s.users);
   if (!user) {
     return (
       <span
@@ -32,10 +49,11 @@ export function Avatar({ user, size = 18 }: { user: User | null | undefined; siz
       </span>
     );
   }
+  const parent = user.parentAgentId ? users[user.parentAgentId] : null;
   return (
     <span
       className="avatar"
-      title={user.name}
+      title={parent ? `${user.name} · via ${parent.name}` : user.name}
       style={{ width: size, height: size, fontSize: size * 0.42, background: user.avatarColor }}
     >
       {userInitials(user)}

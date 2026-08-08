@@ -4,7 +4,15 @@ import type { IssueActivity, IssueRelationType } from '@nonlinear/shared';
 import { PRIORITY_LABELS } from '@nonlinear/shared';
 import { api } from '../api.js';
 import { formatDate, issueKey, relativeTime, useStore } from '../store.js';
-import { anchorFromEvent, Avatar, Popover, toast, toastError, type Anchor } from '../ui.js';
+import {
+  anchorFromEvent,
+  Avatar,
+  PersonaBadge,
+  Popover,
+  toast,
+  toastError,
+  type Anchor,
+} from '../ui.js';
 import {
   CalendarIcon,
   CopyIcon,
@@ -418,6 +426,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
                       <div className="comment-head">
                         <Avatar user={author} size={20} />
                         <span className="who">{author?.name ?? 'Unknown'}</span>
+                        <PersonaBadge user={author} />
                         <span className="when">
                           {relativeTime(comment.createdAt)}
                           {comment.editedAt && ' · edited'}
@@ -486,6 +495,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
             <button className="prop-value" onClick={(e) => assigneePicker.open(anchorFromEvent(e))}>
               <Avatar user={assignee} size={16} />
               {assignee?.name ?? <span className="muted">Unassigned</span>}
+              <PersonaBadge user={assignee} />
             </button>
           </div>
           <div className="prop-row">
@@ -595,7 +605,8 @@ function IssueDetail({ issueId }: { issueId: string }) {
 
           <div className="side-heading">About</div>
           <div style={{ fontSize: 12, color: 'var(--text-3)', lineHeight: 1.8 }}>
-            Created by {creator?.name ?? 'unknown'} {relativeTime(issue.createdAt)} ago
+            Created by {creator?.name ?? 'unknown'}
+            <PersonaBadge user={creator} /> {relativeTime(issue.createdAt)} ago
             <br />
             Updated {relativeTime(issue.updatedAt)} ago
             {issue.completedAt && (
@@ -976,7 +987,8 @@ function ActivityFeed({ activities }: { activities: IssueActivity[] }) {
           <div key={a.id} className="activity-item">
             <Avatar user={actor} size={16} />
             <span>
-              <span className="who">{actor?.name ?? 'Someone'}</span> {text}
+              <span className="who">{actor?.name ?? 'Someone'}</span>
+              <PersonaBadge user={actor} /> {text}
               <span className="dim"> · {relativeTime(a.createdAt)}</span>
             </span>
           </div>

@@ -31,6 +31,15 @@ How the model got here — the isolation, scoped-token, guest-role, and intake-r
 — is dogfooded in the **"Provider ↔ Consumer readiness"** project in team `NON` (issues
 `NON-27` … `NON-35`, now shipped).
 
+### Running a fleet under one token (personas)
+
+If you run several agent sessions against one shared token and want each to be **individually
+attributed and assignable**, have each session send an **`X-Agent-ID: <name>`** header. That
+names a **persona** under the agent (e.g. `arch` acting under `vantage-agent`), auto-created on
+first use — no pre-provisioning. It's attribution-only and **never widens access**
+(authorization stays on the token). Operator setup is in guide 01 §6d; `whoami` shows your
+active persona.
+
 ### Also
 
 - [../configuration.md](../configuration.md) — every operator env var (storage, SSO, SCIM, SMTP, AI, blob backend), with per-IdP SSO walkthroughs.

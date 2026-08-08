@@ -66,6 +66,17 @@ export interface User {
   /** Agent users are non-human teammates driven by an API token; they can be
    *  assigned issues and @mentioned like anyone else. */
   isAgent: boolean;
+  /**
+   * A persona is an agent's per-session sub-actor (conveyed by the `X-Agent-ID`
+   * header), auto-provisioned under its parent agent so attribution and
+   * assignment carry the acting name — e.g. `arch` under `vantage-agent`. This
+   * points at that parent agent; unset for ordinary users and top-level agents.
+   * Personas are attribution-only: they never widen what the parent's token can
+   * access. Absent (rather than null) on non-persona users to keep them clean.
+   */
+  parentAgentId?: string | null;
+  /** For a persona: its stable key within the parent (the `X-Agent-ID` value). */
+  agentPersonaKey?: string | null;
   /** Notification types this user has muted (in-app and digest). */
   mutedNotificationTypes: NotificationType[];
   /** Opt-in daily email digest of unread notifications (needs SMTP on the server). */

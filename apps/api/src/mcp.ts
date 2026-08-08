@@ -96,7 +96,7 @@ for (const g of GUIDES) {
   if (text) GUIDE_TEXT.set(g.uri, { meta: g, text });
 }
 
-const MCP_INSTRUCTIONS = `You are connected to nonlinear (a self-hostable Linear clone) over MCP, authenticated as one specific user. Call the \`whoami\` tool FIRST — it returns who you are (name, isAgent, role), your workspace, your member \`teams\`, your \`intakeTeams\` (teams you can file into but aren't a member of), and your token's scope (read-only? which teams?). Every write is attributed to you. You see your member teams in full; for an intake team you can file issues and track the ones you filed (via \`my_work\`), but not see the team's other work. \`list_teams\` marks each team member vs intake.
+const MCP_INSTRUCTIONS = `You are connected to nonlinear (a self-hostable Linear clone) over MCP, authenticated as one specific user. Call the \`whoami\` tool FIRST — it returns who you are (name, isAgent, role), your workspace, your member \`teams\`, your \`intakeTeams\` (teams you can file into but aren't a member of), and your token's scope (read-only? which teams?). Every write is attributed to you — unless your session presents an \`X-Agent-ID\` header, in which case work is credited to a **persona** under you (e.g. \`arch\` acting under \`vantage-agent\`), so several sessions sharing one token stay individually attributed and separately assignable. \`whoami\` shows your persona when one is active; it never changes what you can access. You see your member teams in full; for an intake team you can file issues and track the ones you filed (via \`my_work\`), but not see the team's other work. \`list_teams\` marks each team member vs intake.
 
 If this is your first time, read the guide resources (list them with resources/list, then resources/read):
 - nonlinear://guides/for-consumer-agents — you USE a tool another team provides and want to file & track bugs/requests.
@@ -243,7 +243,16 @@ const fail = (message: string) => ({
 });
 
 /** Build a per-request MCP server whose tools act as `user`. */
-function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenScope): McpServer {
+function buildServer(
+  domain: Domain,
+  user: User,
+  vis: Visibility,
+  scope: TokenScope,
+  // Attribution identity: equals `user`, or a persona under it when the request
+  // carried an X-Agent-ID header. Authored content + "my work" use `actor`;
+  // visibility/scope stay bound to `user`.
+  actor: User,
+): McpServer {
   const server = new McpServer(
     { name: 'nonlinear', version: '1.0.0' },
     { instructions: MCP_INSTRUCTIONS },
@@ -264,7 +273,8 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
   const guardWrite = () => {
     if (scope.readOnly) throw new Error('This API token is read-only');
   };
-  const projectVisible = (teamIds: string[]) => vis.seesAll || teamIds.some((t) => seesTeam(vis, t));
+  const projectVisible = (teamIds: string[]) =>
+    vis.seesAll || teamIds.some((t) => seesTeam(vis, t));
 
   server.registerTool(
     'whoami',
@@ -280,20 +290,24 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
       const visibleKeys = vis.seesAll
         ? allTeams.map((t) => t.key)
         : [...vis.teamIds].map(keyOf).filter((k): k is string => Boolean(k));
-      const intakeKeys = [...vis.intakeTeamIds]
-        .map(keyOf)
-        .filter((k): k is string => Boolean(k));
+      const intakeKeys = [...vis.intakeTeamIds].map(keyOf).filter((k): k is string => Boolean(k));
       const tokenTeams =
         scope.teamIds === null
           ? 'all'
           : scope.teamIds.map(keyOf).filter((k): k is string => Boolean(k));
+      const parent = actor.parentAgentId ? await s.users.get(actor.parentAgentId) : null;
       return ok({
         user: {
-          name: user.name,
-          displayName: user.displayName,
-          isAgent: user.isAgent,
-          role: user.role,
+          name: actor.name,
+          displayName: actor.displayName,
+          isAgent: actor.isAgent,
+          role: actor.role,
         },
+        // Present when acting as a persona: work is attributed to this named
+        // sub-actor under the parent agent, set via the X-Agent-ID header.
+        persona: parent
+          ? { key: actor.agentPersonaKey, handle: actor.displayName, parent: parent.displayName }
+          : undefined,
         workspace: workspace?.name,
         // Teams you're a member of — full read/write. Admins see every team.
         teams: visibleKeys,
@@ -462,7 +476,7 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
     { description: 'List issues assigned to the authenticated user.', inputSchema: {} },
     async () => {
       const mine = (await s.issues.all())
-        .filter((i) => i.assigneeId === user.id && !i.archivedAt && canReadIssue(vis, i))
+        .filter((i) => i.assigneeId === actor.id && !i.archivedAt && canReadIssue(vis, i))
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       return ok(await Promise.all(mine.map((i) => serializeIssue(domain, i, { summary: true }))));
     },
@@ -478,9 +492,9 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
     async () => {
       const visible = (await s.issues.all()).filter((i) => !i.archivedAt && canReadIssue(vis, i));
       const byUpdated = (a: Issue, b: Issue) => b.updatedAt.localeCompare(a.updatedAt);
-      const assigned = visible.filter((i) => i.assigneeId === user.id).sort(byUpdated);
+      const assigned = visible.filter((i) => i.assigneeId === actor.id).sort(byUpdated);
 
-      const handle = user.displayName.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const handle = actor.displayName.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const mentionRe = new RegExp(`(^|[^\\w])@${handle}(?![\\w.-])`);
       const mentionedIds = new Set(
         (await s.comments.all())
@@ -488,10 +502,10 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
           .map((c) => c.issueId),
       );
       const mentioned = visible
-        .filter((i) => mentionedIds.has(i.id) && i.assigneeId !== user.id)
+        .filter((i) => mentionedIds.has(i.id) && i.assigneeId !== actor.id)
         .sort(byUpdated);
       const filed = visible
-        .filter((i) => i.creatorId === user.id && i.assigneeId !== user.id)
+        .filter((i) => i.creatorId === actor.id && i.assigneeId !== actor.id)
         .sort(byUpdated);
 
       const summarize = (arr: Issue[]) =>
@@ -524,7 +538,7 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
       try {
         guardWrite();
         const team = await resolveTeam(domain, teamKey, vis);
-        const issue = await domain.issues.create(user.id, {
+        const issue = await domain.issues.create(actor.id, {
           teamId: team.id,
           title,
           description,
@@ -561,9 +575,11 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
         const issue = await resolveIssue(domain, identifier, vis);
         // Intake access is view-and-comment on your own filed issues, not edit.
         if (!seesTeam(vis, issue.teamId)) {
-          throw new Error(`You can view ${identifier} but not edit it (intake access, not a member)`);
+          throw new Error(
+            `You can view ${identifier} but not edit it (intake access, not a member)`,
+          );
         }
-        const updated = await domain.issues.update(user.id, issue.id, {
+        const updated = await domain.issues.update(actor.id, issue.id, {
           title,
           description,
           stateId: await resolveState(domain, issue.teamId, state),
@@ -588,7 +604,7 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
       try {
         guardWrite();
         const issue = await resolveIssue(domain, identifier, vis);
-        const comment = await domain.comments.create(user.id, { issueId: issue.id, body });
+        const comment = await domain.comments.create(actor.id, { issueId: issue.id, body });
         return ok({ ok: true, commentId: comment.id });
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
@@ -630,7 +646,10 @@ function buildServer(domain: Domain, user: User, vis: Visibility, scope: TokenSc
       inputSchema: {
         teamKey: z.string(),
         name: z.string(),
-        color: z.string().optional().describe('Hex like #4c9. Defaults to one derived from the name.'),
+        color: z
+          .string()
+          .optional()
+          .describe('Hex like #4c9. Defaults to one derived from the name.'),
       },
     },
     async ({ teamKey, name, color }) => {
@@ -749,8 +768,17 @@ export function registerMcp(
       resolved.scope.teamIds,
     );
 
+    // An agent presenting X-Agent-ID acts as a named persona under itself, so
+    // authored work is attributed to that name. Authorization stays on the token.
+    const rawAgentId = req.headers['x-agent-id'];
+    const agentId = Array.isArray(rawAgentId) ? rawAgentId[0] : rawAgentId;
+    const actor =
+      agentId && resolved.user.isAgent
+        ? await domain.auth.findOrProvisionAgentPersona(resolved.user, agentId)
+        : resolved.user;
+
     // Stateless: one server + transport per request, torn down on close.
-    const server = buildServer(domain, resolved.user, vis, resolved.scope);
+    const server = buildServer(domain, resolved.user, vis, resolved.scope, actor);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     reply.raw.on('close', () => {
       void transport.close();

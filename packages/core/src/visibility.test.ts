@@ -88,7 +88,10 @@ describe('team-scoped read isolation', () => {
     expect(view.teams.map((t) => t.id)).toContain(teamA.id); // intake shell (teamA accepts intake)
     expect(view.issues).toEqual([]); // but no issues — none filed, not a member
 
-    const filed = await domain.issues.create(guest.id, { teamId: teamA.id, title: 'guest request' });
+    const filed = await domain.issues.create(guest.id, {
+      teamId: teamA.id,
+      title: 'guest request',
+    });
     view = await domain.bootstrap.payload(guest.id);
     expect(view.issues.map((i) => i.id)).toEqual([filed.id]);
   });

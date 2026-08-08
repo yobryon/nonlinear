@@ -63,6 +63,8 @@ export interface UserStore extends EntityStore<User> {
    */
   getBySsoSubject(subject: string): Promise<User | null>;
   linkSsoSubject(userId: string, subject: string): Promise<void>;
+  /** Resolve an agent persona by its parent agent + stable key (the X-Agent-ID). */
+  getPersona(parentAgentId: string, personaKey: string): Promise<User | null>;
 }
 
 export interface TeamStore extends EntityStore<Team> {

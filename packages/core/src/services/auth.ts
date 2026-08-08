@@ -26,8 +26,26 @@ export function slugify(value: string): string {
   );
 }
 
+/**
+ * Normalize a raw `X-Agent-ID` header into a safe persona key: lowercase, only
+ * `[a-z0-9_-]`, no leading/trailing separators, capped length. Notably strips
+ * `.` (our parent.persona separator) so a persona key can never forge a
+ * composite handle. Returns '' when nothing usable remains.
+ */
+export function personaKey(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+}
+
 export class AuthService {
   constructor(private ctx: Ctx) {}
+
+  /** In-process dedupe so one session's burst of parallel calls provisions once. */
+  private personaProvisioning = new Map<string, Promise<User>>();
 
   /**
    * First register creates the workspace, an admin user, and a default team.
@@ -153,6 +171,64 @@ export class AuthService {
     const teams = new TeamService(this.ctx);
     for (const team of await storage.teams.all()) {
       if (!team.private) await teams.addMember(team.id, user.id);
+    }
+    return user;
+  }
+
+  /**
+   * Resolve an agent's named persona (its per-session sub-actor, conveyed by the
+   * `X-Agent-ID` header) to a real, assignable agent user under `parentAgent`,
+   * creating it the first time the name is seen. Attribution-only: the persona
+   * mirrors the parent's teams and never widens what the token can access.
+   * Falls back to the parent itself when the key is empty or the caller is not
+   * an agent, so a stray header simply attributes to the agent as before.
+   */
+  async findOrProvisionAgentPersona(parentAgent: User, rawKey: string): Promise<User> {
+    const key = personaKey(rawKey);
+    if (!key || !parentAgent.isAgent) return parentAgent;
+    const existing = await this.ctx.storage.users.getPersona(parentAgent.id, key);
+    if (existing) return existing;
+    const lockKey = `${parentAgent.id}:${key}`;
+    let pending = this.personaProvisioning.get(lockKey);
+    if (!pending) {
+      pending = this.provisionPersona(parentAgent, key).finally(() =>
+        this.personaProvisioning.delete(lockKey),
+      );
+      this.personaProvisioning.set(lockKey, pending);
+    }
+    return pending;
+  }
+
+  private async provisionPersona(parent: User, key: string): Promise<User> {
+    const { storage, bus } = this.ctx;
+    const now = nowIso();
+    const displayName = await this.uniqueDisplayName(`${parent.displayName}.${key}`);
+    const user: User = {
+      id: newId(),
+      email: `${displayName}@agents.nonlinear.local`,
+      name: key,
+      displayName,
+      // Share the parent's color so a family of personas reads as one agent.
+      avatarColor: parent.avatarColor,
+      role: 'member',
+      active: true,
+      isAgent: true,
+      parentAgentId: parent.id,
+      agentPersonaKey: key,
+      mutedNotificationTypes: [],
+      emailDigest: false,
+      digestLastSentAt: null,
+      preferences: { ...DEFAULT_PREFERENCES },
+      createdAt: now,
+      updatedAt: now,
+    };
+    await storage.users.insert(user);
+    await bus.publish([created('user', user)]);
+    // Mirror the parent's memberships so the persona is assignable exactly where
+    // the parent can act — never anywhere broader.
+    const teams = new TeamService(this.ctx);
+    for (const m of await storage.teamMemberships.all()) {
+      if (m.userId === parent.id) await teams.addMember(m.teamId, user.id);
     }
     return user;
   }

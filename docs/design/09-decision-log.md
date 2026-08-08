@@ -914,6 +914,58 @@ low-privilege and serves discovery); tighten later if a use case demands it.
 
 ---
 
+## 22. Agent personas — many attributed actors under one token
+
+**Decision.** Split a request's identity in two. **Authorization** stays bound to
+the token (its user + team/read-only scope) exactly as before. **Attribution** —
+who authored an issue/comment/activity, who an issue is assigned to, who a
+mention resolves to — can be a **persona**: a real, assignable agent user
+(`isAgent`, `parentAgentId`, `agentPersonaKey`) auto-provisioned under the token's
+agent the first time it presents an **`X-Agent-ID: <name>`** header. `arch` under
+`vantage-agent` becomes member `vantage-agent.arch` (name `arch`, badged "· via
+vantage-agent"), mirroring the parent's team memberships. In the API this is
+`req.actor` (defaults to `req.user`); authored-content routes credit `req.actor`,
+everything else (authz, personal state, admin/config) stays on `req.user`.
+
+**Context.** The owner runs 2–5+ Claude sessions per repo sharing one `.mcp.json`
+— hence one token, one user — so member attribution and assignment collapsed:
+every session looked like the same agent. Each session already carries its team
+bus-name in an env var. The want: that name should be who work is *from/assigned
+to*, with zero pre-provisioning ("it just works"), and the identity carrier must
+be **structural** (a header), never a tool argument the model has to remember.
+
+**Alternatives rejected.** (a) *A token per session* — what the owner is avoiding;
+defeats the shared-config ergonomics. (b) *A decorative label on each record*
+(free-text "actor") — covers source but not assignment or @mention, which need a
+real identity to target; rejected because the owner explicitly wanted assignation.
+(c) *A tool argument* (`create_issue(..., asAgent)`) — puts identity in the tool
+contract, so the model can forget or spoof it; rejected for the header, which the
+launcher fills from the env var via `.mcp.json` interpolation. (d) *Declare-first
+provisioning* — safer against typos but adds a setup step per name; the owner chose
+auto, judging stray personas a rare, self-correcting, cleanable edge — so no
+management surface was built. (e) *Give the persona its own memberships as the
+access basis* — would let a header widen (or narrow) access; rejected outright.
+Authorization is **always** the token; the persona is attribution-only and can
+never see or do more than the parent. `X-Agent-ID` only names a persona *under the
+authenticating agent*, so it can't impersonate a real user or another agent's
+persona. This mirrors `findOrProvisionSso` (entry on enterprise auth): a
+structural credential → match-or-JIT-provision.
+
+**Consequences.** New: `User.parentAgentId`/`agentPersonaKey` (synced, for the
+badge + pickers), `UserStore.getPersona`, `auth.findOrProvisionAgentPersona`
+(in-process dedupe so a session's parallel first calls provision once). The header
+is read at the two auth chokepoints (`server.resolveAuth`, `mcp` handler) and
+threaded as `actor` through REST, MCP (`create_issue`/`update_issue`/`add_comment`
++ `whoami`/`my_work`), and GraphQL. Webhooks: `involvesAgent` now matches the
+parent agent *and its personas*, so an agent's webhook fires when any of its
+personas is assigned/@mentioned. Web renders the short name + a "· via {parent}"
+badge (assignee, bylines, activity, avatar tooltip). Open edges, deliberately
+unbuilt: no persona list/deactivate UI (personas are cheap, bounded by named
+agents, deletable); a typo mints a stray persona (accepted). Dogfooded for the
+owner's multi-session bus workflow (team `Vantage`, agent `vantage-agent`).
+
+---
+
 ## How to extend this log
 
 When you make a decision that would be expensive to reverse — a new storage
