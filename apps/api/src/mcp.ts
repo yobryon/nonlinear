@@ -103,7 +103,7 @@ If this is your first time, read the guide resources (list them with resources/l
 - nonlinear://guides/for-provider-agents — you OWN a tool/component and run its project + support its users here.
 - nonlinear://guides/readme — overview and the team-scoped access model.
 
-Quick loop: whoami → list_teams → search_issues (always search before filing to avoid duplicates) → create_issue / add_comment / update_issue. Use \`my_work\` to see what's assigned to you or @mentions you. Names are resolved for you: team by key (e.g. ENG), state/label/project by name, assignee by email/@handle/name. Priority is 0 none, 1 urgent, 2 high, 3 medium, 4 low — set it honestly. A read-only or team-scoped token limits what you can do (whoami shows this).`;
+Quick loop: whoami → list_teams → search_issues (always search before filing to avoid duplicates) → create_issue / add_comment / update_issue. In-flow shortcuts: \`find_issue\` fuzzy-resolves a description to an issue so you needn't look up a number; \`comment_and_state\` comments and moves state in one call; \`update_issues\` batches state moves (the reconcile pass as one motion). Use \`my_work\` to see what's assigned to you or @mentions you. Names are resolved for you: team by key (e.g. ENG), state/label/project by name, assignee by email/@handle/name. Priority is 0 none, 1 urgent, 2 high, 3 medium, 4 low — set it honestly. A read-only or team-scoped token limits what you can do (whoami shows this).`;
 
 const PRIORITY_BY_NAME: Record<string, Priority> = {
   none: 0,
@@ -609,6 +609,123 @@ function buildServer(
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }
+    },
+  );
+
+  // ---- ergonomic tools: resolve, and write in one motion ----
+
+  server.registerTool(
+    'find_issue',
+    {
+      description:
+        'Fuzzy-resolve a description to matching issues — "the overlay clipping thing" → ranked hits — so you never leave the thread to look up a number. Ranks identifier/title over description.',
+      inputSchema: {
+        query: z.string().describe('Free text, or an identifier fragment like ENG-4'),
+        limit: z.number().optional().describe('Max matches (default 5)'),
+      },
+    },
+    async ({ query, limit }) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return ok([]);
+      const teams = await s.teams.all();
+      const scored = (await s.issues.all())
+        .filter((i) => !i.archivedAt && canReadIssue(vis, i))
+        .map((i) => {
+          const team = teams.find((t) => t.id === i.teamId);
+          const ident = team ? `${team.key}-${i.number}`.toLowerCase() : '';
+          const title = i.title.toLowerCase();
+          // Rank: exact identifier > identifier prefix > title match > body match.
+          let score = 0;
+          if (ident === q) score = 100;
+          else if (ident.startsWith(q)) score = 80;
+          else if (title === q) score = 70;
+          else if (title.includes(q)) score = 50 - Math.min(20, title.indexOf(q));
+          else if (i.description.toLowerCase().includes(q)) score = 20;
+          return { i, score };
+        })
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score || b.i.updatedAt.localeCompare(a.i.updatedAt))
+        .slice(0, Math.min(limit ?? 5, 25));
+      return ok(
+        await Promise.all(scored.map((x) => serializeIssue(domain, x.i, { summary: true }))),
+      );
+    },
+  );
+
+  server.registerTool(
+    'comment_and_state',
+    {
+      description:
+        'The commonest update as one motion: comment on an issue and/or move its state, without a second lookup. Any field omitted is left unchanged.',
+      inputSchema: {
+        identifier: z.string(),
+        body: z.string().optional().describe('A comment to add (markdown, @mentions)'),
+        state: z.string().optional().describe('Workflow state name to move to'),
+      },
+    },
+    async ({ identifier, body, state }) => {
+      try {
+        guardWrite();
+        const issue = await resolveIssue(domain, identifier, vis);
+        if (!seesTeam(vis, issue.teamId) && state) {
+          throw new Error(`You can view ${identifier} but not change its state (intake access)`);
+        }
+        let commentId: string | undefined;
+        if (body && body.trim()) {
+          commentId = (await domain.comments.create(actor.id, { issueId: issue.id, body })).id;
+        }
+        let updated = issue;
+        if (state) {
+          updated = await domain.issues.update(actor.id, issue.id, {
+            stateId: await resolveState(domain, issue.teamId, state),
+          });
+        }
+        return ok({ ...(await serializeIssue(domain, updated, { summary: true })), commentId });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    'update_issues',
+    {
+      description:
+        'Apply a state (and/or assignee) change to many issues in one call — the reconcile pass as a single motion. Each item is applied independently; failures are reported per-item.',
+      inputSchema: {
+        updates: z
+          .array(
+            z.object({
+              identifier: z.string(),
+              state: z.string().optional(),
+              assignee: z.string().nullable().optional(),
+            }),
+          )
+          .describe('One entry per issue to change'),
+      },
+    },
+    async ({ updates }) => {
+      guardWrite();
+      const results = await Promise.all(
+        updates.map(async (u) => {
+          try {
+            const issue = await resolveIssue(domain, u.identifier, vis);
+            if (!seesTeam(vis, issue.teamId)) throw new Error('not a member of its team');
+            await domain.issues.update(actor.id, issue.id, {
+              stateId: await resolveState(domain, issue.teamId, u.state),
+              assigneeId: await resolveAssignee(domain, u.assignee),
+            });
+            return { identifier: u.identifier, ok: true };
+          } catch (err) {
+            return {
+              identifier: u.identifier,
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            };
+          }
+        }),
+      );
+      return ok({ applied: results.filter((r) => r.ok).length, results });
     },
   );
 
