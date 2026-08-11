@@ -6,6 +6,8 @@ import type {
   CustomView,
   Cycle,
   Dashboard,
+  Decision,
+  DecisionComment,
   Document,
   DocumentComment,
   Favorite,
@@ -68,6 +70,8 @@ export interface SyncModelMap {
   documentComment: DocumentComment;
   triageRule: TriageRule;
   dashboard: Dashboard;
+  decision: Decision;
+  decisionComment: DecisionComment;
 }
 
 export type SyncModelName = keyof SyncModelMap;
@@ -102,6 +106,8 @@ export const SYNC_MODEL_NAMES = [
   'documentComment',
   'triageRule',
   'dashboard',
+  'decision',
+  'decisionComment',
 ] as const satisfies readonly SyncModelName[];
 
 export type SyncAction = 'create' | 'update' | 'delete';
@@ -156,4 +162,6 @@ export interface BootstrapPayload {
   documentComments: DocumentComment[];
   triageRules: TriageRule[];
   dashboards: Dashboard[];
+  decisions: Decision[];
+  decisionComments: DecisionComment[];
 }

@@ -9,6 +9,8 @@ import type {
   CustomerRequest,
   CustomView,
   Cycle,
+  Decision,
+  DecisionComment,
   Document,
   DocumentComment,
   Favorite,
@@ -74,6 +76,11 @@ export interface TeamStore extends EntityStore<Team> {
 
 export interface IssueStore extends EntityStore<Issue> {
   byTeam(teamId: string): Promise<Issue[]>;
+}
+
+export interface DecisionStore extends EntityStore<Decision> {
+  /** Atomically reserve and return the next decision number for a team. */
+  nextNumber(teamId: string): Promise<number>;
 }
 
 export interface ActivityStore extends EntityStore<IssueActivity> {
@@ -195,6 +202,8 @@ export interface Storage {
   documentComments: EntityStore<DocumentComment>;
   triageRules: EntityStore<TriageRule>;
   dashboards: EntityStore<Dashboard>;
+  decisions: DecisionStore;
+  decisionComments: EntityStore<DecisionComment>;
   activities: ActivityStore;
   sessions: SessionStore;
   apiTokens: ApiTokenStore;

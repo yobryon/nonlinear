@@ -749,8 +749,8 @@ function TeamSettingsInner({ team }: { team: Team }) {
           <div className="info">
             <div className="label">Private team</div>
             <div className="desc">
-              When on, new people are <b>not</b> auto-added on sign-up — you grant access
-              explicitly under Members. When off, every new member joins automatically.
+              When on, new people are <b>not</b> auto-added on sign-up — you grant access explicitly
+              under Members. When off, every new member joins automatically.
             </div>
           </div>
           <Switch on={team.private} onChange={(on) => patchTeam({ private: on })} />

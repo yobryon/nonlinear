@@ -203,6 +203,47 @@ export interface Issue {
   archivedAt: string | null;
 }
 
+/**
+ * A first-class decision record — a judgment, not a work item. Where an issue
+ * has an assignee and a completion, a decision has an argument (its body) and a
+ * ruling. Its lifecycle is fixed (never "done"): `proposed` awaits a ruling;
+ * `ruled` is decided; a ruled decision later becomes `superseded` (replaced by
+ * another) or `carried` (reaffirmed on review). Numbered per team as
+ * `${team.key}-D${number}`.
+ */
+export type DecisionStatus = 'proposed' | 'ruled' | 'superseded' | 'carried';
+
+export interface Decision {
+  id: string;
+  teamId: string;
+  /** Per-team decision sequence; identifier is `${team.key}-D${number}`. */
+  number: number;
+  title: string;
+  /** The argument — markdown, prose-first. This is the artifact. */
+  body: string;
+  status: DecisionStatus;
+  authorId: string;
+  ruledById: string | null;
+  ruledAt: string | null;
+  /** First-class supersession edge: the decision this one replaces (which is
+   *  flipped to `superseded`). Null for an original decision. */
+  supersedesId: string | null;
+  /** Issues this decision governs (bidirectional with the issue view). */
+  governedIssueIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A comment on a decision — where the PO answers a proposal, asynchronously. */
+export interface DecisionComment {
+  id: string;
+  decisionId: string;
+  userId: string;
+  body: string;
+  createdAt: string;
+  editedAt: string | null;
+}
+
 export interface Label {
   id: string;
   /** Null teamId = workspace-level label. */

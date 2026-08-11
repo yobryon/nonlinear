@@ -427,6 +427,13 @@ export function Sidebar() {
                       <ProjectIcon size={14} />
                       <span className="grow">Projects</span>
                     </NavLink>
+                    <NavLink
+                      to={`/team/${team.key}/decisions`}
+                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                    >
+                      <BookIcon size={14} />
+                      <span className="grow">Decisions</span>
+                    </NavLink>
                     {team.triageEnabled && (
                       <NavLink
                         to={`/team/${team.key}/triage`}

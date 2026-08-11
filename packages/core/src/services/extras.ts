@@ -288,6 +288,8 @@ export class BootstrapService {
       documentComments,
       triageRules,
       dashboards,
+      decisions,
+      decisionComments,
       syncId,
     ] = await Promise.all([
       s.users.all(),
@@ -317,6 +319,8 @@ export class BootstrapService {
       s.documentComments.all(),
       s.triageRules.all(),
       s.dashboards.all(),
+      s.decisions.all(),
+      s.decisionComments.all(),
       s.syncLog.currentSyncId(),
     ]);
     const full: BootstrapPayload = {
@@ -350,6 +354,8 @@ export class BootstrapService {
       documentComments,
       triageRules,
       dashboards: dashboards.filter((d) => d.shared || d.creatorId === userId),
+      decisions,
+      decisionComments,
     };
     // Team-scoped read isolation: a non-admin receives only the teams they
     // belong to and the entities hanging off them, further narrowed by any

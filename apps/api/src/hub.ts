@@ -37,6 +37,7 @@ export class SyncHub {
   private commentIssue = new Map<string, string>();
   private projectTeams = new Map<string, string[]>();
   private docProject = new Map<string, string | null>();
+  private decisionTeam = new Map<string, string>();
   private membershipInfo = new Map<string, { userId: string; teamId: string }>();
   private teamIntake = new Map<string, boolean>();
   private ready: Promise<void>;
@@ -50,14 +51,17 @@ export class SyncHub {
 
   private async seedIndexes(): Promise<void> {
     const s = this.domain.ctx.storage;
-    const [issues, comments, projects, documents, memberships, teams] = await Promise.all([
-      s.issues.all(),
-      s.comments.all(),
-      s.projects.all(),
-      s.documents.all(),
-      s.teamMemberships.all(),
-      s.teams.all(),
-    ]);
+    const [issues, comments, projects, documents, memberships, teams, decisions] =
+      await Promise.all([
+        s.issues.all(),
+        s.comments.all(),
+        s.projects.all(),
+        s.documents.all(),
+        s.teamMemberships.all(),
+        s.teams.all(),
+        s.decisions.all(),
+      ]);
+    for (const dec of decisions) this.decisionTeam.set(dec.id, dec.teamId);
     for (const i of issues) {
       this.issueTeam.set(i.id, i.teamId);
       this.issueCreator.set(i.id, i.creatorId);
@@ -91,6 +95,9 @@ export class SyncHub {
         break;
       case 'document':
         this.docProject.set(d.id as string, (d.projectId as string | null) ?? null);
+        break;
+      case 'decision':
+        this.decisionTeam.set(d.id as string, d.teamId as string);
         break;
       case 'teamMembership':
         this.membershipInfo.set(d.id as string, {
@@ -158,7 +165,10 @@ export class SyncHub {
       case 'cycle':
       case 'triageRule':
       case 'issueTemplate':
+      case 'decision':
         return this.member(vis, d.teamId as string);
+      case 'decisionComment':
+        return this.member(vis, this.decisionTeam.get(d.decisionId as string));
       case 'project':
         return this.someMemberTeam(vis, d.teamIds as string[]);
       case 'projectMilestone':

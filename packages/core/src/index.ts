@@ -36,6 +36,7 @@ export * from './services/dashboards.js';
 export * from './services/ai.js';
 export * from './services/pulse.js';
 export * from './services/invites.js';
+export * from './services/decisions.js';
 
 import type { Storage } from './storage.js';
 import { SyncBus, type Ctx } from './domain.js';
@@ -59,6 +60,7 @@ import { DashboardService } from './services/dashboards.js';
 import { AiService } from './services/ai.js';
 import { PulseService } from './services/pulse.js';
 import { InviteService } from './services/invites.js';
+import { DecisionService } from './services/decisions.js';
 import { AuthService } from './services/auth.js';
 import { TeamService } from './services/teams.js';
 import { IssueService } from './services/issues.js';
@@ -110,6 +112,7 @@ export interface Domain {
   ai: AiService;
   pulse: PulseService;
   invites: InviteService;
+  decisions: DecisionService;
 }
 
 export interface DomainOptions {
@@ -162,5 +165,6 @@ export function createDomain(storage: Storage, options: DomainOptions = {}): Dom
     ai: new AiService(ctx),
     pulse: new PulseService(ctx),
     invites: new InviteService(ctx),
+    decisions: new DecisionService(ctx),
   };
 }

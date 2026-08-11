@@ -123,6 +123,27 @@ export interface UpdateLabelInput {
   color?: string;
 }
 
+export interface CreateDecisionInput {
+  teamId: string;
+  title: string;
+  body?: string;
+  /** Issues this decision governs. */
+  governedIssueIds?: string[];
+  /** If set, this decision supersedes another (which is flipped to superseded). */
+  supersedesId?: string | null;
+}
+
+export interface UpdateDecisionInput {
+  title?: string;
+  body?: string;
+  governedIssueIds?: string[];
+}
+
+export interface CreateDecisionCommentInput {
+  decisionId: string;
+  body: string;
+}
+
 export interface CreateCommentInput {
   issueId: string;
   body: string;

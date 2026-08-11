@@ -24,6 +24,7 @@ import { MyIssuesPage } from './pages/MyIssues.js';
 import { InboxPage } from './pages/Inbox.js';
 import { ProjectDetailPage, ProjectsPage } from './pages/Projects.js';
 import { CycleDetailPage, TeamCyclesPage } from './pages/Cycles.js';
+import { DecisionDetailPage, DecisionsPage } from './pages/Decisions.js';
 import { SettingsPage } from './pages/Settings.js';
 import { TriagePage } from './pages/Triage.js';
 import { InitiativeDetailPage, InitiativesPage } from './pages/Initiatives.js';
@@ -152,6 +153,8 @@ function AppShell() {
             <Route path="/team/:teamKey/issues" element={<TeamIssuesPage />} />
             <Route path="/team/:teamKey/projects" element={<ProjectsPage />} />
             <Route path="/team/:teamKey/triage" element={<TriagePage />} />
+            <Route path="/team/:teamKey/decisions" element={<DecisionsPage />} />
+            <Route path="/decision/:decisionId" element={<DecisionDetailPage />} />
             <Route path="/team/:teamKey/archive" element={<ArchivePage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/timeline" element={<TimelinePage />} />

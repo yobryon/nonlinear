@@ -2,6 +2,8 @@ import type {
   Attachment,
   BootstrapPayload,
   Comment,
+  Decision,
+  DecisionComment,
   Document,
   DocumentComment,
   Issue,
@@ -75,6 +77,14 @@ export function canReadIssue(vis: Visibility, issue: Issue | undefined | null): 
   if (!issue) return false;
   if (vis.teamIds.has(issue.teamId)) return true;
   return vis.intakeTeamIds.has(issue.teamId) && issue.creatorId === vis.userId;
+}
+
+/** Decisions are a team's private reasoning — member-only, never shown to the
+ *  intake tier. */
+export function canReadDecision(vis: Visibility, decision: Decision | undefined | null): boolean {
+  if (vis.seesAll) return true;
+  if (!decision) return false;
+  return vis.teamIds.has(decision.teamId);
 }
 
 /** Projects are member-only (intake users don't see a team's projects). */
@@ -162,6 +172,16 @@ export function filterPayload(payload: BootstrapPayload, vis: Visibility): Boots
     ),
     issueTemplates: payload.issueTemplates.filter((t) => teamIds.has(t.teamId)),
     triageRules: payload.triageRules.filter((r) => teamIds.has(r.teamId)),
+    // Decisions are member-only reasoning; their comments follow the decision.
+    decisions: payload.decisions.filter((d) => teamIds.has(d.teamId)),
+    decisionComments: (() => {
+      const visibleDecisionIds = new Set(
+        payload.decisions.filter((d) => teamIds.has(d.teamId)).map((d) => d.id),
+      );
+      return payload.decisionComments.filter((c: DecisionComment) =>
+        visibleDecisionIds.has(c.decisionId),
+      );
+    })(),
     // Webhooks carry a secret — admin-only.
     webhooks: [],
     // Initiatives and customers are workspace-level; the projects/issues they

@@ -32,7 +32,11 @@ const GROUPS: DocGroup[] = [
     key: 'guides',
     label: 'Guides',
     docs: [
-      { slug: 'README', title: 'Overview', blurb: 'The three audiences and the trust-domain model' },
+      {
+        slug: 'README',
+        title: 'Overview',
+        blurb: 'The three audiences and the trust-domain model',
+      },
       {
         slug: '01-guide-for-humans',
         title: 'For humans',

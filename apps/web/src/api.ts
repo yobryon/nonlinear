@@ -13,6 +13,10 @@ import type {
   BootstrapPayload,
   Comment,
   CreateCommentInput,
+  CreateDecisionInput,
+  CreateDecisionCommentInput,
+  Decision,
+  DecisionComment,
   CreateCustomerInput,
   CreateCustomerRequestInput,
   CreateCustomViewInput,
@@ -140,6 +144,20 @@ export const api = {
   addReaction: (input: CreateReactionInput) => req<Reaction>('POST', '/api/reactions', input),
   removeReaction: (id: string) => req<{ ok: true }>('DELETE', `/api/reactions/${id}`),
 
+  createDecision: (input: CreateDecisionInput) => req<Decision>('POST', '/api/decisions', input),
+  updateDecision: (id: string, input: Record<string, unknown>) =>
+    req<Decision>('PATCH', `/api/decisions/${id}`, input),
+  ruleDecision: (id: string, note?: string) =>
+    req<Decision>('POST', `/api/decisions/${id}/rule`, { note }),
+  carryDecision: (id: string) => req<Decision>('POST', `/api/decisions/${id}/carry`),
+  supersedeDecision: (id: string, supersededId: string) =>
+    req<Decision>('POST', `/api/decisions/${id}/supersede`, { supersededId }),
+  deleteDecision: (id: string) => req<{ ok: true }>('DELETE', `/api/decisions/${id}`),
+  createDecisionComment: (input: CreateDecisionCommentInput) =>
+    req<DecisionComment>('POST', '/api/decision-comments', input),
+  deleteDecisionComment: (id: string) =>
+    req<{ ok: true }>('DELETE', `/api/decision-comments/${id}`),
+
   createTeam: (input: CreateTeamInput) => req<Team>('POST', '/api/teams', input),
   updateTeam: (id: string, input: Record<string, unknown>) =>
     req<Team>('PATCH', `/api/teams/${id}`, input),
@@ -228,8 +246,7 @@ export const api = {
     req<User>('POST', '/api/agents', { name, displayName }),
   createAgentToken: (agentId: string, name: string) =>
     req<CreatedApiToken>('POST', `/api/agents/${agentId}/tokens`, { name }),
-  listAgentTokens: (agentId: string) =>
-    req<ApiToken[]>('GET', `/api/agents/${agentId}/tokens`),
+  listAgentTokens: (agentId: string) => req<ApiToken[]>('GET', `/api/agents/${agentId}/tokens`),
   revokeAgentToken: (agentId: string, tokenId: string) =>
     req<{ ok: true }>('DELETE', `/api/agents/${agentId}/tokens/${tokenId}`),
 

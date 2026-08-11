@@ -15,7 +15,7 @@ import {
   type Domain,
   type Visibility,
 } from '@nonlinear/core';
-import type { Issue, Priority, StateCategory, TokenScope, User } from '@nonlinear/shared';
+import type { Decision, Issue, Priority, StateCategory, TokenScope, User } from '@nonlinear/shared';
 import { PRIORITY_LABELS, STATE_CATEGORIES } from '@nonlinear/shared';
 
 /**
@@ -234,6 +234,62 @@ async function serializeIssue(domain: Domain, issue: Issue, opts: { summary?: bo
     updatedAt: issue.updatedAt,
   };
   return opts.summary ? base : { ...base, description: issue.description };
+}
+
+/** Resolve a `KEY-D#` decision identifier for a member (decisions are member-only). */
+async function resolveDecision(
+  domain: Domain,
+  identifier: string,
+  vis: Visibility,
+): Promise<Decision> {
+  const m = identifier.match(/^(.+)-D(\d+)$/i);
+  if (!m) throw new Error(`Bad decision identifier "${identifier}" (expected e.g. VAN-D12)`);
+  const key = m[1]!.toUpperCase();
+  const number = Number(m[2]);
+  const team = (await domain.ctx.storage.teams.all()).find((t) => t.key.toUpperCase() === key);
+  if (!team || !seesTeam(vis, team.id)) throw new Error(`Decision ${identifier} not found`);
+  const decision = (await domain.ctx.storage.decisions.all()).find(
+    (d) => d.teamId === team.id && d.number === number,
+  );
+  if (!decision) throw new Error(`Decision ${identifier} not found`);
+  return decision;
+}
+
+async function serializeDecision(
+  domain: Domain,
+  decision: Decision,
+  opts: { summary?: boolean } = {},
+) {
+  const s = domain.ctx.storage;
+  const [team, users, decisions, issues] = await Promise.all([
+    s.teams.get(decision.teamId),
+    s.users.all(),
+    s.decisions.all(),
+    s.issues.all(),
+  ]);
+  const key = team?.key ?? '?';
+  const identifier = `${key}-D${decision.number}`;
+  const name = (id: string | null) =>
+    id ? (users.find((u) => u.id === id)?.displayName ?? null) : null;
+  const supersededBy = decisions.find((d) => d.supersedesId === decision.id);
+  const decIdent = (id: string) => `${key}-D${decisions.find((d) => d.id === id)?.number ?? '?'}`;
+  const base = {
+    identifier,
+    title: decision.title,
+    status: decision.status,
+    author: name(decision.authorId),
+    ruledBy: name(decision.ruledById),
+    ruledAt: decision.ruledAt,
+    supersedes: decision.supersedesId ? decIdent(decision.supersedesId) : null,
+    supersededBy: supersededBy ? `${key}-D${supersededBy.number}` : null,
+    governs: decision.governedIssueIds.map((id) => {
+      const i = issues.find((x) => x.id === id);
+      return i ? `${key}-${i.number}` : id;
+    }),
+    url: `/decision/${decision.id}`,
+    updatedAt: decision.updatedAt,
+  };
+  return opts.summary ? base : { ...base, body: decision.body };
 }
 
 const ok = (data: unknown) => ({
@@ -745,6 +801,168 @@ function buildServer(
         }),
       );
       return ok({ applied: results.filter((r) => r.ok).length, results });
+    },
+  );
+
+  // ---- decisions: judgments as first-class records (member teams only) ----
+
+  server.registerTool(
+    'create_decision',
+    {
+      description:
+        'Record a decision — a judgment, not a work item. Its body is the argument; it starts as `proposed`. Use for architecture rulings, tradeoffs, policy. Numbered per team as VAN-D12.',
+      inputSchema: {
+        teamKey: z.string(),
+        title: z.string(),
+        body: z.string().optional().describe('The argument (markdown, prose-first)'),
+        governedIssues: z
+          .array(z.string())
+          .optional()
+          .describe('Issue identifiers this decision governs (e.g. VAN-4)'),
+        supersedes: z
+          .string()
+          .optional()
+          .describe('A decision identifier this one replaces (e.g. VAN-D5)'),
+      },
+    },
+    async ({ teamKey, title, body, governedIssues, supersedes }) => {
+      try {
+        guardWrite();
+        const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
+        const governedIssueIds = await Promise.all(
+          (governedIssues ?? []).map(async (id) => (await resolveIssue(domain, id, vis)).id),
+        );
+        const supersedesId = supersedes
+          ? (await resolveDecision(domain, supersedes, vis)).id
+          : undefined;
+        const decision = await domain.decisions.create(actor.id, {
+          teamId: team.id,
+          title,
+          body,
+          governedIssueIds,
+          supersedesId,
+        });
+        return ok(await serializeDecision(domain, decision));
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    'list_decisions',
+    {
+      description: 'List a team’s decisions (optionally by status), newest first.',
+      inputSchema: {
+        teamKey: z.string(),
+        status: z
+          .enum(['proposed', 'ruled', 'superseded', 'carried'])
+          .optional()
+          .describe('Filter by lifecycle status'),
+      },
+    },
+    async ({ teamKey, status }) => {
+      try {
+        const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
+        const rows = (await domain.ctx.storage.decisions.all())
+          .filter((d) => d.teamId === team.id && (!status || d.status === status))
+          .sort((a, b) => b.number - a.number);
+        return ok(
+          await Promise.all(rows.map((d) => serializeDecision(domain, d, { summary: true }))),
+        );
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    'get_decision',
+    {
+      description: 'Get one decision by identifier (e.g. VAN-D12), with its full argument.',
+      inputSchema: { identifier: z.string() },
+    },
+    async ({ identifier }) => {
+      try {
+        const decision = await resolveDecision(domain, identifier, vis);
+        const comments = (await domain.ctx.storage.decisionComments.all())
+          .filter((c) => c.decisionId === decision.id)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        const users = await domain.ctx.storage.users.all();
+        return ok({
+          ...(await serializeDecision(domain, decision)),
+          comments: comments.map((c) => ({
+            author: users.find((u) => u.id === c.userId)?.displayName ?? null,
+            body: c.body,
+            createdAt: c.createdAt,
+          })),
+        });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    'rule_decision',
+    {
+      description:
+        'Rule on a proposed decision — mark it decided, credited to you, optionally with a note that lands as a comment. This is how a decider answers a proposal.',
+      inputSchema: { identifier: z.string(), note: z.string().optional() },
+    },
+    async ({ identifier, note }) => {
+      try {
+        guardWrite();
+        const decision = await resolveDecision(domain, identifier, vis);
+        const ruled = await domain.decisions.rule(actor.id, decision.id, note);
+        return ok(await serializeDecision(domain, ruled));
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    'supersede_decision',
+    {
+      description:
+        'Record that one decision replaces another: `identifier` supersedes `supersedes` (which is flipped to superseded). Supersession is a first-class edge — never leave it implicit.',
+      inputSchema: {
+        identifier: z.string().describe('The newer decision (e.g. VAN-D20)'),
+        supersedes: z.string().describe('The decision it replaces (e.g. VAN-D5)'),
+      },
+    },
+    async ({ identifier, supersedes }) => {
+      try {
+        guardWrite();
+        const decision = await resolveDecision(domain, identifier, vis);
+        const target = await resolveDecision(domain, supersedes, vis);
+        const updated = await domain.decisions.setSupersedes(actor.id, decision.id, target.id);
+        return ok(await serializeDecision(domain, updated));
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    'comment_decision',
+    {
+      description: 'Comment on a decision — e.g. to answer a proposal or add context.',
+      inputSchema: { identifier: z.string(), body: z.string() },
+    },
+    async ({ identifier, body }) => {
+      try {
+        guardWrite();
+        const decision = await resolveDecision(domain, identifier, vis);
+        const comment = await domain.decisions.comment(actor.id, {
+          decisionId: decision.id,
+          body,
+        });
+        return ok({ ok: true, commentId: comment.id });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
     },
   );
 

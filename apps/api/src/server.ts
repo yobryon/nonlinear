@@ -44,6 +44,53 @@ declare module 'fastify' {
 const FULL_SCOPE: TokenScope = { teamIds: null, readOnly: false };
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
+const DECISION_STATUS_LABEL: Record<string, string> = {
+  proposed: 'Proposed',
+  ruled: 'Ruled',
+  superseded: 'Superseded',
+  carried: 'Carried',
+};
+
+/** Render a team's decisions as a one-way markdown mirror (tracker → file). */
+async function decisionsMarkdown(domain: Domain, teamId: string): Promise<string> {
+  const s = domain.ctx.storage;
+  const [team, decisions, users, issues] = await Promise.all([
+    s.teams.get(teamId),
+    s.decisions.all(),
+    s.users.all(),
+    s.issues.all(),
+  ]);
+  if (!team) return '# Decisions\n\n_Team not found._\n';
+  const mine = decisions.filter((d) => d.teamId === teamId).sort((a, b) => a.number - b.number);
+  const ident = (id: string) => `${team.key}-D${decisions.find((d) => d.id === id)?.number ?? '?'}`;
+  const userName = (id: string | null) =>
+    id ? (users.find((u) => u.id === id)?.name ?? '?') : '—';
+  const issueIdent = (id: string) => {
+    const i = issues.find((x) => x.id === id);
+    return i ? `${team.key}-${i.number}` : id;
+  };
+  const day = (iso: string | null) => (iso ? iso.slice(0, 10) : '');
+
+  const out: string[] = [`# ${team.name} — Decisions`, ''];
+  if (mine.length === 0) out.push('_No decisions recorded yet._', '');
+  for (const d of mine) {
+    const anchor = `${team.key.toLowerCase()}-d${d.number}`;
+    out.push(`## ${team.key}-D${d.number} — ${d.title} <a id="${anchor}"></a>`);
+    const meta = [`**${DECISION_STATUS_LABEL[d.status] ?? d.status}**`];
+    meta.push(`proposed by ${userName(d.authorId)} ${day(d.createdAt)}`);
+    if (d.ruledById) meta.push(`ruled by ${userName(d.ruledById)} ${day(d.ruledAt)}`);
+    if (d.supersedesId) meta.push(`supersedes ${ident(d.supersedesId)}`);
+    const supersededBy = mine.find((x) => x.supersedesId === d.id);
+    if (supersededBy) meta.push(`superseded by ${team.key}-D${supersededBy.number}`);
+    out.push(meta.join(' · '), '');
+    if (d.governedIssueIds.length) {
+      out.push(`Governs: ${d.governedIssueIds.map(issueIdent).join(', ')}`, '');
+    }
+    out.push(d.body.trim() || '_(no argument recorded)_', '', '---', '');
+  }
+  return out.join('\n');
+}
+
 export async function buildServer(domain: Domain, config: Config): Promise<FastifyInstance> {
   const app = Fastify({ logger: true, bodyLimit: 1024 * 1024 });
   await app.register(cookie);
@@ -361,6 +408,78 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
   app.delete('/api/reactions/:id', authed, async (req) => {
     await domain.comments.removeReaction(req.actor.id, (req.params as { id: string }).id);
     return { ok: true };
+  });
+
+  // ---- decisions (member-only: a team's private reasoning) ----
+  const decisionTeam = async (req: FastifyRequest): Promise<string> => {
+    const decision = await domain.ctx.storage.decisions.get((req.params as { id: string }).id);
+    if (!decision) throw new DomainError('not_found', 'Decision not found', 404);
+    return decision.teamId;
+  };
+  app.post('/api/decisions', authed, async (req) => {
+    await requireTeamAccess(req, (req.body as { teamId: string }).teamId);
+    return domain.decisions.create(req.actor.id, req.body as never);
+  });
+  app.patch('/api/decisions/:id', authed, async (req) => {
+    await requireTeamAccess(req, await decisionTeam(req));
+    return domain.decisions.update(
+      req.actor.id,
+      (req.params as { id: string }).id,
+      req.body as never,
+    );
+  });
+  app.post('/api/decisions/:id/rule', authed, async (req) => {
+    await requireTeamAccess(req, await decisionTeam(req));
+    return domain.decisions.rule(
+      req.actor.id,
+      (req.params as { id: string }).id,
+      (req.body as { note?: string }).note,
+    );
+  });
+  app.post('/api/decisions/:id/carry', authed, async (req) => {
+    await requireTeamAccess(req, await decisionTeam(req));
+    return domain.decisions.carry(req.actor.id, (req.params as { id: string }).id);
+  });
+  app.post('/api/decisions/:id/supersede', authed, async (req) => {
+    await requireTeamAccess(req, await decisionTeam(req));
+    return domain.decisions.setSupersedes(
+      req.actor.id,
+      (req.params as { id: string }).id,
+      (req.body as { supersededId: string }).supersededId,
+    );
+  });
+  app.delete('/api/decisions/:id', authed, async (req) => {
+    await requireTeamAccess(req, await decisionTeam(req));
+    await domain.decisions.remove((req.params as { id: string }).id);
+    return { ok: true };
+  });
+  app.post('/api/decision-comments', authed, async (req) => {
+    const decision = await domain.ctx.storage.decisions.get(
+      (req.body as { decisionId: string }).decisionId,
+    );
+    if (!decision) throw new DomainError('not_found', 'Decision not found', 404);
+    await requireTeamAccess(req, decision.teamId);
+    return domain.decisions.comment(req.actor.id, req.body as never);
+  });
+  app.patch('/api/decision-comments/:id', authed, async (req) =>
+    domain.decisions.updateComment(
+      req.actor.id,
+      (req.params as { id: string }).id,
+      (req.body as { body: string }).body,
+    ),
+  );
+  app.delete('/api/decision-comments/:id', authed, async (req) => {
+    await domain.decisions.removeComment(req.actor.id, (req.params as { id: string }).id);
+    return { ok: true };
+  });
+  // One-way markdown mirror: keeps a repo-attached team's greppability while the
+  // tracker holds the truth. Member-only.
+  app.get('/api/teams/:id/decisions.md', authed, async (req, reply) => {
+    const teamId = (req.params as { id: string }).id;
+    await requireTeamAccess(req, teamId);
+    const md = await decisionsMarkdown(domain, teamId);
+    reply.header('Content-Type', 'text/markdown; charset=utf-8');
+    return reply.send(md);
   });
 
   // ---- teams & workflow states ----

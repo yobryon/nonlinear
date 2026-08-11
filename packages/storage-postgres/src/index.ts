@@ -2,6 +2,7 @@ import pg from 'pg';
 import type {
   AiSettings,
   AuditEvent,
+  Decision,
   Invite,
   Issue,
   IssueActivity,
@@ -26,6 +27,7 @@ import type {
   SyncLogStore,
   TeamStore,
   UserStore,
+  DecisionStore,
 } from '@nonlinear/core';
 import { migrate } from './migrate.js';
 
@@ -170,6 +172,18 @@ class PgIssueStore extends PgEntityStore<Issue> implements IssueStore {
       teamId,
     ]);
     return rows.map((r) => r.data);
+  }
+}
+
+class PgDecisionStore extends PgEntityStore<Decision> implements DecisionStore {
+  async nextNumber(teamId: string): Promise<number> {
+    const { rows } = await this.pool.query(
+      `INSERT INTO decision_counters (team_id, counter) VALUES ($1, 1)
+       ON CONFLICT (team_id) DO UPDATE SET counter = decision_counters.counter + 1
+       RETURNING counter::int AS counter`,
+      [teamId],
+    );
+    return rows[0].counter;
   }
 }
 
@@ -465,6 +479,8 @@ export async function createPostgresStorage(options: PostgresStorageOptions): Pr
     documentComments: new PgEntityStore(pool, 'document_comments'),
     triageRules: new PgEntityStore(pool, 'triage_rules'),
     dashboards: new PgEntityStore(pool, 'dashboards'),
+    decisions: new PgDecisionStore(pool, 'decisions'),
+    decisionComments: new PgEntityStore(pool, 'decision_comments'),
     activities: new PgActivityStore(pool, 'issue_activities'),
     sessions: new PgSessionStore(pool),
     apiTokens: new PgApiTokenStore(pool),
