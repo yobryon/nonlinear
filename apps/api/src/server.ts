@@ -54,9 +54,10 @@ const DECISION_STATUS_LABEL: Record<string, string> = {
 /** Render a team's decisions as a one-way markdown mirror (tracker → file). */
 async function decisionsMarkdown(domain: Domain, teamId: string): Promise<string> {
   const s = domain.ctx.storage;
-  const [team, decisions, users, issues] = await Promise.all([
+  const [team, decisions, decisionComments, users, issues] = await Promise.all([
     s.teams.get(teamId),
     s.decisions.all(),
+    s.decisionComments.all(),
     s.users.all(),
     s.issues.all(),
   ]);
@@ -86,7 +87,18 @@ async function decisionsMarkdown(domain: Domain, teamId: string): Promise<string
     if (d.governedIssueIds.length) {
       out.push(`Governs: ${d.governedIssueIds.map(issueIdent).join(', ')}`, '');
     }
-    out.push(d.body.trim() || '_(no argument recorded)_', '', '---', '');
+    out.push(d.body.trim() || '_(no argument recorded)_', '');
+    // The discussion — where the argument was worked out and the PO answered.
+    const thread = decisionComments
+      .filter((c) => c.decisionId === d.id)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    if (thread.length) {
+      out.push('**Discussion**', '');
+      for (const c of thread) {
+        out.push(`*${userName(c.userId)} · ${day(c.createdAt)}*`, '', c.body.trim(), '');
+      }
+    }
+    out.push('---', '');
   }
   return out.join('\n');
 }
