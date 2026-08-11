@@ -210,10 +210,11 @@ async function resolveProject(
  */
 async function serializeIssue(domain: Domain, issue: Issue, opts: { summary?: boolean } = {}) {
   const s = domain.ctx.storage;
-  const [team, state, assignee, labels] = await Promise.all([
+  const [team, state, assignee, waitingOn, labels] = await Promise.all([
     s.teams.get(issue.teamId),
     s.workflowStates.get(issue.stateId),
     issue.assigneeId ? s.users.get(issue.assigneeId) : Promise.resolve(null),
+    issue.waitingOnId ? s.users.get(issue.waitingOnId) : Promise.resolve(null),
     s.labels.all(),
   ]);
   const identifier = team ? `${team.key}-${issue.number}` : issue.id;
@@ -223,6 +224,7 @@ async function serializeIssue(domain: Domain, issue: Issue, opts: { summary?: bo
     state: state?.name ?? null,
     priority: PRIORITY_LABELS[issue.priority],
     assignee: assignee?.displayName ?? null,
+    waitingOn: waitingOn?.displayName ?? null,
     labels: issue.labelIds.map((id) => labels.find((l) => l.id === id)?.name).filter(Boolean),
     project: issue.projectId,
     dueDate: issue.dueDate,
@@ -486,7 +488,7 @@ function buildServer(
     'my_work',
     {
       description:
-        'What needs your attention: issues assigned to you, issues where a comment @mentions your handle, and issues you filed (incl. via intake into other teams — to track responses). A pull-based alternative to a webhook.',
+        'What needs your attention: issues assigned to you, where a comment @mentions you, that you filed (incl. via intake — to track responses), and that are waiting_on you (blocked pending your move). A pull-based alternative to a webhook.',
       inputSchema: {},
     },
     async () => {
@@ -507,6 +509,7 @@ function buildServer(
       const filed = visible
         .filter((i) => i.creatorId === actor.id && i.assigneeId !== actor.id)
         .sort(byUpdated);
+      const waitingOnMe = visible.filter((i) => i.waitingOnId === actor.id).sort(byUpdated);
 
       const summarize = (arr: Issue[]) =>
         Promise.all(arr.map((i) => serializeIssue(domain, i, { summary: true })));
@@ -514,6 +517,7 @@ function buildServer(
         assigned: await summarize(assigned),
         mentioned: await summarize(mentioned),
         filed: await summarize(filed),
+        waiting_on_me: await summarize(waitingOnMe),
       });
     },
   );
@@ -566,10 +570,15 @@ function buildServer(
         state: z.string().optional(),
         priority: z.string().optional(),
         assignee: z.string().nullable().optional(),
+        waiting_on: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('Person/agent this issue is blocked on (email/@handle/name); null to clear'),
         project: z.string().optional().describe('Project name to move the issue into'),
       },
     },
-    async ({ identifier, title, description, state, priority, assignee, project }) => {
+    async ({ identifier, title, description, state, priority, assignee, waiting_on, project }) => {
       try {
         guardWrite();
         const issue = await resolveIssue(domain, identifier, vis);
@@ -585,6 +594,7 @@ function buildServer(
           stateId: await resolveState(domain, issue.teamId, state),
           priority: parsePriority(priority),
           assigneeId: await resolveAssignee(domain, assignee),
+          waitingOnId: await resolveAssignee(domain, waiting_on),
           projectId: await resolveProject(domain, project, vis),
         });
         return ok(await serializeIssue(domain, updated));
@@ -661,23 +671,30 @@ function buildServer(
         identifier: z.string(),
         body: z.string().optional().describe('A comment to add (markdown, @mentions)'),
         state: z.string().optional().describe('Workflow state name to move to'),
+        waiting_on: z
+          .string()
+          .nullable()
+          .optional()
+          .describe('Set who it is blocked on (email/@handle/name); null to clear'),
       },
     },
-    async ({ identifier, body, state }) => {
+    async ({ identifier, body, state, waiting_on }) => {
       try {
         guardWrite();
         const issue = await resolveIssue(domain, identifier, vis);
-        if (!seesTeam(vis, issue.teamId) && state) {
-          throw new Error(`You can view ${identifier} but not change its state (intake access)`);
+        const wantsEdit = state !== undefined || waiting_on !== undefined;
+        if (!seesTeam(vis, issue.teamId) && wantsEdit) {
+          throw new Error(`You can view ${identifier} but not edit it (intake access)`);
         }
         let commentId: string | undefined;
         if (body && body.trim()) {
           commentId = (await domain.comments.create(actor.id, { issueId: issue.id, body })).id;
         }
         let updated = issue;
-        if (state) {
+        if (wantsEdit) {
           updated = await domain.issues.update(actor.id, issue.id, {
             stateId: await resolveState(domain, issue.teamId, state),
+            waitingOnId: await resolveAssignee(domain, waiting_on),
           });
         }
         return ok({ ...(await serializeIssue(domain, updated, { summary: true })), commentId });
@@ -699,6 +716,7 @@ function buildServer(
               identifier: z.string(),
               state: z.string().optional(),
               assignee: z.string().nullable().optional(),
+              waiting_on: z.string().nullable().optional(),
             }),
           )
           .describe('One entry per issue to change'),
@@ -714,6 +732,7 @@ function buildServer(
             await domain.issues.update(actor.id, issue.id, {
               stateId: await resolveState(domain, issue.teamId, u.state),
               assigneeId: await resolveAssignee(domain, u.assignee),
+              waitingOnId: await resolveAssignee(domain, u.waiting_on),
             });
             return { identifier: u.identifier, ok: true };
           } catch (err) {

@@ -110,6 +110,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
   const statePicker = usePicker();
   const priorityPicker = usePicker();
   const assigneePicker = usePicker();
+  const waitingPicker = usePicker();
   const labelPicker = usePicker();
   const projectPicker = usePicker();
   const cyclePicker = usePicker();
@@ -163,6 +164,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
   const team = teams[issue.teamId];
   const state = states[issue.stateId];
   const assignee = issue.assigneeId ? users[issue.assigneeId] : null;
+  const waitingOn = issue.waitingOnId ? users[issue.waitingOnId] : null;
   const creator = users[issue.creatorId];
   const project = issue.projectId ? projects[issue.projectId] : null;
   const milestone = issue.milestoneId ? milestones[issue.milestoneId] : null;
@@ -499,6 +501,23 @@ function IssueDetail({ issueId }: { issueId: string }) {
             </button>
           </div>
           <div className="prop-row">
+            <span className="prop-label">Waiting on</span>
+            <button className="prop-value" onClick={(e) => waitingPicker.open(anchorFromEvent(e))}>
+              {waitingOn ? (
+                <>
+                  <Avatar user={waitingOn} size={16} />
+                  {waitingOn.name}
+                  <PersonaBadge user={waitingOn} />
+                </>
+              ) : (
+                <>
+                  <ClockIcon size={14} />
+                  <span className="muted">Nobody</span>
+                </>
+              )}
+            </button>
+          </div>
+          <div className="prop-row">
             <span className="prop-label">Estimate</span>
             <button className="prop-value" onClick={(e) => estimatePicker.open(anchorFromEvent(e))}>
               <EstimateIcon size={14} />
@@ -643,6 +662,14 @@ function IssueDetail({ issueId }: { issueId: string }) {
           onClose={assigneePicker.close}
           currentId={issue.assigneeId}
           onPick={(id) => void patchIssue(issueId, { assigneeId: id })}
+        />
+      )}
+      {waitingPicker.anchor && (
+        <AssigneePicker
+          anchor={waitingPicker.anchor}
+          onClose={waitingPicker.close}
+          currentId={issue.waitingOnId}
+          onPick={(id) => void patchIssue(issueId, { waitingOnId: id })}
         />
       )}
       {labelPicker.anchor && (

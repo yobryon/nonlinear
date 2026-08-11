@@ -177,6 +177,13 @@ export interface Issue {
   stateId: string;
   priority: Priority;
   assigneeId: string | null;
+  /**
+   * Who this issue is *waiting on* — orthogonal to workflow state. Names the
+   * person/agent whose next move unblocks it; null means "waiting on nobody",
+   * which on an in-flight issue is the board-review finding, mechanized. Cleared
+   * by hand (and, later, when the named person next acts on the issue).
+   */
+  waitingOnId: string | null;
   creatorId: string;
   projectId: string | null;
   milestoneId: string | null;
@@ -384,6 +391,8 @@ export interface ViewFilters {
   labelIds: string[];
   stateIds: string[];
   projectIds: string[];
+  /** Optional for back-compat with views saved before waiting_on existed. */
+  waitingOn?: string | null;
 }
 
 export interface CustomView {

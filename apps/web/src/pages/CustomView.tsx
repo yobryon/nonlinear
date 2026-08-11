@@ -8,9 +8,11 @@ import { Popover, toastError, anchorFromEvent, type Anchor } from '../ui.js';
 import {
   applyFilters,
   Board,
+  EMPTY_FILTERS,
   GroupedIssueList,
   useGroupedIssues,
   ViewControls,
+  type IssueFilters,
 } from '../issueViews.js';
 
 export function CustomViewPage() {
@@ -70,15 +72,22 @@ function ViewBody({ view }: { view: CustomView }) {
     }
   };
 
+  // Normalize a persisted view's filters (waitingOn is optional for back-compat).
+  const filters: IssueFilters = {
+    ...EMPTY_FILTERS,
+    ...view.filters,
+    waitingOn: view.filters.waitingOn ?? null,
+  };
+
   const visible = useMemo(
     () =>
       applyFilters(
         Object.values(issues).filter(
           (i) => !i.archivedAt && (view.teamId === null || i.teamId === view.teamId),
         ),
-        view.filters,
+        filters,
       ),
-    [issues, view.teamId, view.filters],
+    [issues, view.teamId, filters],
   );
 
   const grouped = useGroupedIssues(
@@ -150,7 +159,7 @@ function ViewBody({ view }: { view: CustomView }) {
       </div>
 
       <ViewControls
-        filters={view.filters}
+        filters={filters}
         onFilters={(f) => void persist({ filters: f })}
         grouping={view.display === 'list' ? view.grouping : undefined}
         onGrouping={view.display === 'list' ? (g) => void persist({ grouping: g }) : undefined}

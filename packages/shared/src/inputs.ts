@@ -93,6 +93,7 @@ export interface UpdateIssueInput {
   dueDate?: string | null;
   labelIds?: string[];
   subscriberIds?: string[];
+  waitingOnId?: string | null;
   sortOrder?: string;
   archived?: boolean;
 }

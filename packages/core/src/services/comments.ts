@@ -35,9 +35,18 @@ export class CommentService {
     await storage.comments.insert(comment);
     const deltas: DeltaInput[] = [created('comment', comment)];
 
-    // Commenting subscribes you to the issue.
+    // Commenting subscribes you to the issue, and — if the issue was waiting on
+    // *you* — clears that wait: responding is the action it was waiting for.
+    let issueChanged = false;
     if (!issue.subscriberIds.includes(actorId)) {
       issue.subscriberIds = [...issue.subscriberIds, actorId];
+      issueChanged = true;
+    }
+    if (issue.waitingOnId === actorId) {
+      issue.waitingOnId = null;
+      issueChanged = true;
+    }
+    if (issueChanged) {
       issue.updatedAt = now;
       await storage.issues.update(issue);
       deltas.push(updated('issue', issue));

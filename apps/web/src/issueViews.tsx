@@ -39,6 +39,8 @@ export interface IssueFilters {
   labelIds: string[];
   stateIds: string[];
   projectIds: string[];
+  /** null = no filter; 'nobody' = waiting on no one; otherwise a userId. */
+  waitingOn: string | null;
 }
 
 export const EMPTY_FILTERS: IssueFilters = {
@@ -47,6 +49,7 @@ export const EMPTY_FILTERS: IssueFilters = {
   labelIds: [],
   stateIds: [],
   projectIds: [],
+  waitingOn: null,
 };
 
 export function filtersActive(f: IssueFilters): boolean {
@@ -55,7 +58,8 @@ export function filtersActive(f: IssueFilters): boolean {
     f.assigneeIds.length > 0 ||
     f.labelIds.length > 0 ||
     f.stateIds.length > 0 ||
-    f.projectIds.length > 0
+    f.projectIds.length > 0 ||
+    f.waitingOn !== null
   );
 }
 
@@ -66,6 +70,9 @@ export function applyFilters(issues: Issue[], f: IssueFilters): Issue[] {
     if (f.labelIds.length && !f.labelIds.some((l) => i.labelIds.includes(l))) return false;
     if (f.stateIds.length && !f.stateIds.includes(i.stateId)) return false;
     if (f.projectIds.length && !(i.projectId && f.projectIds.includes(i.projectId))) return false;
+    if (f.waitingOn === 'nobody' && i.waitingOnId) return false;
+    if (f.waitingOn !== null && f.waitingOn !== 'nobody' && i.waitingOnId !== f.waitingOn)
+      return false;
     return true;
   });
 }
@@ -891,7 +898,9 @@ export function ViewControls({
   const labels = useStore((s) => s.labels);
   const states = useStore((s) => s.workflowStates);
   const [filterAnchor, setFilterAnchor] = useState<Anchor | null>(null);
-  const [dim, setDim] = useState<'root' | 'priority' | 'assignee' | 'label' | 'state'>('root');
+  const [dim, setDim] = useState<'root' | 'priority' | 'assignee' | 'label' | 'state' | 'waiting'>(
+    'root',
+  );
   const [groupAnchor, setGroupAnchor] = useState<Anchor | null>(null);
 
   const closeFilter = () => {
@@ -949,6 +958,15 @@ export function ViewControls({
           </button>
         </span>
       )}
+      {filters.waitingOn !== null && (
+        <span className="filter-pill set">
+          Waiting on:{' '}
+          {filters.waitingOn === 'nobody' ? 'Nobody' : (users[filters.waitingOn]?.name ?? '?')}
+          <button className="x" onClick={() => onFilters({ ...filters, waitingOn: null })}>
+            <CloseIcon size={11} />
+          </button>
+        </span>
+      )}
 
       <span className="grow" />
       {extra}
@@ -997,6 +1015,7 @@ export function ViewControls({
               label: 'Status',
               icon: <StateIcon category="started" color="var(--text-3)" />,
             },
+            { id: 'waiting', label: 'Waiting on', icon: <UserIcon size={14} /> },
           ]}
           onPick={(id) => setDim(id as typeof dim)}
         />
@@ -1082,6 +1101,22 @@ export function ViewControls({
               ? filters.stateIds.filter((x) => x !== id)
               : [...filters.stateIds, id];
             onFilters({ ...filters, stateIds: next });
+          }}
+        />
+      )}
+      {filterAnchor && dim === 'waiting' && (
+        <Picker
+          anchor={filterAnchor}
+          onClose={closeFilter}
+          selectedIds={new Set(filters.waitingOn ? [filters.waitingOn] : [])}
+          items={[
+            { id: 'nobody', label: 'Nobody (needs a next mover)' },
+            ...Object.values(users).map((u) => ({ id: u.id, label: u.name })),
+          ]}
+          onPick={(id) => {
+            // Single-value: toggling the current pick clears the filter.
+            onFilters({ ...filters, waitingOn: filters.waitingOn === id ? null : id });
+            closeFilter();
           }}
         />
       )}

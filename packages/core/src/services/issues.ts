@@ -115,6 +115,7 @@ export class IssueService {
       stateId: state.id,
       priority: input.priority ?? 0,
       assigneeId: input.assigneeId ?? null,
+      waitingOnId: null,
       creatorId: actorId,
       projectId: input.projectId ?? null,
       milestoneId: input.milestoneId ?? null,
@@ -344,6 +345,7 @@ export class IssueService {
     }
 
     if (input.subscriberIds !== undefined) issue.subscriberIds = [...new Set(input.subscriberIds)];
+    if (input.waitingOnId !== undefined) issue.waitingOnId = input.waitingOnId;
     if (input.sortOrder !== undefined) issue.sortOrder = input.sortOrder;
     if (input.archived !== undefined) issue.archivedAt = input.archived ? now : null;
 
