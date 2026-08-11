@@ -24,7 +24,7 @@ export function ReconcilePage() {
 
   const team = teamKey ? Object.values(teams).find((t) => t.key === teamKey) : null;
 
-  const { ranked, open, untouched, waitingNobody } = useMemo(() => {
+  const { ranked, open, untouched, stalledUnowned } = useMemo(() => {
     const now = Date.now();
     const lastCommentAt = new Map<string, number>();
     for (const c of Object.values(comments)) {
@@ -42,13 +42,13 @@ export function ReconcilePage() {
       .map((i) => ({ issue: i, at: activityAt(i.id, i.updatedAt) }))
       .sort((a, b) => a.at - b.at);
     const threshold = STALE_DAYS * 86400000;
+    const stale = ranked.filter((r) => now - r.at > threshold);
     return {
       ranked,
       open: openIssues.length,
-      untouched: ranked.filter((r) => now - r.at > threshold).length,
-      waitingNobody: openIssues.filter(
-        (i) => !i.waitingOnId && states[i.stateId]?.category === 'started',
-      ).length,
+      untouched: stale.length,
+      // The board-review finding: stale AND nobody named as the blocker.
+      stalledUnowned: stale.filter((r) => !r.issue.waitingOnId).length,
     };
   }, [issues, comments, states, team]);
 
@@ -72,7 +72,8 @@ export function ReconcilePage() {
         </div>
         <span className="spacer" />
         <span className="dim">
-          {open} open · {untouched} untouched {STALE_DAYS}+ days · {waitingNobody} waiting on nobody
+          {open} open · {untouched} untouched {STALE_DAYS}+ days · {stalledUnowned} stalled with no
+          owner
         </span>
       </div>
       <div className="content">

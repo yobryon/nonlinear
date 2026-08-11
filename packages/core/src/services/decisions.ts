@@ -109,6 +109,7 @@ export class DecisionService {
     const decision = await storage.decisions.get(id);
     if (!decision) throw notFound('Decision');
     const now = nowIso();
+    const wasWaitingOn = decision.waitingOnId;
     decision.status = 'ruled';
     decision.ruledById = actorId;
     decision.ruledAt = now;
@@ -119,8 +120,37 @@ export class DecisionService {
     if (note && note.trim()) {
       deltas.push(...(await this.buildComment(actorId, decision.id, note)));
     }
+    // Tell everyone party to the decision that it's decided — it's back in the
+    // proposer's court. Author + anyone who discussed it + whoever it awaited.
+    deltas.push(...(await this.notifyRuled(decision.id, actorId, decision.authorId, wasWaitingOn)));
     await bus.publish(deltas);
     return decision;
+  }
+
+  /** Notify everyone party to a decision that it was ruled (minus the ruler). */
+  private async notifyRuled(
+    decisionId: string,
+    actorId: string,
+    authorId: string,
+    wasWaitingOn: string | null,
+  ): Promise<DeltaInput[]> {
+    const commenters = (await this.ctx.storage.decisionComments.all())
+      .filter((c) => c.decisionId === decisionId)
+      .map((c) => c.userId);
+    const recipients = new Set<string>([authorId, ...commenters]);
+    if (wasWaitingOn) recipients.add(wasWaitingOn);
+    recipients.delete(actorId);
+    const deltas: DeltaInput[] = [];
+    for (const userId of recipients) {
+      const note = await pushNotification(this.ctx, {
+        userId,
+        actorId,
+        type: 'decision_ruled',
+        decisionId,
+      });
+      if (note) deltas.push(note);
+    }
+    return deltas;
   }
 
   /** Reaffirm a ruled decision after review — still in force, not superseded. */

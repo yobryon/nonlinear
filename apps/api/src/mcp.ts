@@ -103,7 +103,7 @@ If this is your first time, read the guide resources (list them with resources/l
 - nonlinear://guides/for-provider-agents — you OWN a tool/component and run its project + support its users here.
 - nonlinear://guides/readme — overview and the team-scoped access model.
 
-Quick loop: whoami → list_teams → search_issues (always search before filing to avoid duplicates) → create_issue / add_comment / update_issue. In-flow shortcuts: \`find_issue\` fuzzy-resolves a description to an issue so you needn't look up a number; \`comment_and_state\` comments and moves state in one call; \`update_issues\` batches state moves (the reconcile pass as one motion). Use \`my_work\` to see what's assigned to you or @mentions you. Names are resolved for you: team by key (e.g. ENG), state/label/project by name, assignee by email/@handle/name. Priority is 0 none, 1 urgent, 2 high, 3 medium, 4 low — set it honestly. A read-only or team-scoped token limits what you can do (whoami shows this).`;
+Quick loop: whoami → list_teams → search_issues (always search before filing to avoid duplicates) → create_issue / add_comment / update_issue. In-flow shortcuts: \`find_issue\` fuzzy-resolves a description to an issue so you needn't look up a number; \`comment_and_state\` comments and moves state in one call; \`update_issues\` batches state moves (the reconcile pass as one motion). Use \`my_work\` for issues that are yours (assigned / @mentioned / filed / waiting on you), \`awaiting_me\` for decisions to rule + issues blocked on you, and \`inbox\` for everything else addressed to you (decision @mentions, a decision you proposed being ruled) — pass \`inbox {markRead:true}\` to clear them. Names are resolved for you: team by key (e.g. ENG), state/label/project by name, assignee by email/@handle/name. Priority is 0 none, 1 urgent, 2 high, 3 medium, 4 low — set it honestly. A read-only or team-scoped token limits what you can do (whoami shows this).`;
 
 const PRIORITY_BY_NAME: Record<string, Priority> = {
   none: 0,
@@ -620,6 +620,90 @@ function buildServer(
   );
 
   server.registerTool(
+    'inbox',
+    {
+      description:
+        'Your notifications — the passive pull mirror of the human Inbox: things addressed to you (@mentions on issues AND decisions, a decision you proposed being ruled, assignments, waiting_on). Unread by default. Pass markRead:true to clear the ones returned so the next call is fresh.',
+      inputSchema: {
+        markRead: z
+          .boolean()
+          .optional()
+          .describe('Mark the returned notifications read (so you stop seeing them)'),
+        includeRead: z.boolean().optional().describe('Include already-read ones too'),
+        limit: z.number().optional(),
+      },
+    },
+    async ({ markRead, includeRead, limit }) => {
+      const [notifications, teams, issues, decisions, users] = await Promise.all([
+        s.notifications.all(),
+        s.teams.all(),
+        s.issues.all(),
+        s.decisions.all(),
+        s.users.all(),
+      ]);
+      const keyOf = (teamId: string) => teams.find((t) => t.id === teamId)?.key ?? '?';
+      const phrase: Record<string, string> = {
+        issue_assigned: 'assigned you',
+        issue_unassigned: 'unassigned you',
+        issue_status_changed: 'changed status',
+        issue_commented: 'commented',
+        issue_mentioned: 'mentioned you',
+        issue_due_soon: 'due soon',
+        issue_reminder: 'reminder',
+        issue_waiting_on: 'is waiting on you',
+        decision_ruled: 'ruled',
+      };
+      const mine = notifications
+        .filter((n) => n.userId === actor.id && (includeRead || !n.readAt))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .slice(0, Math.min(limit ?? 50, 200));
+      if (markRead) {
+        guardWrite();
+        await Promise.all(
+          mine
+            .filter((n) => !n.readAt)
+            .map((n) => domain.notifications.markRead(actor.id, n.id, true)),
+        );
+      }
+      const rows = mine.map((n) => {
+        const from = n.actorId
+          ? (users.find((u) => u.id === n.actorId)?.displayName ?? null)
+          : null;
+        let target: { kind: string; identifier: string; title: string; url: string } | null = null;
+        if (n.issueId) {
+          const i = issues.find((x) => x.id === n.issueId);
+          if (i) {
+            target = {
+              kind: 'issue',
+              identifier: `${keyOf(i.teamId)}-${i.number}`,
+              title: i.title,
+              url: `/issue/${keyOf(i.teamId)}-${i.number}`,
+            };
+          }
+        } else if (n.decisionId) {
+          const d = decisions.find((x) => x.id === n.decisionId);
+          if (d) {
+            target = {
+              kind: 'decision',
+              identifier: `${keyOf(d.teamId)}-D${d.number}`,
+              title: d.title,
+              url: `/decision/${d.id}`,
+            };
+          }
+        }
+        return {
+          what: phrase[n.type] ?? n.type,
+          from,
+          target,
+          read: n.readAt != null,
+          at: n.createdAt,
+        };
+      });
+      return ok({ unread: mine.filter((n) => !n.readAt).length, notifications: rows });
+    },
+  );
+
+  server.registerTool(
     'create_issue',
     {
       description:
@@ -1107,10 +1191,11 @@ function buildServer(
     async ({ teamKey, staleDays }) => {
       try {
         const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
-        const [issues, states, comments] = await Promise.all([
+        const [issues, states, comments, decisions] = await Promise.all([
           domain.ctx.storage.issues.byTeam(team.id),
           domain.ctx.storage.workflowStates.all(),
           domain.ctx.storage.comments.all(),
+          domain.ctx.storage.decisions.all(),
         ]);
         const catOf = (stateId: string) => states.find((s) => s.id === stateId)?.category;
         const open = issues.filter((i) => {
@@ -1118,7 +1203,8 @@ function buildServer(
           const c = catOf(i.stateId);
           return c !== 'completed' && c !== 'canceled';
         });
-        const threshold = (staleDays ?? 5) * 86400000;
+        const days = staleDays ?? 5;
+        const threshold = days * 86400000;
         const now = Date.now();
         const lastActivity = (issueId: string, updatedAt: string) => {
           let latest = Date.parse(updatedAt);
@@ -1128,15 +1214,34 @@ function buildServer(
           return latest;
         };
         const stale = open.filter((i) => now - lastActivity(i.id, i.updatedAt) > threshold);
-        const waitingNobody = open.filter((i) => !i.waitingOnId && catOf(i.stateId) === 'started');
-        const days = staleDays ?? 5;
+        // The board-review finding: of the stale ones, which have nobody named as
+        // the blocker (waiting_on) — genuinely adrift, not just paused on someone.
+        const stalledUnowned = stale.filter((i) => !i.waitingOnId);
+        // Decisions: what awaits a ruling, and what was decided lately.
+        const teamDecisions = decisions.filter((d) => d.teamId === team.id);
+        const awaitingRuling = teamDecisions.filter((d) => d.status === 'proposed');
+        const ruledRecently = teamDecisions
+          .filter((d) => d.ruledAt && now - Date.parse(d.ruledAt) <= 7 * 86400000)
+          .sort((a, b) => (b.ruledAt ?? '').localeCompare(a.ruledAt ?? ''));
+        const parts = [
+          `${open.length} open`,
+          `${stale.length} untouched ${days}+ days`,
+          `${stalledUnowned.length} stalled with no owner`,
+        ];
+        const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+        if (awaitingRuling.length)
+          parts.push(`${plural(awaitingRuling.length, 'decision')} to rule`);
+        if (ruledRecently.length)
+          parts.push(`${plural(ruledRecently.length, 'decision')} ruled (7d)`);
         return ok({
           team: team.key,
           open: open.length,
           untouched: stale.length,
           untouchedDays: days,
-          waitingNobody: waitingNobody.length,
-          summary: `${open.length} open · ${stale.length} untouched ${days}+ days · ${waitingNobody.length} in progress waiting on nobody`,
+          stalledUnowned: stalledUnowned.length,
+          decisionsAwaitingRuling: awaitingRuling.length,
+          decisionsRuledRecently: ruledRecently.map((d) => `${team.key}-D${d.number}`),
+          summary: parts.join(' · '),
           stalest: stale
             .sort((a, b) => lastActivity(a.id, a.updatedAt) - lastActivity(b.id, b.updatedAt))
             .slice(0, 10)

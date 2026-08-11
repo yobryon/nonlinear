@@ -71,6 +71,17 @@ describe('decisions', () => {
     expect(ruled.waitingOnId).toBeNull();
   });
 
+  it('notifies the author (the proposer) when their decision is ruled', async () => {
+    const arch = await domain.auth.createAgent({ name: 'Arch' });
+    const d = await domain.decisions.create(arch.id, { teamId: team.id, title: 'Their proposal' });
+    // The PO (admin) rules it — arch is told it's back in their court.
+    await domain.decisions.rule(admin.id, d.id, 'Approved with the narrowing.');
+    const notes = (await domain.ctx.storage.notifications.all()).filter(
+      (n) => n.userId === arch.id && n.decisionId === d.id && n.type === 'decision_ruled',
+    );
+    expect(notes).toHaveLength(1);
+  });
+
   it('@mentions in a decision thread notify the mentioned user', async () => {
     const arch = await domain.auth.createAgent({ name: 'Arch' });
     const d = await domain.decisions.create(admin.id, { teamId: team.id, title: 'Discuss' });
