@@ -216,6 +216,7 @@ function DecisionDetail({ decision }: { decision: Decision }) {
   const [menuAnchor, setMenuAnchor] = useState<Anchor | null>(null);
   const [supAnchor, setSupAnchor] = useState<Anchor | null>(null);
   const [commentBody, setCommentBody] = useState('');
+  const [confirm, setConfirm] = useState<'rule' | 'carry' | null>(null);
   const waitingPicker = usePicker();
 
   const team = teams[decision.teamId];
@@ -277,19 +278,13 @@ function DecisionDetail({ decision }: { decision: Decision }) {
         <span className="spacer" />
         <StatusChip status={decision.status} />
         {decision.status === 'proposed' && (
-          <button
-            className="btn primary"
-            onClick={() => void patch(() => api.ruleDecision(decision.id, ruleNote || undefined))}
-          >
-            Rule
+          <button className="btn primary" onClick={() => setConfirm('rule')}>
+            Rule…
           </button>
         )}
         {decision.status === 'ruled' && (
-          <button
-            className="btn ghost"
-            onClick={() => void patch(() => api.carryDecision(decision.id))}
-          >
-            Carry
+          <button className="btn ghost" onClick={() => setConfirm('carry')}>
+            Carry…
           </button>
         )}
         <button className="btn ghost" onClick={(e) => setSupAnchor(anchorFromEvent(e))}>
@@ -353,19 +348,6 @@ function DecisionDetail({ decision }: { decision: Decision }) {
                 </button>
               )}
             </div>
-
-            {decision.status === 'proposed' && (
-              <div style={{ marginTop: 20 }}>
-                <div className="side-heading">Ruling</div>
-                <textarea
-                  className="input"
-                  rows={2}
-                  placeholder="Optional note to record with your ruling…"
-                  value={ruleNote}
-                  onChange={(e) => setRuleNote(e.target.value)}
-                />
-              </div>
-            )}
 
             {/* comments — where the decider answers */}
             <div style={{ marginTop: 28, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
@@ -537,6 +519,55 @@ function DecisionDetail({ decision }: { decision: Decision }) {
         </div>
       </div>
 
+      {confirm && (
+        <Modal onClose={() => setConfirm(null)} width={480}>
+          <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {confirm === 'rule' ? (
+              <>
+                <h2 style={{ fontSize: 16 }}>Rule on {kid}?</h2>
+                <p className="dim" style={{ margin: 0 }}>
+                  Marks this decision <strong>ruled</strong>, credited to you. Add an optional note
+                  — it lands as a comment on the record.
+                </p>
+                <textarea
+                  className="input"
+                  rows={3}
+                  autoFocus
+                  placeholder="Optional note to record with your ruling…"
+                  value={ruleNote}
+                  onChange={(e) => setRuleNote(e.target.value)}
+                />
+              </>
+            ) : (
+              <>
+                <h2 style={{ fontSize: 16 }}>Carry {kid}?</h2>
+                <p className="dim" style={{ margin: 0 }}>
+                  Reaffirms this ruled decision as still in force after review.
+                </p>
+              </>
+            )}
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+              <button className="btn ghost" onClick={() => setConfirm(null)}>
+                Cancel
+              </button>
+              <button
+                className="btn primary"
+                onClick={() => {
+                  const action = confirm;
+                  setConfirm(null);
+                  void patch(() =>
+                    action === 'rule'
+                      ? api.ruleDecision(decision.id, ruleNote || undefined)
+                      : api.carryDecision(decision.id),
+                  );
+                }}
+              >
+                {confirm === 'rule' ? 'Rule' : 'Carry'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {waitingPicker.anchor && (
         <AssigneePicker
           anchor={waitingPicker.anchor}
