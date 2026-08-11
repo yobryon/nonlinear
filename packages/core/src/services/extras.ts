@@ -131,6 +131,34 @@ export class NotificationService {
     await bus.publish(deltas);
   }
 
+  /**
+   * Read-through: viewing the thing a notification is about *is* reading it, so
+   * clear this user's unread notifications for a subject (an issue or a
+   * decision) — every type at once. Called when a detail is opened (web) or
+   * fetched with its content (MCP get_issue/get_decision). A no-op when nothing
+   * matches.
+   */
+  async markReadForSubject(
+    userId: string,
+    subject: { issueId?: string; decisionId?: string },
+  ): Promise<void> {
+    if (!subject.issueId && !subject.decisionId) return;
+    const { storage, bus } = this.ctx;
+    const deltas: DeltaInput[] = [];
+    const now = nowIso();
+    for (const n of await storage.notifications.all()) {
+      if (n.userId !== userId || n.readAt) continue;
+      const match =
+        (subject.issueId != null && n.issueId === subject.issueId) ||
+        (subject.decisionId != null && n.decisionId === subject.decisionId);
+      if (!match) continue;
+      n.readAt = now;
+      await storage.notifications.update(n);
+      deltas.push(updated('notification', n));
+    }
+    if (deltas.length) await bus.publish(deltas);
+  }
+
   async remove(userId: string, notificationId: string): Promise<void> {
     const { storage, bus } = this.ctx;
     const notification = await storage.notifications.get(notificationId);

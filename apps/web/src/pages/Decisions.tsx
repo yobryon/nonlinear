@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Decision, DecisionStatus } from '@nonlinear/shared';
 import { api } from '../api.js';
@@ -218,6 +218,14 @@ function DecisionDetail({ decision }: { decision: Decision }) {
   const [commentBody, setCommentBody] = useState('');
   const [confirm, setConfirm] = useState<'rule' | 'carry' | null>(null);
   const waitingPicker = usePicker();
+
+  // Read-through: opening the decision clears its unread notifications.
+  useEffect(() => {
+    const notes = useStore.getState().notifications;
+    if (Object.values(notes).some((n) => !n.readAt && n.decisionId === decision.id)) {
+      void api.readThrough({ decisionId: decision.id }).catch(() => {});
+    }
+  }, [decision.id]);
 
   const team = teams[decision.teamId];
   const waitingOn = decision.waitingOnId ? users[decision.waitingOnId] : null;

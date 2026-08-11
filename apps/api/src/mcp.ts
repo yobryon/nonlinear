@@ -519,6 +519,9 @@ function buildServer(
         .filter((c) => c.issueId === issue.id)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       const users = await s.users.all();
+      // Read-through: fetching the issue with its comments clears its inbox items.
+      if (!scope.readOnly)
+        await domain.notifications.markReadForSubject(actor.id, { issueId: issue.id });
       return ok({
         ...(await serializeIssue(domain, issue)),
         comments: comments.map((c) => ({
@@ -1019,6 +1022,9 @@ function buildServer(
           .filter((c) => c.decisionId === decision.id)
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
         const users = await domain.ctx.storage.users.all();
+        // Read-through: reading the decision + its thread clears its inbox items.
+        if (!scope.readOnly)
+          await domain.notifications.markReadForSubject(actor.id, { decisionId: decision.id });
         return ok({
           ...(await serializeDecision(domain, decision)),
           comments: comments.map((c) => ({

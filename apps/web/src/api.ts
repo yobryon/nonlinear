@@ -220,6 +220,8 @@ export const api = {
   markNotification: (id: string, read: boolean) =>
     req<{ ok: true }>('PATCH', `/api/notifications/${id}`, { read }),
   markAllNotificationsRead: () => req<{ ok: true }>('POST', '/api/notifications/read-all'),
+  readThrough: (subject: { issueId?: string; decisionId?: string }) =>
+    req<{ ok: true }>('POST', '/api/notifications/read-through', subject),
   deleteNotification: (id: string) => req<{ ok: true }>('DELETE', `/api/notifications/${id}`),
 
   uploadAttachment: async (issueId: string, file: File): Promise<Attachment> => {

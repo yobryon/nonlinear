@@ -713,6 +713,14 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     await domain.notifications.markAllRead(req.user.id);
     return { ok: true };
   });
+  // Read-through: opening an issue/decision clears its unread notifications.
+  app.post('/api/notifications/read-through', authed, async (req) => {
+    await domain.notifications.markReadForSubject(
+      req.user.id,
+      req.body as { issueId?: string; decisionId?: string },
+    );
+    return { ok: true };
+  });
   app.patch('/api/notifications/:id', authed, async (req) => {
     await domain.notifications.markRead(
       req.user.id,

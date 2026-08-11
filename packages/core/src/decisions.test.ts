@@ -113,6 +113,21 @@ describe('decisions', () => {
     expect(notes).toHaveLength(1);
   });
 
+  it('read-through: viewing a decision clears its unread notifications', async () => {
+    const arch = await domain.auth.createAgent({ name: 'Arch' });
+    const d = await domain.decisions.create(arch.id, { teamId: team.id, title: 'Theirs' });
+    await domain.decisions.comment(admin.id, { decisionId: d.id, body: 'A plain answer.' });
+    const unreadFor = async (uid: string) =>
+      (await domain.ctx.storage.notifications.all()).filter(
+        (n) => n.userId === uid && n.decisionId === d.id && !n.readAt,
+      ).length;
+    expect(await unreadFor(arch.id)).toBe(1);
+
+    // arch "views" the decision → its notifications clear; others untouched.
+    await domain.notifications.markReadForSubject(arch.id, { decisionId: d.id });
+    expect(await unreadFor(arch.id)).toBe(0);
+  });
+
   it('is member-only (invisible to a non-member)', async () => {
     // A private team the admin creates; make it private BEFORE the outsider is
     // created, since new members auto-join every non-private team.

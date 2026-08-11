@@ -169,6 +169,14 @@ function IssueDetail({ issueId }: { issueId: string }) {
       alive = false;
     };
   }, [issueId, liveUpdatedAt]);
+  // Read-through: opening the issue clears its unread notifications. Guarded so
+  // we only call when there's actually something to clear (non-reactive read).
+  useEffect(() => {
+    const notes = useStore.getState().notifications;
+    if (Object.values(notes).some((n) => !n.readAt && n.issueId === issueId)) {
+      void api.readThrough({ issueId }).catch(() => {});
+    }
+  }, [issueId]);
 
   // Parent (IssueDetailPage) swaps to "not found" when the issue disappears;
   // this guard covers the same-render race. All hooks are above it.
