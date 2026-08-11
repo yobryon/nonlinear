@@ -967,6 +967,142 @@ function buildServer(
   );
 
   server.registerTool(
+    'sync_commits',
+    {
+      description:
+        'Reconcile a batch of git commits against issues in one call — the update rides the commit. Parses each message for `Closes/Fixes/Refs TEAM-N`: a reference adds a comment linking the commit; a close is PROPOSED (a comment, not a state change — "a state means someone judged it done"), returned in `proposedCloses` for you to confirm with update_issues. Idempotent per (issue, commit).',
+      inputSchema: {
+        commits: z
+          .array(
+            z.object({
+              sha: z.string(),
+              message: z.string(),
+              date: z.string().optional(),
+            }),
+          )
+          .describe('The commits to reconcile (sha, message, optional ISO date)'),
+        repoUrl: z
+          .string()
+          .optional()
+          .describe('Base repo URL for commit links, e.g. https://github.com/org/repo'),
+      },
+    },
+    async ({ commits, repoUrl }) => {
+      try {
+        guardWrite();
+        const commented: string[] = [];
+        const proposedCloses = new Set<string>();
+        const skipped: string[] = [];
+        const existing = await domain.ctx.storage.comments.all();
+
+        for (const commit of commits) {
+          const shortSha = commit.sha.slice(0, 10);
+          const subject = commit.message.split('\n')[0]!.trim();
+          const link = repoUrl
+            ? ` ([\`${shortSha}\`](${repoUrl.replace(/\/$/, '')}/commit/${commit.sha}))`
+            : ` \`${shortSha}\``;
+          // Identifiers preceded by a closing keyword vs. bare references.
+          const closeIds = new Set(
+            [
+              ...commit.message.matchAll(
+                /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#?([a-z]+-\d+)\b/gi,
+              ),
+            ].map((m) => m[1]!.toUpperCase()),
+          );
+          const allIds = new Set(
+            [...commit.message.matchAll(/#?([a-z]+-\d+)\b/gi)].map((m) => m[1]!.toUpperCase()),
+          );
+          for (const ident of allIds) {
+            let issue;
+            try {
+              issue = await resolveIssue(domain, ident, vis);
+            } catch {
+              continue; // unknown or not visible — skip quietly
+            }
+            if (!seesTeam(vis, issue.teamId)) continue; // member-write only
+            // Idempotent: skip if we've already noted this commit on this issue.
+            if (existing.some((c) => c.issueId === issue.id && c.body.includes(shortSha))) {
+              skipped.push(`${ident}@${shortSha}`);
+              continue;
+            }
+            const closing = closeIds.has(ident);
+            const body = closing
+              ? `Commit${link} proposes closing this — ${subject}`
+              : `Referenced in commit${link} — ${subject}`;
+            await domain.comments.create(actor.id, { issueId: issue.id, body });
+            commented.push(`${ident}@${shortSha}`);
+            if (closing) proposedCloses.add(ident);
+          }
+        }
+        return ok({
+          commented: commented.length,
+          proposedCloses: [...proposedCloses],
+          skipped: skipped.length,
+          hint: proposedCloses.size
+            ? 'Confirm the closes with update_issues (set state), or leave them if not actually done.'
+            : undefined,
+        });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    'reconcile_summary',
+    {
+      description:
+        'A board-truth summary for a team — a pull diagnostic, not an alarm: how many issues are open, how many are stale (untouched N+ days by any activity), and how many are in progress waiting on nobody (the board-review finding, mechanized). Drops into a status report.',
+      inputSchema: {
+        teamKey: z.string(),
+        staleDays: z.number().optional().describe('Staleness threshold in days (default 5)'),
+      },
+    },
+    async ({ teamKey, staleDays }) => {
+      try {
+        const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
+        const [issues, states, comments] = await Promise.all([
+          domain.ctx.storage.issues.byTeam(team.id),
+          domain.ctx.storage.workflowStates.all(),
+          domain.ctx.storage.comments.all(),
+        ]);
+        const catOf = (stateId: string) => states.find((s) => s.id === stateId)?.category;
+        const open = issues.filter((i) => {
+          if (i.archivedAt) return false;
+          const c = catOf(i.stateId);
+          return c !== 'completed' && c !== 'canceled';
+        });
+        const threshold = (staleDays ?? 5) * 86400000;
+        const now = Date.now();
+        const lastActivity = (issueId: string, updatedAt: string) => {
+          let latest = Date.parse(updatedAt);
+          for (const c of comments) {
+            if (c.issueId === issueId) latest = Math.max(latest, Date.parse(c.createdAt));
+          }
+          return latest;
+        };
+        const stale = open.filter((i) => now - lastActivity(i.id, i.updatedAt) > threshold);
+        const waitingNobody = open.filter((i) => !i.waitingOnId && catOf(i.stateId) === 'started');
+        const days = staleDays ?? 5;
+        return ok({
+          team: team.key,
+          open: open.length,
+          untouched: stale.length,
+          untouchedDays: days,
+          waitingNobody: waitingNobody.length,
+          summary: `${open.length} open · ${stale.length} untouched ${days}+ days · ${waitingNobody.length} in progress waiting on nobody`,
+          stalest: stale
+            .sort((a, b) => lastActivity(a.id, a.updatedAt) - lastActivity(b.id, b.updatedAt))
+            .slice(0, 10)
+            .map((i) => `${team.key}-${i.number}`),
+        });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
     'create_project',
     {
       description: 'Create a project spanning one or more teams (by key).',

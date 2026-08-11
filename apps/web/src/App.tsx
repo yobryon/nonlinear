@@ -28,6 +28,7 @@ import { CycleDetailPage, TeamCyclesPage } from './pages/Cycles.js';
 import { DecisionDetailPage, DecisionsPage } from './pages/Decisions.js';
 import { SettingsPage } from './pages/Settings.js';
 import { TriagePage } from './pages/Triage.js';
+import { ReconcilePage } from './pages/Reconcile.js';
 import { InitiativeDetailPage, InitiativesPage } from './pages/Initiatives.js';
 import { DocumentDetailPage, DocumentsPage } from './pages/Documents.js';
 import { DocsPage } from './pages/Docs.js';
@@ -155,6 +156,7 @@ function AppShell() {
             <Route path="/team/:teamKey/issues" element={<TeamIssuesPage />} />
             <Route path="/team/:teamKey/projects" element={<ProjectsPage />} />
             <Route path="/team/:teamKey/triage" element={<TriagePage />} />
+            <Route path="/team/:teamKey/reconcile" element={<ReconcilePage />} />
             <Route path="/team/:teamKey/decisions" element={<DecisionsPage />} />
             <Route path="/decision/:decisionId" element={<DecisionDetailPage />} />
             <Route path="/team/:teamKey/archive" element={<ArchivePage />} />

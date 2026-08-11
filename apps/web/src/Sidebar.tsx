@@ -476,6 +476,13 @@ export function Sidebar() {
                       <span className="grow">Insights</span>
                     </NavLink>
                     <NavLink
+                      to={`/team/${team.key}/reconcile`}
+                      className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+                    >
+                      <ClockIcon size={14} />
+                      <span className="grow">Reconcile</span>
+                    </NavLink>
+                    <NavLink
                       to={`/team/${team.key}/archive`}
                       className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
                     >
