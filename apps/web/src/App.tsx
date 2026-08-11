@@ -21,6 +21,7 @@ import { AuthPage } from './pages/Auth.js';
 import { TeamIssuesPage } from './pages/TeamIssues.js';
 import { IssueDetailPage } from './pages/IssueDetail.js';
 import { MyIssuesPage } from './pages/MyIssues.js';
+import { AwaitingPage } from './pages/Awaiting.js';
 import { InboxPage } from './pages/Inbox.js';
 import { ProjectDetailPage, ProjectsPage } from './pages/Projects.js';
 import { CycleDetailPage, TeamCyclesPage } from './pages/Cycles.js';
@@ -150,6 +151,7 @@ function AppShell() {
             <Route path="/" element={<DefaultRedirect />} />
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/my-issues" element={<MyIssuesPage />} />
+            <Route path="/awaiting" element={<AwaitingPage />} />
             <Route path="/team/:teamKey/issues" element={<TeamIssuesPage />} />
             <Route path="/team/:teamKey/projects" element={<ProjectsPage />} />
             <Route path="/team/:teamKey/triage" element={<TriagePage />} />

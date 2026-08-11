@@ -11,6 +11,7 @@ const TYPE_LABELS: Record<NotificationType, string> = {
   issue_mentioned: 'Mentions',
   issue_due_soon: 'Due soon',
   issue_reminder: 'Reminders',
+  issue_waiting_on: 'Waiting on you',
 };
 
 export function NotificationPrefs() {

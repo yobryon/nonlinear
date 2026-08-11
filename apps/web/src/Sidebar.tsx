@@ -7,6 +7,7 @@ import {
   BookIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ClockIcon,
   CycleIcon,
   DashboardIcon,
   PulseIcon,
@@ -136,6 +137,7 @@ export function Sidebar() {
   const notifications = useStore((s) => s.notifications);
   const favorites = useStore((s) => s.favorites);
   const issues = useStore((s) => s.issues);
+  const decisions = useStore((s) => s.decisions);
   const projects = useStore((s) => s.projects);
   const cycles = useStore((s) => s.cycles);
   const reset = useStore((s) => s.reset);
@@ -182,6 +184,9 @@ export function Sidebar() {
       triageCounts[issue.teamId] = (triageCounts[issue.teamId] ?? 0) + 1;
     }
   }
+  const awaitingCount =
+    Object.values(decisions).filter((d) => d.status === 'proposed').length +
+    Object.values(issues).filter((i) => i.waitingOnId === userId && !i.archivedAt).length;
   const myFavorites = Object.values(favorites)
     .filter((f) => f.userId === userId)
     .sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1));
@@ -239,6 +244,14 @@ export function Sidebar() {
         >
           <UserIcon size={15} />
           <span className="grow">My Issues</span>
+        </NavLink>
+        <NavLink
+          to="/awaiting"
+          className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}
+        >
+          <ClockIcon size={15} />
+          <span className="grow">Awaiting me</span>
+          {awaitingCount > 0 ? <span className="count">{awaitingCount}</span> : null}
         </NavLink>
 
         {myFavorites.length > 0 && (

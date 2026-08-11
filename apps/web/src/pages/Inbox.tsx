@@ -22,6 +22,8 @@ function describe(n: Notification, actorName: string): string {
       return 'Due soon:';
     case 'issue_reminder':
       return 'Reminder:';
+    case 'issue_waiting_on':
+      return `${actorName} is waiting on you for`;
     default:
       return 'Update on';
   }

@@ -345,7 +345,20 @@ export class IssueService {
     }
 
     if (input.subscriberIds !== undefined) issue.subscriberIds = [...new Set(input.subscriberIds)];
-    if (input.waitingOnId !== undefined) issue.waitingOnId = input.waitingOnId;
+    if (input.waitingOnId !== undefined && input.waitingOnId !== issue.waitingOnId) {
+      const target = input.waitingOnId;
+      issue.waitingOnId = target;
+      // Queue-add signal: tell the newly-awaited person (unless it's the actor).
+      if (target && target !== actorId) {
+        const note = await pushNotification(this.ctx, {
+          userId: target,
+          actorId,
+          type: 'issue_waiting_on',
+          issueId,
+        });
+        if (note) deltas.push(note);
+      }
+    }
     if (input.sortOrder !== undefined) issue.sortOrder = input.sortOrder;
     if (input.archived !== undefined) issue.archivedAt = input.archived ? now : null;
 

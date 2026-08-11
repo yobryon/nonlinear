@@ -48,6 +48,7 @@ export const NOTIFICATION_TYPES = [
   'issue_mentioned',
   'issue_due_soon',
   'issue_reminder',
+  'issue_waiting_on',
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
