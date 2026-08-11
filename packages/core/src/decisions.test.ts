@@ -82,6 +82,24 @@ describe('decisions', () => {
     expect(notes).toHaveLength(1);
   });
 
+  it('a comment on a decision notifies its author even without an @mention', async () => {
+    // The exact NON-56 path: arch proposes, the PO answers in a plain comment.
+    const arch = await domain.auth.createAgent({ name: 'Arch' });
+    const d = await domain.decisions.create(arch.id, {
+      teamId: team.id,
+      title: 'Their proposal',
+      waitingOnId: admin.id,
+    });
+    await domain.decisions.comment(admin.id, {
+      decisionId: d.id,
+      body: 'What about the narrowing? (no @mention)',
+    });
+    const notes = (await domain.ctx.storage.notifications.all()).filter(
+      (n) => n.userId === arch.id && n.decisionId === d.id && n.type === 'issue_commented',
+    );
+    expect(notes).toHaveLength(1);
+  });
+
   it('@mentions in a decision thread notify the mentioned user', async () => {
     const arch = await domain.auth.createAgent({ name: 'Arch' });
     const d = await domain.decisions.create(admin.id, { teamId: team.id, title: 'Discuss' });

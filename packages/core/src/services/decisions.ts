@@ -118,7 +118,8 @@ export class DecisionService {
     await storage.decisions.update(decision);
     const deltas: DeltaInput[] = [updated('decision', decision)];
     if (note && note.trim()) {
-      deltas.push(...(await this.buildComment(actorId, decision.id, note)));
+      // notifyRuled covers the participants; keep only the note's @mentions.
+      deltas.push(...(await this.buildComment(actorId, decision.id, note, { fanout: false })));
     }
     // Tell everyone party to the decision that it's decided — it's back in the
     // proposer's court. Author + anyone who discussed it + whoever it awaited.
@@ -237,6 +238,7 @@ export class DecisionService {
     actorId: string,
     decisionId: string,
     body: string,
+    opts: { fanout?: boolean } = {},
   ): Promise<DeltaInput[]> {
     const { storage } = this.ctx;
     const decision = await storage.decisions.get(decisionId);
@@ -244,6 +246,10 @@ export class DecisionService {
     const trimmed = body.trim();
     if (!trimmed) throw new DomainError('empty_comment', 'Comment cannot be empty');
     const now = nowIso();
+    // Prior commenters — the decision's participants — captured before insert.
+    const priorCommenters = (await storage.decisionComments.all())
+      .filter((c) => c.decisionId === decisionId)
+      .map((c) => c.userId);
     const comment: DecisionComment = {
       id: newId(),
       decisionId,
@@ -262,7 +268,8 @@ export class DecisionService {
       deltas.push(updated('decision', decision));
     }
     // @mentions in the thread notify — a precise signal, to the decision.
-    for (const userId of await mentionedUserIds(this.ctx, trimmed)) {
+    const mentioned = new Set(await mentionedUserIds(this.ctx, trimmed));
+    for (const userId of mentioned) {
       const note = await pushNotification(this.ctx, {
         userId,
         actorId,
@@ -270,6 +277,25 @@ export class DecisionService {
         decisionId,
       });
       if (note) deltas.push(note);
+    }
+    // A comment reaches the decision's participants (author, prior commenters,
+    // whoever it's waiting on) — the analogue of an issue's subscribers, so the
+    // PO answering a proposal reaches the proposer even without an @mention.
+    // Skipped when a ruling produced this comment (notifyRuled covers those).
+    if (opts.fanout !== false) {
+      const participants = new Set<string>([decision.authorId, ...priorCommenters]);
+      if (decision.waitingOnId) participants.add(decision.waitingOnId);
+      participants.delete(actorId);
+      for (const userId of participants) {
+        if (mentioned.has(userId)) continue; // already got the sharper signal
+        const note = await pushNotification(this.ctx, {
+          userId,
+          actorId,
+          type: 'issue_commented',
+          decisionId,
+        });
+        if (note) deltas.push(note);
+      }
     }
     return deltas;
   }
