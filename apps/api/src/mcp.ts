@@ -280,6 +280,7 @@ async function serializeDecision(
     author: name(decision.authorId),
     ruledBy: name(decision.ruledById),
     ruledAt: decision.ruledAt,
+    waitingOn: name(decision.waitingOnId),
     supersedes: decision.supersedesId ? decIdent(decision.supersedesId) : null,
     supersededBy: supersededBy ? `${key}-D${supersededBy.number}` : null,
     governs: decision.governedIssueIds.map((id) => {
@@ -579,6 +580,46 @@ function buildServer(
   );
 
   server.registerTool(
+    'awaiting_me',
+    {
+      description:
+        'What is blocked on YOU — the pull surface a decider or teammate opens: decisions to rule (proposed and routed to you, or proposals not yet routed to anyone) and issues explicitly waiting_on you. One call to see everything others expect from you.',
+      inputSchema: {},
+    },
+    async () => {
+      const [allDecisions, allIssues, teams] = await Promise.all([
+        s.decisions.all(),
+        s.issues.all(),
+        s.teams.all(),
+      ]);
+      const keyOf = (teamId: string) => teams.find((t) => t.id === teamId)?.key ?? '?';
+      const decisionsToRule = allDecisions
+        .filter(
+          (d) =>
+            d.status === 'proposed' &&
+            seesTeam(vis, d.teamId) &&
+            (d.waitingOnId === actor.id || d.waitingOnId == null),
+        )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        .map((d) => ({
+          identifier: `${keyOf(d.teamId)}-D${d.number}`,
+          title: d.title,
+          routedToYou: d.waitingOnId === actor.id,
+          url: `/decision/${d.id}`,
+        }));
+      const waitingOnMe = allIssues
+        .filter((i) => i.waitingOnId === actor.id && !i.archivedAt && canReadIssue(vis, i))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      return ok({
+        decisions_to_rule: decisionsToRule,
+        waiting_on_me: await Promise.all(
+          waitingOnMe.map((i) => serializeIssue(domain, i, { summary: true })),
+        ),
+      });
+    },
+  );
+
+  server.registerTool(
     'create_issue',
     {
       description:
@@ -823,9 +864,13 @@ function buildServer(
           .string()
           .optional()
           .describe('A decision identifier this one replaces (e.g. VAN-D5)'),
+        waiting_on: z
+          .string()
+          .optional()
+          .describe('Route the proposal to a specific decider (email/@handle/name)'),
       },
     },
-    async ({ teamKey, title, body, governedIssues, supersedes }) => {
+    async ({ teamKey, title, body, governedIssues, supersedes, waiting_on }) => {
       try {
         guardWrite();
         const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
@@ -841,6 +886,7 @@ function buildServer(
           body,
           governedIssueIds,
           supersedesId,
+          waitingOnId: await resolveAssignee(domain, waiting_on),
         });
         return ok(await serializeDecision(domain, decision));
       } catch (err) {

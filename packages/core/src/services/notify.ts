@@ -9,7 +9,8 @@ export async function pushNotification(
     userId: string;
     actorId: string | null;
     type: NotificationType;
-    issueId: string;
+    issueId?: string | null;
+    decisionId?: string | null;
     commentId?: string | null;
   },
 ): Promise<DeltaInput | null> {
@@ -21,7 +22,8 @@ export async function pushNotification(
     userId: params.userId,
     actorId: params.actorId,
     type: params.type,
-    issueId: params.issueId,
+    issueId: params.issueId ?? null,
+    decisionId: params.decisionId ?? null,
     commentId: params.commentId ?? null,
     createdAt: nowIso(),
     readAt: null,

@@ -225,6 +225,9 @@ export interface Decision {
   authorId: string;
   ruledById: string | null;
   ruledAt: string | null;
+  /** Who this proposal is routed to for a ruling; null = any member may rule.
+   *  Cleared when it's ruled. Feeds each decider's "Awaiting me". */
+  waitingOnId: string | null;
   /** First-class supersession edge: the decision this one replaces (which is
    *  flipped to `superseded`). Null for an original decision. */
   supersedesId: string | null;
@@ -328,7 +331,9 @@ export interface Notification {
   userId: string;
   actorId: string | null;
   type: NotificationType;
-  issueId: string;
+  /** The subject — exactly one of these is set. */
+  issueId: string | null;
+  decisionId: string | null;
   commentId: string | null;
   createdAt: string;
   readAt: string | null;

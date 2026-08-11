@@ -51,6 +51,39 @@ describe('decisions', () => {
     expect((await domain.ctx.storage.decisions.get(old.id))!.status).toBe('superseded');
   });
 
+  it('routes a proposal to a decider, notifies them, and clears on ruling', async () => {
+    const decider = await domain.auth.createAgent({ name: 'Decider' });
+    const d = await domain.decisions.create(admin.id, {
+      teamId: team.id,
+      title: 'Route me',
+      waitingOnId: decider.id,
+    });
+    expect(d.waitingOnId).toBe(decider.id);
+    // The routed decider got a notification about the decision (not an issue).
+    const notes = (await domain.ctx.storage.notifications.all()).filter(
+      (n) => n.userId === decider.id && n.decisionId === d.id,
+    );
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.issueId).toBeNull();
+
+    // Ruling clears the wait.
+    const ruled = await domain.decisions.rule(decider.id, d.id);
+    expect(ruled.waitingOnId).toBeNull();
+  });
+
+  it('@mentions in a decision thread notify the mentioned user', async () => {
+    const arch = await domain.auth.createAgent({ name: 'Arch' });
+    const d = await domain.decisions.create(admin.id, { teamId: team.id, title: 'Discuss' });
+    await domain.decisions.comment(admin.id, {
+      decisionId: d.id,
+      body: `@${arch.displayName} what's your call?`,
+    });
+    const notes = (await domain.ctx.storage.notifications.all()).filter(
+      (n) => n.userId === arch.id && n.decisionId === d.id && n.type === 'issue_mentioned',
+    );
+    expect(notes).toHaveLength(1);
+  });
+
   it('is member-only (invisible to a non-member)', async () => {
     // A private team the admin creates; make it private BEFORE the outsider is
     // created, since new members auto-join every non-private team.

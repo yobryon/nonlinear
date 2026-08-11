@@ -6,6 +6,7 @@ import { relativeTime, useStore } from '../store.js';
 import { anchorFromEvent, Avatar, Modal, Popover, toastError, type Anchor } from '../ui.js';
 import { Markdown } from '../markdown.js';
 import { DotsIcon, PlusIcon, TrashIcon } from '../icons.js';
+import { AssigneePicker, usePicker } from '../pickers.js';
 import { OriginCrumb, OriginProvider, originState } from '../nav.js';
 
 const STATUS_META: Record<DecisionStatus, { label: string; color: string }> = {
@@ -215,8 +216,10 @@ function DecisionDetail({ decision }: { decision: Decision }) {
   const [menuAnchor, setMenuAnchor] = useState<Anchor | null>(null);
   const [supAnchor, setSupAnchor] = useState<Anchor | null>(null);
   const [commentBody, setCommentBody] = useState('');
+  const waitingPicker = usePicker();
 
   const team = teams[decision.teamId];
+  const waitingOn = decision.waitingOnId ? users[decision.waitingOnId] : null;
   const kid = team ? `${team.key}-D${decision.number}` : decision.id;
   const author = users[decision.authorId];
   const ruledBy = decision.ruledById ? users[decision.ruledById] : null;
@@ -459,6 +462,24 @@ function DecisionDetail({ decision }: { decision: Decision }) {
               <span className="muted">Not yet ruled</span>
             )}
           </div>
+          {decision.status === 'proposed' && (
+            <div className="prop-row">
+              <span className="prop-label">Waiting on</span>
+              <button
+                className="prop-value"
+                onClick={(e) => waitingPicker.open(anchorFromEvent(e))}
+              >
+                {waitingOn ? (
+                  <>
+                    <Avatar user={waitingOn} size={16} />
+                    {waitingOn.name}
+                  </>
+                ) : (
+                  <span className="muted">Anyone</span>
+                )}
+              </button>
+            </div>
+          )}
 
           <div className="side-heading">Supersession</div>
           <div style={{ fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.8 }}>
@@ -516,6 +537,14 @@ function DecisionDetail({ decision }: { decision: Decision }) {
         </div>
       </div>
 
+      {waitingPicker.anchor && (
+        <AssigneePicker
+          anchor={waitingPicker.anchor}
+          onClose={waitingPicker.close}
+          currentId={decision.waitingOnId}
+          onPick={(id) => void patch(() => api.updateDecision(decision.id, { waitingOnId: id }))}
+        />
+      )}
       {supAnchor && (
         <Popover anchor={supAnchor} onClose={() => setSupAnchor(null)} width={260}>
           <div className="menu-heading">This decision supersedes…</div>

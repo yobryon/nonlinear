@@ -16,6 +16,7 @@ import {
 } from '../domain.js';
 import { newId } from '../util/ids.js';
 import { nowIso } from '../util/time.js';
+import { mentionedUserIds, pushNotification } from './notify.js';
 
 /**
  * First-class decision records. A decision is a judgment, not a work item: its
@@ -45,6 +46,7 @@ export class DecisionService {
       authorId: actorId,
       ruledById: null,
       ruledAt: null,
+      waitingOnId: input.waitingOnId ?? null,
       supersedesId: null,
       governedIssueIds: [...new Set(input.governedIssueIds ?? [])],
       createdAt: now,
@@ -58,6 +60,16 @@ export class DecisionService {
     }
     await storage.decisions.insert(decision);
     deltas.unshift(created('decision', decision));
+    // Routed to a decider → tell them it awaits their ruling.
+    if (decision.waitingOnId && decision.waitingOnId !== actorId) {
+      const note = await pushNotification(this.ctx, {
+        userId: decision.waitingOnId,
+        actorId,
+        type: 'issue_waiting_on',
+        decisionId: decision.id,
+      });
+      if (note) deltas.push(note);
+    }
     await bus.publish(deltas);
     return decision;
   }
@@ -71,9 +83,23 @@ export class DecisionService {
     if (input.governedIssueIds !== undefined) {
       decision.governedIssueIds = [...new Set(input.governedIssueIds)];
     }
+    const deltas: DeltaInput[] = [];
+    if (input.waitingOnId !== undefined && input.waitingOnId !== decision.waitingOnId) {
+      decision.waitingOnId = input.waitingOnId;
+      if (input.waitingOnId && input.waitingOnId !== actorId) {
+        const note = await pushNotification(this.ctx, {
+          userId: input.waitingOnId,
+          actorId,
+          type: 'issue_waiting_on',
+          decisionId: decision.id,
+        });
+        if (note) deltas.push(note);
+      }
+    }
     decision.updatedAt = nowIso();
     await storage.decisions.update(decision);
-    await bus.publish([updated('decision', decision)]);
+    deltas.unshift(updated('decision', decision));
+    await bus.publish(deltas);
     return decision;
   }
 
@@ -86,6 +112,7 @@ export class DecisionService {
     decision.status = 'ruled';
     decision.ruledById = actorId;
     decision.ruledAt = now;
+    decision.waitingOnId = null; // the ruling is the action it was waiting for
     decision.updatedAt = now;
     await storage.decisions.update(decision);
     const deltas: DeltaInput[] = [updated('decision', decision)];
@@ -170,7 +197,7 @@ export class DecisionService {
   // ---- comments (where the PO answers a proposal) ----
 
   async comment(actorId: string, input: CreateDecisionCommentInput): Promise<DecisionComment> {
-    const { storage, bus } = this.ctx;
+    const { bus } = this.ctx;
     const deltas = await this.buildComment(actorId, input.decisionId, input.body);
     await bus.publish(deltas);
     return (deltas[0] as { data: DecisionComment }).data;
@@ -196,7 +223,25 @@ export class DecisionService {
       editedAt: null,
     };
     await storage.decisionComments.insert(comment);
-    return [created('decisionComment', comment)];
+    const deltas: DeltaInput[] = [created('decisionComment', comment)];
+    // Answering a proposal you were awaited on clears the wait.
+    if (decision.waitingOnId === actorId) {
+      decision.waitingOnId = null;
+      decision.updatedAt = now;
+      await storage.decisions.update(decision);
+      deltas.push(updated('decision', decision));
+    }
+    // @mentions in the thread notify — a precise signal, to the decision.
+    for (const userId of await mentionedUserIds(this.ctx, trimmed)) {
+      const note = await pushNotification(this.ctx, {
+        userId,
+        actorId,
+        type: 'issue_mentioned',
+        decisionId,
+      });
+      if (note) deltas.push(note);
+    }
+    return deltas;
   }
 
   async updateComment(actorId: string, commentId: string, body: string): Promise<DecisionComment> {

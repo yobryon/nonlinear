@@ -185,7 +185,9 @@ export function Sidebar() {
     }
   }
   const awaitingCount =
-    Object.values(decisions).filter((d) => d.status === 'proposed').length +
+    Object.values(decisions).filter(
+      (d) => d.status === 'proposed' && (d.waitingOnId === userId || d.waitingOnId == null),
+    ).length +
     Object.values(issues).filter((i) => i.waitingOnId === userId && !i.archivedAt).length;
   const myFavorites = Object.values(favorites)
     .filter((f) => f.userId === userId)

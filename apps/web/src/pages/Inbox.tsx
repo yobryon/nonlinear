@@ -32,6 +32,7 @@ function describe(n: Notification, actorName: string): string {
 export function InboxPage() {
   const notifications = useStore((s) => s.notifications);
   const issues = useStore((s) => s.issues);
+  const decisions = useStore((s) => s.decisions);
   const teams = useStore((s) => s.teams);
   const users = useStore((s) => s.users);
   const putEntity = useStore((s) => s.putEntity);
@@ -127,15 +128,27 @@ export function InboxPage() {
           </div>
         )}
         {rows.map((n) => {
-          const issue = issues[n.issueId];
+          const issue = n.issueId ? issues[n.issueId] : null;
+          const decision = n.decisionId ? decisions[n.decisionId] : null;
           const actor = n.actorId ? users[n.actorId] : null;
+          const target = decision
+            ? {
+                to: `/decision/${decision.id}`,
+                label: `${teams[decision.teamId]?.key}-D${decision.number} ${decision.title}`,
+              }
+            : issue
+              ? {
+                  to: `/issue/${issueKey(issue, teams)}`,
+                  label: `${issueKey(issue, teams)} ${issue.title}`,
+                }
+              : null;
           return (
             <div
               key={n.id}
               className={`inbox-row ${n.readAt ? 'read' : 'unread'}`}
               onClick={() => {
                 if (!n.readAt) markRead(n, true);
-                if (issue) navigate(`/issue/${issueKey(issue, teams)}`);
+                if (target) navigate(target.to);
               }}
             >
               <span className="unread-dot" />
@@ -143,9 +156,7 @@ export function InboxPage() {
               <div className="msg">
                 <div>
                   {describe(n, actor?.name ?? 'Someone')}{' '}
-                  <strong>
-                    {issue ? `${issueKey(issue, teams)} ${issue.title}` : 'a deleted issue'}
-                  </strong>
+                  <strong>{target ? target.label : 'a deleted item'}</strong>
                 </div>
                 <div className="dim" style={{ fontSize: 11.5 }}>
                   {relativeTime(n.createdAt)} ago

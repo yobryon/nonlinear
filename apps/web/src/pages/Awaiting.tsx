@@ -19,14 +19,16 @@ export function AwaitingPage() {
   const userId = useStore((s) => s.userId);
   const navigate = useNavigate();
 
-  // Decisions are member-only, so the store already holds only my teams' — every
-  // proposed one is a ruling awaiting a decider.
+  // Decisions are member-only, so the store already holds only my teams'.
+  // A proposal awaits me if it's routed to me, or routed to no one yet.
   const proposals = useMemo(
     () =>
       Object.values(decisions)
-        .filter((d) => d.status === 'proposed')
+        .filter(
+          (d) => d.status === 'proposed' && (d.waitingOnId === userId || d.waitingOnId == null),
+        )
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-    [decisions],
+    [decisions, userId],
   );
 
   const waitingIssues = useMemo(
@@ -86,6 +88,11 @@ export function AwaitingPage() {
                   <span className="title" style={{ fontWeight: 500 }}>
                     {d.title}
                   </span>
+                  {d.waitingOnId === userId && (
+                    <span className="status-chip" style={{ color: 'var(--accent-text)' }}>
+                      routed to you
+                    </span>
+                  )}
                   <span className="dim">proposed {relativeTime(d.createdAt)} ago</span>
                   <button
                     className="btn primary sm"

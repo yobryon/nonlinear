@@ -131,12 +131,15 @@ export interface CreateDecisionInput {
   governedIssueIds?: string[];
   /** If set, this decision supersedes another (which is flipped to superseded). */
   supersedesId?: string | null;
+  /** Route the proposal to a specific decider. */
+  waitingOnId?: string | null;
 }
 
 export interface UpdateDecisionInput {
   title?: string;
   body?: string;
   governedIssueIds?: string[];
+  waitingOnId?: string | null;
 }
 
 export interface CreateDecisionCommentInput {

@@ -54,6 +54,8 @@ export function createDigestSender(domain: Domain, smtpUrl: string, from: string
       const teamById = new Map(teams.map((t) => [t.id, t]));
       const lines: string[] = [];
       for (const n of unread) {
+        // The email digest covers issue notifications; decision ones live in-app.
+        if (!n.issueId) continue;
         const issue = await storage.issues.get(n.issueId);
         if (!issue) continue;
         const team = teamById.get(issue.teamId);
