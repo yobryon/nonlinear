@@ -156,39 +156,57 @@ Bearer per request. Config block:
 For Claude Code specifically: `claude mcp add --transport http nonlinear http://localhost:8080/mcp
 --header "Authorization: Bearer nl_your_agent_token"`.
 
-### The 17 tools
+### The 28 tools
 
 Names are **resolved for you** — teams by key (`AUGRID`), states/labels by name (`In Progress`,
 `type: bug`), assignees by email / `@handle` / display name. You never juggle UUIDs through MCP.
 
-**Read (10):**
+**Read (14):**
 
 | Tool | What it does |
 |---|---|
-| `whoami` | Authenticated user + workspace + your visible `teams` + `token` scope. Verify `isAgent`. |
+| `whoami` | Authenticated user + workspace + your visible `teams` + `token` scope. Verify `isAgent`; shows your `persona` when an `X-Agent-ID` header is active. |
 | `list_teams` | All teams with keys. |
 | `list_users` | Members + agents (name, handle, isAgent). |
 | `list_projects` | Projects (id, name, status). |
 | `list_workflow_states` | A team's states in order — `{ teamKey }`. |
 | `list_labels` | Labels, optionally `{ teamKey }`. |
-| `search_issues` | Text + filters `{ query?, teamKey?, assignee?, state?, priority?, limit? }`. Returns a lean summary (no description — `get_issue` for the full body). |
+| `search_issues` | Text + filters `{ query?, teamKey?, assignee?, state?, priority?, limit? }`. Lean summary (no description — `get_issue` for the body). |
+| `find_issue` | **Fuzzy** resolve a description → ranked issues `{ query, limit? }`, so you never leave the thread to look up a number. |
 | `get_issue` | One issue **with its comments** — `{ identifier }` e.g. `AUGRID-42`. |
-| `list_my_issues` | Issues assigned to *your* token's user (lean summary). Your work queue. |
-| `my_work` | No params. `{ assigned: [...], mentioned: [...] }` — issues assigned to you **and** issues where a comment @mentions your handle (lean summaries; `get_issue` for detail). The pull-based "what needs my attention". |
+| `list_my_issues` | Issues assigned to *your* identity (lean summary). |
+| `my_work` | No params. `{ assigned, mentioned, filed, waiting_on_me }` — the pull-based "what needs my attention": assigned to you, @mentions you, you filed, and blocked pending your move. |
+| `reconcile_summary` | `{ teamKey, staleDays? }` → board truth: open count, how many untouched N+ days, how many in progress **waiting on nobody**. A status-report line. |
+| `list_decisions` | A team's decisions `{ teamKey, status? }`. |
+| `get_decision` | One decision **with its discussion** — `{ identifier }` e.g. `AUGRID-D12`. |
 
-**Write (7):**
+**Write (14):**
 
 | Tool | Params |
 |---|---|
 | `create_issue` | `{ teamKey, title, description?, priority?, assignee?, state?, labels?, project? }` |
-| `update_issue` | `{ identifier, title?, description?, state?, priority?, assignee?, project? }` |
+| `update_issue` | `{ identifier, title?, description?, state?, priority?, assignee?, waiting_on?, project? }` |
+| `comment_and_state` | `{ identifier, body?, state?, waiting_on? }` — the commonest update, one motion |
+| `update_issues` | `{ updates: [{ identifier, state?, assignee?, waiting_on? }] }` — batch (the reconcile pass as one call) |
 | `add_comment` | `{ identifier, body }` — markdown + `@handle` mentions |
+| `sync_commits` | `{ commits: [{ sha, message, date? }], repoUrl? }` — reconcile git commits: `Refs` → comment, `Closes` → **propose**-close, returned to confirm with `update_issues` |
+| `create_decision` | `{ teamKey, title, body?, governedIssues?, supersedes? }` — a judgment, starts `proposed` |
+| `rule_decision` | `{ identifier, note? }` — decide it (the note lands as a comment) |
+| `supersede_decision` | `{ identifier, supersedes }` — record that one decision replaces another (a first-class edge) |
+| `comment_decision` | `{ identifier, body }` — answer a proposal |
 | `create_project` | `{ name, description?, teamKeys[] }` |
 | `create_label` | `{ teamKey, name, color? }` — shape your own team's labels |
 | `create_workflow_state` | `{ teamKey, name, category, color? }` — category ∈ triage/backlog/unstarted/started/completed/canceled |
 | `create_issue_template` | `{ teamKey, name, description?, titlePrefix?, priority?, labels? }` |
 
-The last three configure **your own team's** workflow — they require you be a **member** of
+**Decisions are judgments, not work items** — record a tradeoff/ruling as a decision
+(`AUGRID-D#`, a fixed `proposed → ruled → superseded|carried` lifecycle) instead of forcing it
+into an issue. Member-only, and exportable as a greppable `decisions.md` (`GET
+/api/teams/:id/decisions.md`). **`waiting_on`** names who blocks an issue; **`sync_commits`** lets
+the update ride the commit; **`reconcile_summary`** is your pull-diagnostic for a status report.
+
+The team-config tools (`create_label`/`create_workflow_state`/`create_issue_template`/decisions/
+`create_project`) require you be a **member** of
 `teamKey` (not just intake access), so you can set up your team yourself: a Triage state for
 consumer-filed issues, `area:`/`type:` labels for routing, a bug-report template. `create_project`
 also requires membership.

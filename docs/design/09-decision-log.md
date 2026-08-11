@@ -966,6 +966,47 @@ owner's multi-session bus workflow (team `Vantage`, agent `vantage-agent`).
 
 ---
 
+## 23. The Plumb slate — decisions first-class, status that rides the motion
+
+**Decision.** Ship the seven-item functionality slate from Plumb ([NON-53](/issue/NON-53)),
+designed in `docs/design/10-plumb-slate.md`, to make the tracker a home for *judgment*, not just
+tickets: (1) a first-class `Decision` entity beside `Issue` — per-team `TEAM-D#`, body-as-argument,
+fixed `proposed → ruled → superseded|carried` lifecycle, supersession as an edge, member-only, a
+one-way `decisions.md` export; (2) an "Awaiting me" queue over proposed decisions + issues
+`waiting_on` you; (3) a `waiting_on` orthogonal field (the "waiting on nobody" board-review finding
+as a filter); (4) `sync_commits` propose-close ingestion; (6) a `reconcile_summary` + pull view;
+(7) ergonomic MCP tools (`find_issue`, `comment_and_state`, `update_issues`); (8) cross-team links
+with a narrow read-only projection. (Item 5, per-agent identities, shipped earlier as personas,
+entry 22.)
+
+**Context.** Field data from two projects run against nonlinear: a judgment-heavy project's tracker
+held <1% of its recorded thought while its decisions log carried the gravity. The fix is
+product-side — move the ledger onto the path the work already travels.
+
+**Alternatives rejected** (the load-bearing ones; full table in the slate doc). *Decision as a
+labeled issue* — a judgment has no assignee/completion; forcing it into work-item states is the
+miscategorization the field work named, so it got its own entity and lifecycle. *Polymorphic
+comments* for decision threads — invasive; used a dedicated `decisionComment` like the existing
+`docComments` precedent. *`waiting_on` as a workflow state* — it's orthogonal (any state can be
+waiting), so a field. *Auto-close on a commit trailer* — "a state means someone judged it done";
+`sync_commits` proposes and a human/agent confirms via `update_issues`. *Push staleness alarms* —
+"a signal dominated by false positives is acted on wrongly the one time it's believed"; reconcile
+is pull-only. *Full cross-team read-through* — would reopen the isolation model (entries 19–22), so
+the projection is exactly `{identifier, title, state, team}` and no wider, and gated by a new rule
+that **you may only link issues you can read** (which also closed a pre-existing ungated-relations
+hole).
+
+**Consequences.** New synced models `decision` + `decisionComment` (jsonb, migration 010,
+`decision_counters`), threaded through the standard path (SyncModelMap, both storages, service,
+bootstrap + member-only `filterPayload`/hub gating, web store + pages + sidebar). New MCP surface
+grew 17 → 28 tools; guide 02 updated. A new `issue_waiting_on` notification (queue-add signal, not a
+nag). Everything shipped behind the usual bar — typecheck, tests (core 114, api 34), live
+verification over MCP + browser, per-item commits. Open, deliberately unbuilt: decision-comment
+@mention notifications (decisions are member-only; the PO queue is the surface), a provider opt-in
+flag on the cross-team projection (the read-both-to-link rule is the consent proxy for now).
+
+---
+
 ## How to extend this log
 
 When you make a decision that would be expensive to reverse — a new storage
