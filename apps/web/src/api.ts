@@ -68,6 +68,19 @@ import type {
   WorkflowState,
 } from '@nonlinear/shared';
 
+/** Read-only view of a linked issue on another team the viewer can't fully see. */
+export interface LinkedProjection {
+  relationId: string;
+  type: IssueRelation['type'];
+  outgoing: boolean;
+  identifier: string;
+  title: string;
+  state: string | null;
+  teamKey: string | null;
+  teamName: string | null;
+  updatedAt: string;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -196,6 +209,8 @@ export const api = {
   createRelation: (input: CreateRelationInput) =>
     req<IssueRelation>('POST', '/api/relations', input),
   deleteRelation: (id: string) => req<{ ok: true }>('DELETE', `/api/relations/${id}`),
+  linkedProjections: (issueId: string) =>
+    req<{ projections: LinkedProjection[] }>('GET', `/api/issues/${issueId}/linked`),
 
   addFavorite: (input: CreateFavoriteInput) => req<Favorite>('POST', '/api/favorites', input),
   removeFavorite: (id: string) => req<{ ok: true }>('DELETE', `/api/favorites/${id}`),

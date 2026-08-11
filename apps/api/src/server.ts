@@ -623,11 +623,61 @@ export async function buildServer(domain: Domain, config: Config): Promise<Fasti
     return { ok: true };
   });
 
-  // ---- relations ----
-  app.post('/api/relations', authed, async (req) => domain.relations.create(req.body as never));
+  // ---- relations (can cross the team boundary; see the linked projection below) ----
+  app.post('/api/relations', authed, async (req) => {
+    // You may only link issues you can read — this both closes an isolation hole
+    // and is what makes a cross-team link's minimal projection consented: the
+    // link is created by someone who could see both sides.
+    const body = req.body as { issueId: string; relatedIssueId: string };
+    const vis = await visFor(req);
+    const [a, b] = await Promise.all([
+      domain.ctx.storage.issues.get(body.issueId),
+      domain.ctx.storage.issues.get(body.relatedIssueId),
+    ]);
+    if (!a || !canReadIssue(vis, a) || !b || !canReadIssue(vis, b)) {
+      throw new DomainError('forbidden', 'You can only link issues you can read', 403);
+    }
+    return domain.relations.create(req.body as never);
+  });
   app.delete('/api/relations/:id', authed, async (req) => {
     await domain.relations.remove((req.params as { id: string }).id);
     return { ok: true };
+  });
+  // Read-only projection of issues linked to :id that the viewer can't otherwise
+  // see — identifier, title, state, team only. Never the full provider issue.
+  app.get('/api/issues/:id/linked', authed, async (req) => {
+    const id = (req.params as { id: string }).id;
+    const s = domain.ctx.storage;
+    const issue = await s.issues.get(id);
+    const vis = await visFor(req);
+    if (!issue || !canReadIssue(vis, issue)) {
+      throw new DomainError('not_found', 'Issue not found', 404);
+    }
+    const relations = (await s.issueRelations.all()).filter(
+      (r) => r.issueId === id || r.relatedIssueId === id,
+    );
+    const projections = [];
+    for (const r of relations) {
+      const otherId = r.issueId === id ? r.relatedIssueId : r.issueId;
+      const other = await s.issues.get(otherId);
+      if (!other || canReadIssue(vis, other)) continue; // client already has readable ones
+      const [team, state] = await Promise.all([
+        s.teams.get(other.teamId),
+        s.workflowStates.get(other.stateId),
+      ]);
+      projections.push({
+        relationId: r.id,
+        type: r.type,
+        outgoing: r.issueId === id,
+        identifier: team ? `${team.key}-${other.number}` : otherId,
+        title: other.title,
+        state: state?.name ?? null,
+        teamKey: team?.key ?? null,
+        teamName: team?.name ?? null,
+        updatedAt: other.updatedAt,
+      });
+    }
+    return { projections };
   });
 
   // ---- favorites ----

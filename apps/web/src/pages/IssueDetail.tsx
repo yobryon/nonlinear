@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { IssueActivity, IssueRelationType } from '@nonlinear/shared';
 import { PRIORITY_LABELS } from '@nonlinear/shared';
-import { api } from '../api.js';
+import { api, type LinkedProjection } from '../api.js';
 import { formatDate, issueKey, relativeTime, useStore } from '../store.js';
 import {
   anchorFromEvent,
@@ -101,6 +101,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
   const [descDraft, setDescDraft] = useState(maybeIssue?.description ?? '');
   const [titleDraft, setTitleDraft] = useState(maybeIssue?.title ?? '');
   const [activities, setActivities] = useState<IssueActivity[]>([]);
+  const [projections, setProjections] = useState<LinkedProjection[]>([]);
   const [menuAnchor, setMenuAnchor] = useState<Anchor | null>(null);
   const [reminderAnchor, setReminderAnchor] = useState<Anchor | null>(null);
   const [relAnchor, setRelAnchor] = useState<Anchor | null>(null);
@@ -149,6 +150,19 @@ function IssueDetail({ issueId }: { issueId: string }) {
       .issueActivities(issueId)
       .then((rows) => {
         if (alive) setActivities(rows);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [issueId, liveUpdatedAt]);
+  // Read-only projections of linked issues on teams we can't fully see.
+  useEffect(() => {
+    let alive = true;
+    void api
+      .linkedProjections(issueId)
+      .then((r) => {
+        if (alive) setProjections(r.projections);
       })
       .catch(() => {});
     return () => {
@@ -363,7 +377,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
             <AttachmentsSection issueId={issueId} />
 
             {/* relations */}
-            {issueRelations.length > 0 && (
+            {(issueRelations.length > 0 || projections.length > 0) && (
               <div style={{ marginTop: 20 }}>
                 <span style={{ fontWeight: 600, fontSize: 13 }}>Relations</span>
                 <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -371,6 +385,7 @@ function IssueDetail({ issueId }: { issueId: string }) {
                     const outgoing = rel.issueId === issueId;
                     const otherId = outgoing ? rel.relatedIssueId : rel.issueId;
                     const other = allIssues[otherId];
+                    // Cross-team links render below as read-only projections.
                     if (!other) return null;
                     return (
                       <div key={rel.id} className="row" style={{ fontSize: 12.5 }}>
@@ -398,6 +413,20 @@ function IssueDetail({ issueId }: { issueId: string }) {
                       </div>
                     );
                   })}
+                  {/* Read-only cross-team links: a provider issue's status, no more. */}
+                  {projections.map((p) => (
+                    <div key={p.relationId} className="row" style={{ fontSize: 12.5 }}>
+                      <span className="muted" style={{ width: 90, flexShrink: 0 }}>
+                        {relationLabel(p.type, p.outgoing)}
+                      </span>
+                      <span className="row grow truncate" style={{ gap: 6 }}>
+                        <span className="dim">{p.identifier}</span>
+                        <span className="truncate">{p.title}</span>
+                        {p.state && <span className="status-chip muted">{p.state}</span>}
+                        {p.teamName && <span className="persona-parent">· via {p.teamName}</span>}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
