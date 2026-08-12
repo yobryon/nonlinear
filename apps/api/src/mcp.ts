@@ -626,7 +626,7 @@ function buildServer(
     'inbox',
     {
       description:
-        'Your notifications — the passive pull mirror of the human Inbox: things addressed to you (@mentions on issues AND decisions, a decision you proposed being ruled, assignments, waiting_on). Unread by default. Pass markRead:true to clear the ones returned so the next call is fresh.',
+        'Your notifications — the passive pull mirror of the human Inbox: things addressed to you (@mentions on issues AND decisions, a decision you proposed being ruled, assignments, waiting_on). Unread by default. Pass markRead:true to clear the ones returned so the next call is fresh. Returns `{ unread, notifications, additionalContext }`; `additionalContext` is a natural-language digest (present only when something is unread) meant to be injected verbatim by a Stop hook for a turn-end readout.',
       inputSchema: {
         markRead: z
           .boolean()
@@ -702,7 +702,30 @@ function buildServer(
           at: n.createdAt,
         };
       });
-      return ok({ unread: mine.filter((n) => !n.readAt).length, notifications: rows });
+      const unread = rows.filter((r) => !r.read);
+      // A natural-language digest suitable for injecting from a Stop hook: it
+      // rides alongside the structured shape (interactive callers ignore it) but
+      // gives a turn-end readout a hook can surface verbatim. Present only when
+      // there's something unread, so an empty inbox injects nothing.
+      let additionalContext: string | undefined;
+      if (unread.length > 0) {
+        const shown = unread.slice(0, 15);
+        const lines = shown.map((r) => {
+          const who = r.from ?? 'someone';
+          const tgt = r.target
+            ? `${r.target.identifier}${r.target.title ? ` (${r.target.title})` : ''}`
+            : 'a deleted item';
+          return `• ${who} ${r.what} → ${tgt}`;
+        });
+        const more =
+          unread.length > shown.length ? `\n…and ${unread.length - shown.length} more.` : '';
+        additionalContext =
+          `You have ${unread.length} unread item${unread.length === 1 ? '' : 's'} in your nonlinear inbox — things addressed to you:\n` +
+          lines.join('\n') +
+          more +
+          `\n\nIf any need your attention before you finish, read it (get_issue / get_decision — which also clears it), act, and reply; otherwise you're clear to stop. Or clear all with inbox {markRead:true}.`;
+      }
+      return ok({ unread: unread.length, notifications: rows, additionalContext });
     },
   );
 
