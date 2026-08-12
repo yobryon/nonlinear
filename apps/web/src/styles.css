@@ -1137,6 +1137,18 @@ a.crumb-back:hover > span[aria-hidden] {
   font-size: 13.5px;
   word-wrap: break-word;
 }
+/* Autolinked entity keys (TEAM-42, TEAM-D12) inside prose. */
+.md a.entity-link {
+  color: var(--accent-text);
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+  white-space: nowrap;
+}
+.md a.entity-link:hover {
+  border-bottom-color: currentColor;
+}
 .md h1,
 .md h2,
 .md h3 {
