@@ -1034,6 +1034,34 @@ field — if that's ever needed it's a separate addition.
 
 ---
 
+## 25. A bare persona name resolves within the caller's own agent family
+
+**Decision.** MCP name resolution (`resolveAssignee`, used for assignee/`waiting_on`/decider) now
+resolves in priority order — email, then the qualified handle (`displayName`, e.g.
+`plank.agent.arch`), then the short `name` — and when a short name matches **more than one**
+identity, it prefers a match in the **caller's own agent family** (the caller's parent agent or a
+sibling persona under it). If it's still ambiguous, it refuses and lists the candidate handles
+rather than silently picking one.
+
+**Context.** Personas (entry 22) made short names collide: every team may run an `arch`
+(`plank.agent.arch`, `vantage.agent.arch`, …), and agents auto-join every non-private team, so
+team membership can't disambiguate. The old resolver did one `find` matching email/handle/name
+equally and returned the **first** hit — so PLANK's impl setting `waiting_on: arch` reached
+*Vantage's* arch (NON-59). Worst of all it failed in the reassuring direction: PLANK believed it
+had routed a question to its architect while the real one sat idle, and the wrong architect
+received an urgent question on a codebase it had never read — a confident-answer-over-a-gap
+delivered through *addressing*, the same shape as NON-56.
+
+**Alternatives rejected.** *Resolve within the target issue's team* — doesn't help, since all
+agents are members of all non-private teams, so both arches qualify. *Always refuse an ambiguous
+bare name* — safe but noisy on the common, correct case (`waiting_on: arch` from a plank agent
+almost always means plank's arch). The caller's family is the right signal: you refer to
+teammates by short name meaning your *own* team's people; refusal remains the fallback when even
+that is ambiguous. As a cheap defense-in-depth, the `inbox` target now names its source team, so
+a cross-team item is legible without decoding the identifier prefix.
+
+---
+
 ## How to extend this log
 
 When you make a decision that would be expensive to reverse — a new storage

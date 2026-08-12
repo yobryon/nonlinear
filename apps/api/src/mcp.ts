@@ -151,19 +151,38 @@ async function resolveIssue(domain: Domain, identifier: string, vis: Visibility)
   return issue;
 }
 
-async function resolveAssignee(domain: Domain, value: string | null | undefined) {
+/**
+ * Resolve a person reference (email / @handle / name) to a user id. Unique
+ * identifiers win first — email, then the qualified handle (`displayName`, e.g.
+ * `plank.agent.arch`). A bare short name is often shared (every team may name a
+ * persona `arch`); when it matches more than one, prefer a match in the CALLER's
+ * own agent family (self or a sibling persona), since `waiting_on: arch` almost
+ * always means "my team's arch". Still ambiguous → refuse and list the handles,
+ * rather than silently routing to the wrong team's agent.
+ */
+async function resolveAssignee(
+  domain: Domain,
+  value: string | null | undefined,
+  actor: User,
+): Promise<string | null | undefined> {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
   const users = await domain.ctx.storage.users.all();
   const v = value.trim().toLowerCase();
-  const match = users.find(
-    (u) =>
-      u.email.toLowerCase() === v ||
-      u.displayName.toLowerCase() === v ||
-      u.name.toLowerCase() === v,
+  const byEmail = users.find((u) => u.email.toLowerCase() === v);
+  if (byEmail) return byEmail.id;
+  const byHandle = users.find((u) => u.displayName.toLowerCase() === v);
+  if (byHandle) return byHandle.id;
+  const byName = users.filter((u) => u.name.toLowerCase() === v);
+  if (byName.length === 1) return byName[0]!.id;
+  if (byName.length === 0) throw new Error(`Unknown assignee "${value}"`);
+  const familyRoot = actor.parentAgentId ?? actor.id;
+  const inFamily = byName.filter((u) => u.id === familyRoot || u.parentAgentId === familyRoot);
+  if (inFamily.length === 1) return inFamily[0]!.id;
+  const handles = byName.map((u) => u.displayName).join(', ');
+  throw new Error(
+    `"${value}" is ambiguous — it matches ${byName.length} identities (${handles}). Use the full handle to disambiguate.`,
   );
-  if (!match) throw new Error(`Unknown assignee "${value}"`);
-  return match.id;
 }
 
 async function resolveState(domain: Domain, teamId: string, stateName: string | undefined) {
@@ -473,7 +492,7 @@ function buildServer(
         issues = issues.filter((i) => i.teamId === team.id);
       }
       if (assignee) {
-        const id = await resolveAssignee(domain, assignee);
+        const id = await resolveAssignee(domain, assignee, actor);
         issues = issues.filter((i) => i.assigneeId === id);
       }
       const pr = parsePriority(priority);
@@ -678,7 +697,16 @@ function buildServer(
         const from = n.actorId
           ? (users.find((u) => u.id === n.actorId)?.displayName ?? null)
           : null;
-        let target: { kind: string; identifier: string; title: string; url: string } | null = null;
+        // team is named on the target so a cross-team item is legible at a
+        // glance (not just from decoding the identifier prefix).
+        const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? null;
+        let target: {
+          kind: string;
+          identifier: string;
+          title: string;
+          team: string | null;
+          url: string;
+        } | null = null;
         if (n.issueId) {
           const i = issues.find((x) => x.id === n.issueId);
           if (i) {
@@ -686,6 +714,7 @@ function buildServer(
               kind: 'issue',
               identifier: `${keyOf(i.teamId)}-${i.number}`,
               title: i.title,
+              team: teamName(i.teamId),
               url: `/issue/${keyOf(i.teamId)}-${i.number}`,
             };
           }
@@ -696,6 +725,7 @@ function buildServer(
               kind: 'decision',
               identifier: `${keyOf(d.teamId)}-D${d.number}`,
               title: d.title,
+              team: teamName(d.teamId),
               url: `/decision/${d.id}`,
             };
           }
@@ -771,7 +801,7 @@ function buildServer(
           title,
           description,
           priority: parsePriority(priority),
-          assigneeId: await resolveAssignee(domain, assignee),
+          assigneeId: await resolveAssignee(domain, assignee, actor),
           stateId: await resolveState(domain, team.id, state),
           labelIds: await resolveLabels(domain, team.id, labels),
           projectId: await resolveProject(domain, project, vis),
@@ -817,8 +847,8 @@ function buildServer(
           description,
           stateId: await resolveState(domain, issue.teamId, state),
           priority: parsePriority(priority),
-          assigneeId: await resolveAssignee(domain, assignee),
-          waitingOnId: await resolveAssignee(domain, waiting_on),
+          assigneeId: await resolveAssignee(domain, assignee, actor),
+          waitingOnId: await resolveAssignee(domain, waiting_on, actor),
           projectId: await resolveProject(domain, project, vis),
         });
         return ok(await serializeIssue(domain, updated));
@@ -918,7 +948,7 @@ function buildServer(
         if (wantsEdit) {
           updated = await domain.issues.update(actor.id, issue.id, {
             stateId: await resolveState(domain, issue.teamId, state),
-            waitingOnId: await resolveAssignee(domain, waiting_on),
+            waitingOnId: await resolveAssignee(domain, waiting_on, actor),
           });
         }
         return ok({ ...(await serializeIssue(domain, updated, { summary: true })), commentId });
@@ -955,8 +985,8 @@ function buildServer(
             if (!seesTeam(vis, issue.teamId)) throw new Error('not a member of its team');
             await domain.issues.update(actor.id, issue.id, {
               stateId: await resolveState(domain, issue.teamId, u.state),
-              assigneeId: await resolveAssignee(domain, u.assignee),
-              waitingOnId: await resolveAssignee(domain, u.waiting_on),
+              assigneeId: await resolveAssignee(domain, u.assignee, actor),
+              waitingOnId: await resolveAssignee(domain, u.waiting_on, actor),
             });
             return { identifier: u.identifier, ok: true };
           } catch (err) {
@@ -1039,11 +1069,13 @@ function buildServer(
           body,
           governedIssueIds,
           supersedesId,
-          waitingOnId: await resolveAssignee(domain, waiting_on),
+          waitingOnId: await resolveAssignee(domain, waiting_on, actor),
           status,
-          ruledById: ruled_by ? await resolveAssignee(domain, ruled_by) : undefined,
+          ruledById: ruled_by ? await resolveAssignee(domain, ruled_by, actor) : undefined,
           ruledAt: decided_at,
-          authorId: author ? ((await resolveAssignee(domain, author)) ?? undefined) : undefined,
+          authorId: author
+            ? ((await resolveAssignee(domain, author, actor)) ?? undefined)
+            : undefined,
           createdAt: date,
         });
         return ok(await serializeDecision(domain, decision));
