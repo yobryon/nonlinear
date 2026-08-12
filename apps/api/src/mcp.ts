@@ -152,13 +152,11 @@ async function resolveIssue(domain: Domain, identifier: string, vis: Visibility)
 }
 
 /**
- * Resolve a person reference (email / @handle / name) to a user id. Unique
- * identifiers win first — email, then the qualified handle (`displayName`, e.g.
- * `plank.agent.arch`). A bare short name is often shared (every team may name a
- * persona `arch`); when it matches more than one, prefer a match in the CALLER's
- * own agent family (self or a sibling persona), since `waiting_on: arch` almost
- * always means "my team's arch". Still ambiguous → refuse and list the handles,
- * rather than silently routing to the wrong team's agent.
+ * Resolve a person reference (email / @handle / name) to a user id, or the
+ * pass-through null/undefined that mean "clear"/"leave unchanged". The actual
+ * resolution is namespace-structural — see `domain.users.resolvePerson`: a bare
+ * short name resolves within the CALLER's own agent family (parentage is the
+ * namespace), never blindly into another agent's personas.
  */
 async function resolveAssignee(
   domain: Domain,
@@ -167,22 +165,7 @@ async function resolveAssignee(
 ): Promise<string | null | undefined> {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
-  const users = await domain.ctx.storage.users.all();
-  const v = value.trim().toLowerCase();
-  const byEmail = users.find((u) => u.email.toLowerCase() === v);
-  if (byEmail) return byEmail.id;
-  const byHandle = users.find((u) => u.displayName.toLowerCase() === v);
-  if (byHandle) return byHandle.id;
-  const byName = users.filter((u) => u.name.toLowerCase() === v);
-  if (byName.length === 1) return byName[0]!.id;
-  if (byName.length === 0) throw new Error(`Unknown assignee "${value}"`);
-  const familyRoot = actor.parentAgentId ?? actor.id;
-  const inFamily = byName.filter((u) => u.id === familyRoot || u.parentAgentId === familyRoot);
-  if (inFamily.length === 1) return inFamily[0]!.id;
-  const handles = byName.map((u) => u.displayName).join(', ');
-  throw new Error(
-    `"${value}" is ambiguous — it matches ${byName.length} identities (${handles}). Use the full handle to disambiguate.`,
-  );
+  return domain.users.resolvePerson(value, actor.parentAgentId ?? actor.id);
 }
 
 async function resolveState(domain: Domain, teamId: string, stateName: string | undefined) {

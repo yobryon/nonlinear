@@ -1034,31 +1034,36 @@ field — if that's ever needed it's a separate addition.
 
 ---
 
-## 25. A bare persona name resolves within the caller's own agent family
+## 25. Parentage is a namespace — a bare persona name resolves only within the caller's own family
 
-**Decision.** MCP name resolution (`resolveAssignee`, used for assignee/`waiting_on`/decider) now
-resolves in priority order — email, then the qualified handle (`displayName`, e.g.
-`plank.agent.arch`), then the short `name` — and when a short name matches **more than one**
-identity, it prefers a match in the **caller's own agent family** (the caller's parent agent or a
-sibling persona under it). If it's still ambiguous, it refuses and lists the candidate handles
-rather than silently picking one.
+**Decision.** Person resolution (`domain.users.resolvePerson`, used by the MCP
+assignee/`waiting_on`/decider path) is **namespace-structural**, not inferential. Email and the
+qualified handle (`displayName`, e.g. `plank.agent.arch`) are globally unique and resolve
+directly. A bare short name (`arch`) resolves **only within the caller's own namespace** — their
+agent family (parent agent + its personas) plus non-namespaced users (humans and top-level
+agents, which belong to no family). **Another agent's persona is never reachable by a bare
+name** — that requires its qualified handle. There is no cross-family fallback of any kind; an
+unaddressable or genuinely ambiguous name is refused with the candidate handles.
 
 **Context.** Personas (entry 22) made short names collide: every team may run an `arch`
 (`plank.agent.arch`, `vantage.agent.arch`, …), and agents auto-join every non-private team, so
-team membership can't disambiguate. The old resolver did one `find` matching email/handle/name
+team membership can't disambiguate. The original resolver did one `find` over email/handle/name
 equally and returned the **first** hit — so PLANK's impl setting `waiting_on: arch` reached
-*Vantage's* arch (NON-59). Worst of all it failed in the reassuring direction: PLANK believed it
-had routed a question to its architect while the real one sat idle, and the wrong architect
-received an urgent question on a codebase it had never read — a confident-answer-over-a-gap
-delivered through *addressing*, the same shape as NON-56.
+*Vantage's* arch (NON-59), a confident-answer-over-a-gap delivered through *addressing* (the
+NON-56 shape): PLANK believed it had asked its architect while the real one sat idle, and the
+wrong architect got an urgent question on a codebase it had never read.
 
-**Alternatives rejected.** *Resolve within the target issue's team* — doesn't help, since all
-agents are members of all non-private teams, so both arches qualify. *Always refuse an ambiguous
-bare name* — safe but noisy on the common, correct case (`waiting_on: arch` from a plank agent
-almost always means plank's arch). The caller's family is the right signal: you refer to
-teammates by short name meaning your *own* team's people; refusal remains the fallback when even
-that is ambiguous. As a cheap defense-in-depth, the `inbox` target now names its source team, so
-a cross-team item is legible without decoding the identifier prefix.
+**Alternatives rejected.** *Resolve within the target issue's team* — useless here, since all
+agents are members of all non-private teams, so every arch qualifies. *Prefer the caller's family
+only when a name is multiply-matched* (the first fix) — still inference: a bare name that is
+*globally unique* but belongs to another family would resolve, the same cross-namespace reach at a
+different collision count. The structural rule removes the inference entirely: the parent-agent
+grouping **is** the namespace (not the team — teams can't disambiguate), so short = your own
+namespace, qualified handle = anyone, and reaching across is always explicit. The record already
+bears its `parentAgentId`; resolution simply honors it instead of guessing. Refusal (with the
+handles) is the only fallback. Defense-in-depth: the `inbox` target now names its source team, so
+a cross-team item is legible without decoding the identifier prefix. Pinned by
+`resolve-person.test.ts`.
 
 ---
 

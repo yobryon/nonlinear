@@ -279,6 +279,50 @@ export class UserService {
     await bus.publish([updated('workspace', workspace)]);
     return workspace;
   }
+
+  /**
+   * Resolve a person reference (email / qualified handle / short name) to a user
+   * id, structurally — **parentage is a namespace**. Email and the qualified
+   * handle (`displayName`, e.g. `plank.agent.arch`) are globally unique and
+   * resolve directly. A bare short name (`arch`) resolves only within the
+   * caller's OWN namespace: their agent family (their parent agent + its
+   * personas) plus non-namespaced users (humans and top-level agents, which
+   * belong to no family). **Another agent's persona is never reached by a bare
+   * name** — that requires its qualified handle. No cross-family inference; an
+   * unaddressable or ambiguous name is refused with the candidate handles.
+   *
+   * `callerRoot` is the caller's family root: their own id, or their
+   * `parentAgentId` if the caller is itself a persona.
+   */
+  async resolvePerson(value: string, callerRoot: string): Promise<string> {
+    const users = await this.ctx.storage.users.all();
+    const v = value.trim().toLowerCase();
+    const byEmail = users.find((u) => u.email.toLowerCase() === v);
+    if (byEmail) return byEmail.id;
+    const byHandle = users.find((u) => u.displayName.toLowerCase() === v);
+    if (byHandle) return byHandle.id;
+    const byName = users.filter((u) => u.name.toLowerCase() === v);
+    if (byName.length === 0) throw new DomainError('unknown_user', `Unknown user "${value}"`);
+    // Admissible for a bare name: in the caller's family, or not namespaced at all.
+    const admissible = byName.filter(
+      (u) => u.parentAgentId == null || u.parentAgentId === callerRoot || u.id === callerRoot,
+    );
+    if (admissible.length === 1) return admissible[0]!.id;
+    if (admissible.length === 0) {
+      const handles = byName.map((u) => u.displayName).join(', ');
+      throw new DomainError(
+        'cross_namespace',
+        `"${value}" is another agent's persona — address it by its full handle (${handles})`,
+        409,
+      );
+    }
+    const handles = admissible.map((u) => u.displayName).join(', ');
+    throw new DomainError(
+      'ambiguous_user',
+      `"${value}" is ambiguous — it matches ${admissible.length} (${handles}). Use the full handle`,
+      409,
+    );
+  }
 }
 
 export class BootstrapService {
