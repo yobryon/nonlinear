@@ -626,7 +626,7 @@ function buildServer(
     'inbox',
     {
       description:
-        'Your notifications — the passive pull mirror of the human Inbox: things addressed to you (@mentions on issues AND decisions, a decision you proposed being ruled, assignments, waiting_on). Unread by default. Pass markRead:true to clear the ones returned so the next call is fresh. Returns `{ unread, notifications, additionalContext }`; `additionalContext` is a natural-language digest (present only when something is unread) meant to be injected verbatim by a Stop hook for a turn-end readout.',
+        'Your notifications — the passive pull mirror of the human Inbox: things addressed to you (@mentions on issues AND decisions, a decision you proposed being ruled, assignments, waiting_on). Unread by default; returns `{ unread, notifications }`. Pass markRead:true to clear the ones returned so the next call is fresh.',
       inputSchema: {
         markRead: z
           .boolean()
@@ -634,9 +634,15 @@ function buildServer(
           .describe('Mark the returned notifications read (so you stop seeing them)'),
         includeRead: z.boolean().optional().describe('Include already-read ones too'),
         limit: z.number().optional(),
+        runAsHook: z
+          .boolean()
+          .optional()
+          .describe(
+            'NOT FOR INTERACTIVE USE — ignore this. Only a Stop hook sets it, to get a hook-shaped result (additionalContext + a decision/reason block) instead of the notification list.',
+          ),
       },
     },
-    async ({ markRead, includeRead, limit }) => {
+    async ({ markRead, includeRead, limit, runAsHook }) => {
       const [notifications, teams, issues, decisions, users] = await Promise.all([
         s.notifications.all(),
         s.teams.all(),
@@ -703,12 +709,16 @@ function buildServer(
         };
       });
       const unread = rows.filter((r) => !r.read);
-      // A natural-language digest suitable for injecting from a Stop hook: it
-      // rides alongside the structured shape (interactive callers ignore it) but
-      // gives a turn-end readout a hook can surface verbatim. Present only when
-      // there's something unread, so an empty inbox injects nothing.
-      let additionalContext: string | undefined;
-      if (unread.length > 0) {
+
+      // Hook mode: return the Claude Code Stop-hook shape instead of the list.
+      // A block (with a reason to reason over) when something's unread; a plain
+      // "clear" readout otherwise, so the turn ends cleanly.
+      if (runAsHook) {
+        if (unread.length === 0) {
+          return ok({
+            additionalContext: 'Your nonlinear inbox is clear — nothing is awaiting you.',
+          });
+        }
         const shown = unread.slice(0, 15);
         const lines = shown.map((r) => {
           const who = r.from ?? 'someone';
@@ -719,13 +729,20 @@ function buildServer(
         });
         const more =
           unread.length > shown.length ? `\n…and ${unread.length - shown.length} more.` : '';
-        additionalContext =
-          `You have ${unread.length} unread item${unread.length === 1 ? '' : 's'} in your nonlinear inbox — things addressed to you:\n` +
-          lines.join('\n') +
-          more +
-          `\n\nIf any need your attention before you finish, read it (get_issue / get_decision — which also clears it), act, and reply; otherwise you're clear to stop. Or clear all with inbox {markRead:true}.`;
+        return ok({
+          additionalContext:
+            `${unread.length} unread item${unread.length === 1 ? '' : 's'} in your nonlinear inbox — addressed to you:\n` +
+            lines.join('\n') +
+            more,
+          decision: 'block',
+          reason:
+            'You have items awaiting disposition in your nonlinear inbox. Review them (get_issue / get_decision, which also clears them) and act where warranted before stopping.',
+        });
       }
-      return ok({ unread: unread.length, notifications: rows, additionalContext });
+
+      // Interactive: the structured list only — the agent is reading it directly,
+      // so no digest to re-summarize what they just received.
+      return ok({ unread: unread.length, notifications: rows });
     },
   );
 
