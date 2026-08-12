@@ -128,6 +128,36 @@ describe('decisions', () => {
     expect(await unreadFor(arch.id)).toBe(0);
   });
 
+  it('imports a historical decision honestly (true decider, date, no false credit)', async () => {
+    const po = await domain.auth.createAgent({ name: 'PO' });
+    const importer = await domain.auth.createAgent({ name: 'Importer' });
+    // `importer` migrates a February decision the PO actually made.
+    const d = await domain.decisions.create(importer.id, {
+      teamId: team.id,
+      title: 'Historical ruling',
+      status: 'ruled',
+      ruledById: po.id,
+      ruledAt: '2026-02-17T10:00:00.000Z',
+      createdAt: '2026-02-10T09:00:00.000Z',
+    });
+    expect(d.status).toBe('ruled');
+    expect(d.ruledById).toBe(po.id); // the true decider, not the importer
+    expect(d.ruledAt).toBe('2026-02-17T10:00:00.000Z');
+    expect(d.createdAt).toBe('2026-02-10T09:00:00.000Z'); // chronology preserved
+    expect(d.waitingOnId).toBeNull();
+    // Not poisoning the "what awaits a ruling" query.
+    expect(d.status).not.toBe('proposed');
+
+    // Importing settled with an unknown decider is allowed (null, not the caller).
+    const d2 = await domain.decisions.create(importer.id, {
+      teamId: team.id,
+      title: 'Decider not recorded',
+      status: 'carried',
+    });
+    expect(d2.status).toBe('carried');
+    expect(d2.ruledById).toBeNull();
+  });
+
   it('is member-only (invisible to a non-member)', async () => {
     // A private team the admin creates; make it private BEFORE the outsider is
     // created, since new members auto-join every non-private team.

@@ -15,7 +15,13 @@ import type {
   ViewDisplay,
   WebhookFormat,
 } from './enums.js';
-import type { ApiToken, DashboardTile, UserPreferences, ViewFilters } from './entities.js';
+import type {
+  ApiToken,
+  DashboardTile,
+  DecisionStatus,
+  UserPreferences,
+  ViewFilters,
+} from './entities.js';
 
 export interface RegisterInput {
   email: string;
@@ -133,6 +139,18 @@ export interface CreateDecisionInput {
   supersedesId?: string | null;
   /** Route the proposal to a specific decider. */
   waitingOnId?: string | null;
+  /**
+   * Import a historical, already-settled decision honestly (migrating a log).
+   * `status` other than the default `proposed` records it as decided without a
+   * ruling ceremony here; `ruledById`/`ruledAt` capture the *true* decider and
+   * date (null decider = "decided, not recorded here"); `authorId`/`createdAt`
+   * capture the original proposer and date so the ledger's chronology is real.
+   */
+  status?: DecisionStatus;
+  authorId?: string;
+  ruledById?: string | null;
+  ruledAt?: string | null;
+  createdAt?: string;
 }
 
 export interface UpdateDecisionInput {

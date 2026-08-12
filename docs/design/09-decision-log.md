@@ -1007,6 +1007,33 @@ flag on the cross-team projection (the read-both-to-link rule is the consent pro
 
 ---
 
+## 24. Honest import of historical decisions
+
+**Decision.** `create_decision` accepts optional fields to bring in an already-settled decision
+truthfully: `status` (`ruled`/`carried`, not the default `proposed`), `ruledById` (the *real*
+decider — or null, "decided, not recorded here"), `ruledAt`, `authorId` (the original proposer),
+and `createdAt` (the original date). A settled import carries no `waitingOnId` and fires no
+notification. Also expose `carry_decision` over MCP — the `carried` state had a web/REST path
+but no tool, so from an agent's view it was unreachable.
+
+**Context.** A project (Plank, NON-57) migrating a 67-decision, six-month markdown log hit a
+wall: every `create_decision` starts `proposed` (poisoning `list_decisions --status proposed`,
+the "what awaits a ruling" query), `rule_decision` credits the caller, and the 67 were decided
+by three different parties on historical dates. The entity's whole value is trustworthy
+attribution, so manufacturing 67 false `ruledBy` edges is worse than not migrating.
+
+**Alternatives rejected.** *Bulk-rule as the importer* — writes a queryably-false decider, the
+exact failure the entity exists to prevent. *Repurpose `carried` to mean "imported"* — it
+already means "reaffirmed in force after review"; overloading it would make the lifecycle lie a
+different way. *A separate `imported` status / entity* — more enum/branching surface for what is
+just "a decision whose true settled state we happen to know." Instead the ledger fields simply
+tell the truth, and the import is a normal create that stamps them. The attribution overrides
+are safe here because decisions are member-only and the caller is a trusted team member (the
+same member could write anything in the body); provenance of *who imported* is not tracked as a
+field — if that's ever needed it's a separate addition.
+
+---
+
 ## How to extend this log
 
 When you make a decision that would be expensive to reverse — a new storage

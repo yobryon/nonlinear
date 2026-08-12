@@ -156,12 +156,12 @@ Bearer per request. Config block:
 For Claude Code specifically: `claude mcp add --transport http nonlinear http://localhost:8080/mcp
 --header "Authorization: Bearer nl_your_agent_token"`.
 
-### The 28 tools
+### The tools
 
 Names are **resolved for you** — teams by key (`AUGRID`), states/labels by name (`In Progress`,
 `type: bug`), assignees by email / `@handle` / display name. You never juggle UUIDs through MCP.
 
-**Read (14):**
+**Read:**
 
 | Tool | What it does |
 |---|---|
@@ -180,7 +180,7 @@ Names are **resolved for you** — teams by key (`AUGRID`), states/labels by nam
 | `list_decisions` | A team's decisions `{ teamKey, status? }`. |
 | `get_decision` | One decision **with its discussion** — `{ identifier }` e.g. `AUGRID-D12`. |
 
-**Write (14):**
+**Write:**
 
 | Tool | Params |
 |---|---|
@@ -190,8 +190,9 @@ Names are **resolved for you** — teams by key (`AUGRID`), states/labels by nam
 | `update_issues` | `{ updates: [{ identifier, state?, assignee?, waiting_on? }] }` — batch (the reconcile pass as one call) |
 | `add_comment` | `{ identifier, body }` — markdown + `@handle` mentions |
 | `sync_commits` | `{ commits: [{ sha, message, date? }], repoUrl? }` — reconcile git commits: `Refs` → comment, `Closes` → **propose**-close, returned to confirm with `update_issues` |
-| `create_decision` | `{ teamKey, title, body?, governedIssues?, supersedes? }` — a judgment, starts `proposed` |
+| `create_decision` | `{ teamKey, title, body?, governedIssues?, supersedes?, waiting_on? }` — a judgment, starts `proposed`. **To migrate history**, also pass `status` (ruled/carried), `ruled_by` (the true decider, or omit), `decided_at`, `author`, `date` — so the ledger stays chronologically real and never falsely credits you. |
 | `rule_decision` | `{ identifier, note? }` — decide it (the note lands as a comment) |
+| `carry_decision` | `{ identifier }` — reaffirm a ruled decision after review (stays in force, `carried`) |
 | `supersede_decision` | `{ identifier, supersedes }` — record that one decision replaces another (a first-class edge) |
 | `comment_decision` | `{ identifier, body }` — answer a proposal |
 | `create_project` | `{ name, description?, teamKeys[] }` |

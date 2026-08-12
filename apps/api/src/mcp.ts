@@ -978,7 +978,7 @@ function buildServer(
     'create_decision',
     {
       description:
-        'Record a decision — a judgment, not a work item. Its body is the argument; it starts as `proposed`. Use for architecture rulings, tradeoffs, policy. Numbered per team as VAN-D12.',
+        'Record a decision — a judgment, not a work item. Its body is the argument; a new one starts `proposed`. Numbered per team as VAN-D12. To MIGRATE a historical decision, pass its true settled state honestly: `status` (ruled/carried), `ruled_by` (the real decider, or omit if not recorded), `decided_at`, `author`, and `date` (its original date) — so the ledger stays chronologically real and never falsely credits the caller.',
       inputSchema: {
         teamKey: z.string(),
         title: z.string(),
@@ -995,9 +995,35 @@ function buildServer(
           .string()
           .optional()
           .describe('Route the proposal to a specific decider (email/@handle/name)'),
+        status: z
+          .enum(['proposed', 'ruled', 'carried'])
+          .optional()
+          .describe('Import as already-settled: ruled, or carried (in force). Default proposed.'),
+        ruled_by: z
+          .string()
+          .optional()
+          .describe('Import: the TRUE decider (email/@handle/name); omit if unknown'),
+        decided_at: z.string().optional().describe('Import: ISO date it was actually decided'),
+        author: z
+          .string()
+          .optional()
+          .describe('Import: the original proposer (email/@handle/name); defaults to you'),
+        date: z.string().optional().describe('Import: ISO date it was originally proposed'),
       },
     },
-    async ({ teamKey, title, body, governedIssues, supersedes, waiting_on }) => {
+    async ({
+      teamKey,
+      title,
+      body,
+      governedIssues,
+      supersedes,
+      waiting_on,
+      status,
+      ruled_by,
+      decided_at,
+      author,
+      date,
+    }) => {
       try {
         guardWrite();
         const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
@@ -1014,6 +1040,11 @@ function buildServer(
           governedIssueIds,
           supersedesId,
           waitingOnId: await resolveAssignee(domain, waiting_on),
+          status,
+          ruledById: ruled_by ? await resolveAssignee(domain, ruled_by) : undefined,
+          ruledAt: decided_at,
+          authorId: author ? ((await resolveAssignee(domain, author)) ?? undefined) : undefined,
+          createdAt: date,
         });
         return ok(await serializeDecision(domain, decision));
       } catch (err) {
@@ -1092,6 +1123,25 @@ function buildServer(
         const decision = await resolveDecision(domain, identifier, vis);
         const ruled = await domain.decisions.rule(actor.id, decision.id, note);
         return ok(await serializeDecision(domain, ruled));
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
+  server.registerTool(
+    'carry_decision',
+    {
+      description:
+        'Reaffirm a ruled decision after review — it stays in force (status `carried`), explicitly not superseded. (To bring in an already-settled historical decision, prefer create_decision with status:"carried".)',
+      inputSchema: { identifier: z.string() },
+    },
+    async ({ identifier }) => {
+      try {
+        guardWrite();
+        const decision = await resolveDecision(domain, identifier, vis);
+        const carried = await domain.decisions.carry(actor.id, decision.id);
+        return ok(await serializeDecision(domain, carried));
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }

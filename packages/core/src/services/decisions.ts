@@ -35,22 +35,46 @@ export class DecisionService {
     if (!title) throw new DomainError('invalid_title', 'A decision needs a title');
 
     const now = nowIso();
+    // Honest import of a historical decision: an explicit non-`proposed` status
+    // records it as already-settled without a ruling ceremony here.
+    const status = input.status ?? 'proposed';
+    if (status === 'superseded') {
+      throw new DomainError('invalid_status', 'Use supersede_decision to mark one superseded');
+    }
+    const settled = status !== 'proposed';
+    const validDate = (iso: string | null | undefined, field: string) => {
+      if (iso != null && Number.isNaN(Date.parse(iso))) {
+        throw new DomainError('invalid_date', `${field} is not a valid date`);
+      }
+    };
+    validDate(input.createdAt, 'createdAt');
+    validDate(input.ruledAt, 'ruledAt');
+    const requireUser = async (id: string | null | undefined) => {
+      if (id && !(await storage.users.get(id))) throw notFound('User');
+    };
+    await requireUser(input.authorId);
+    await requireUser(input.ruledById);
+
     const number = await storage.decisions.nextNumber(team.id);
+    const createdAt = input.createdAt ?? now;
     const decision: Decision = {
       id: newId(),
       teamId: team.id,
       number,
       title,
       body: input.body ?? '',
-      status: 'proposed',
-      authorId: actorId,
-      ruledById: null,
-      ruledAt: null,
-      waitingOnId: input.waitingOnId ?? null,
+      status,
+      authorId: input.authorId ?? actorId,
+      // Settled decisions carry their true decider (or null = "not recorded
+      // here") and date; a live proposal has neither.
+      ruledById: settled ? (input.ruledById ?? null) : null,
+      ruledAt: settled ? (input.ruledAt ?? createdAt) : null,
+      // A settled decision isn't waiting on anyone.
+      waitingOnId: settled ? null : (input.waitingOnId ?? null),
       supersedesId: null,
       governedIssueIds: [...new Set(input.governedIssueIds ?? [])],
-      createdAt: now,
-      updatedAt: now,
+      createdAt,
+      updatedAt: input.createdAt ?? now,
     };
     // Set the supersession edge (and flip the target) BEFORE inserting, so the
     // new decision persists with its `supersedesId` in one write.
@@ -60,8 +84,8 @@ export class DecisionService {
     }
     await storage.decisions.insert(decision);
     deltas.unshift(created('decision', decision));
-    // Routed to a decider → tell them it awaits their ruling.
-    if (decision.waitingOnId && decision.waitingOnId !== actorId) {
+    // Routed to a decider → tell them it awaits their ruling (live proposals only).
+    if (!settled && decision.waitingOnId && decision.waitingOnId !== actorId) {
       const note = await pushNotification(this.ctx, {
         userId: decision.waitingOnId,
         actorId,
