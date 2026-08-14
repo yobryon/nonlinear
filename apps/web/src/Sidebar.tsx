@@ -27,6 +27,7 @@ import {
   PlusIcon,
 } from './icons.js';
 import { openNewIssue } from './NewIssueDialog.js';
+import { openHelp } from './ShortcutsDialog.js';
 import { openPalette } from './CommandPalette.js';
 import { api } from './api.js';
 import { stopSync } from './sync.js';
@@ -235,6 +236,11 @@ export function Sidebar() {
       </div>
 
       <div className="sidebar-scroll">
+        <button className="new-issue-btn" onClick={() => openNewIssue()}>
+          <PencilIcon size={14} />
+          <span className="grow">New issue</span>
+          <span className="kbd">C</span>
+        </button>
         <NavLink to="/inbox" className={({ isActive }) => `side-item${isActive ? ' active' : ''}`}>
           <InboxIcon size={15} />
           <span className="grow">Inbox</span>
@@ -547,6 +553,19 @@ export function Sidebar() {
           >
             <BookIcon size={14} />
             <span className="grow">Help &amp; docs</span>
+          </button>
+          <button
+            className="menu-item"
+            onClick={() => {
+              openHelp();
+              setWsMenu(null);
+            }}
+          >
+            <BookIcon size={14} />
+            <span className="grow">Keyboard shortcuts</span>
+            <span className="hint">
+              <span className="kbd">?</span>
+            </span>
           </button>
           <div className="menu-separator" />
           <button

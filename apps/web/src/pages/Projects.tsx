@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import type { Project, ProjectStatus, User } from '@nonlinear/shared';
+import type { Grouping, Project, ProjectStatus, User } from '@nonlinear/shared';
 import { PROJECT_STATUSES } from '@nonlinear/shared';
 import { api } from '../api.js';
 import { formatDate, relativeTime, useStore } from '../store.js';
@@ -18,12 +18,12 @@ import {
 } from '../icons.js';
 import {
   applyFilters,
-  EMPTY_FILTERS,
   GroupedIssueList,
   useGroupedIssues,
   ViewControls,
   type IssueFilters,
 } from '../issueViews.js';
+import { patchScopeView, toggleScopeCollapsed, useScopeView } from '../viewState.js';
 import { openNewIssue } from '../NewIssueDialog.js';
 import { toggleFavorite } from '../actions.js';
 import { OriginCrumb, OriginProvider, originState, useNavOrigin, useUrlTab } from '../nav.js';
@@ -667,7 +667,10 @@ function ProjectDetail({ project }: { project: Project }) {
   const navigate = useNavigate();
   const projectOrigin = useNavOrigin();
   const [tab, setTab] = useUrlTab(['overview', 'issues'] as const, 'overview');
-  const [filters, setFilters] = useState<IssueFilters>(EMPTY_FILTERS);
+  const scope = `project:${project.id}`;
+  const view = useScopeView(scope);
+  const { filters, grouping, sort } = view;
+  const setFilters = (f: IssueFilters) => patchScopeView(scope, { filters: f });
   const [statusAnchor, setStatusAnchor] = useState<Anchor | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<Anchor | null>(null);
   const [milestoneName, setMilestoneName] = useState('');
@@ -682,7 +685,7 @@ function ProjectDetail({ project }: { project: Project }) {
       ),
     [issues, project.id, filters],
   );
-  const grouped = useGroupedIssues(projectIssues, 'state');
+  const grouped = useGroupedIssues(projectIssues, grouping, undefined, false, sort);
   const lead = project.leadId ? users[project.leadId] : null;
   const projectMilestones = Object.values(milestones)
     .filter((m) => m.projectId === project.id)
@@ -843,6 +846,10 @@ function ProjectDetail({ project }: { project: Project }) {
           <ViewControls
             filters={filters}
             onFilters={setFilters}
+            grouping={grouping}
+            onGrouping={(g: Grouping) => patchScopeView(scope, { grouping: g })}
+            sort={sort}
+            onSort={(s) => patchScopeView(scope, { sort: s })}
             extra={
               <button
                 className="btn ghost"
@@ -865,7 +872,14 @@ function ProjectDetail({ project }: { project: Project }) {
                 from: projectOrigin ?? undefined,
               }}
             >
-              <GroupedIssueList groups={grouped} grouping="state" />
+              <GroupedIssueList
+                groups={grouped}
+                grouping={grouping}
+                showState={grouping !== 'state'}
+                draggable={sort === 'manual'}
+                collapsed={new Set(view.collapsed)}
+                onToggleCollapse={(key) => toggleScopeCollapsed(scope, key)}
+              />
             </OriginProvider>
           </div>
         </>

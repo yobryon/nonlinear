@@ -2,8 +2,16 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import { useNavigate } from 'react-router-dom';
 import { create } from 'zustand';
 import { SortableList, type SortableDrop } from './sortable.js';
-import type { Issue, Label, Priority, User, WorkflowState } from '@nonlinear/shared';
-import { PRIORITY_LABELS, keyBetween } from '@nonlinear/shared';
+import type {
+  Grouping,
+  IssueSort,
+  Issue,
+  Label,
+  Priority,
+  User,
+  WorkflowState,
+} from '@nonlinear/shared';
+import { GROUPINGS, ISSUE_SORTS, PRIORITY_LABELS, keyBetween } from '@nonlinear/shared';
 import { issueKey, formatDate, relativeTime, sortedStates, useStore, type ById } from './store.js';
 import { Avatar, Picker, Popover, toast, type Anchor, anchorFromMouse } from './ui.js';
 import {
@@ -11,6 +19,8 @@ import {
   StateIcon,
   PlusIcon,
   CloseIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   FilterIcon,
   CopyIcon,
   LinkIcon,
@@ -79,7 +89,24 @@ export function applyFilters(issues: Issue[], f: IssueFilters): Issue[] {
 
 /* ================= grouping & sorting ================= */
 
-export type Grouping = 'state' | 'priority' | 'assignee';
+// The grouping/sort vocabulary lives in shared (persisted on saved views);
+// re-export so pages can keep importing it from here alongside the helpers.
+export type { Grouping, IssueSort };
+
+export const GROUPING_LABELS: Record<Grouping, string> = {
+  state: 'Status',
+  priority: 'Priority',
+  assignee: 'Assignee',
+  none: 'No grouping',
+};
+
+export const SORT_LABELS: Record<IssueSort, string> = {
+  manual: 'Manual',
+  priority: 'Priority',
+  updated: 'Last updated',
+  created: 'Created',
+  title: 'Title',
+};
 
 export interface IssueGroup {
   key: string;
@@ -108,6 +135,23 @@ export function sortForBoard(issues: Issue[]): Issue[] {
   return [...issues].sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1));
 }
 
+/** Sort a list of issues by the chosen key. 'manual' honors the drag order. */
+export function sortIssues(issues: Issue[], sortBy: IssueSort): Issue[] {
+  switch (sortBy) {
+    case 'manual':
+      return sortForBoard(issues);
+    case 'updated':
+      return [...issues].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    case 'created':
+      return [...issues].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    case 'title':
+      return [...issues].sort((a, b) => a.title.localeCompare(b.title));
+    case 'priority':
+    default:
+      return sortForList(issues);
+  }
+}
+
 export function groupIssues(
   issues: Issue[],
   grouping: Grouping,
@@ -116,9 +160,14 @@ export function groupIssues(
     users: ById<User>;
     teamId?: string;
   },
-  opts: { board?: boolean; hideEmpty?: boolean } = {},
+  opts: { board?: boolean; hideEmpty?: boolean; sortBy?: IssueSort } = {},
 ): IssueGroup[] {
-  const sort = opts.board ? sortForBoard : sortForList;
+  const sort = opts.board
+    ? sortForBoard
+    : (rows: Issue[]) => sortIssues(rows, opts.sortBy ?? 'priority');
+  if (grouping === 'none') {
+    return [{ key: '__all', label: '', icon: null, issues: sort(issues) }];
+  }
   if (grouping === 'state') {
     if (ctx.teamId) {
       const states = sortedStates(Object.values(ctx.states), ctx.teamId);
@@ -538,6 +587,7 @@ export function IssueContextMenu({
 
 /** What dropping into a group changes, given the active grouping. */
 function groupPatch(grouping: Grouping, group: IssueGroup): Record<string, unknown> | null {
+  if (grouping === 'none') return {}; // reorder only — no grouped field to reassign
   if (grouping === 'state') return group.stateId ? { stateId: group.stateId } : null;
   if (grouping === 'priority') return { priority: Number(group.key) as Priority };
   return { assigneeId: group.key === '__unassigned' ? null : group.key };
@@ -548,27 +598,42 @@ export function GroupedIssueList({
   grouping,
   showState = true,
   onQuickAdd,
+  draggable,
+  collapsed,
+  onToggleCollapse,
 }: {
   groups: IssueGroup[];
-  /** Enables dragging rows between groups; drop reassigns the grouped field. */
+  /** The active grouping — used to compute the drop patch and header chrome. */
   grouping?: Grouping;
   showState?: boolean;
   onQuickAdd?: (group: IssueGroup) => void;
+  /**
+   * Whether rows can be dragged to reorder / reassign. Defaults to on whenever
+   * the list is grouped (except 'none'); pass explicitly to tie it to a manual
+   * sort so a chosen sort order isn't silently overwritten by drag order.
+   */
+  draggable?: boolean;
+  /** Group keys currently collapsed (header shown, rows hidden). */
+  collapsed?: Set<string>;
+  onToggleCollapse?: (groupKey: string) => void;
 }) {
   const teams = useStore((s) => s.teams);
   const issuesById = useStore((s) => s.issues);
 
+  const canDrag = (draggable ?? !!grouping) && grouping !== 'none';
+  const flat = grouping === 'none' || !grouping;
+
   // When drag is enabled, present each group in manual (sortOrder) order so
-  // reordering is stable and remembered.
+  // reordering is stable and remembered; otherwise keep the chosen sort.
   const orderedGroups = useMemo(
     () =>
-      grouping
+      canDrag
         ? groups.map((g) => ({
             ...g,
             issues: [...g.issues].sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1)),
           }))
         : groups,
-    [groups, grouping],
+    [groups, canDrag],
   );
   const groupsRef = useRef(orderedGroups);
   groupsRef.current = orderedGroups;
@@ -583,7 +648,7 @@ export function GroupedIssueList({
   // Reorder + cross-group reassignment on drop, computed from the dropped
   // neighbors (fractional key) plus the destination group's grouped field.
   const handleDrop = (drop: SortableDrop) => {
-    if (!grouping) return;
+    if (!canDrag || !grouping) return;
     const group = groupsRef.current.find((g) => g.key === drop.toGroup);
     const groupChange = group ? groupPatch(grouping, group) : null;
     if (!group || !groupChange) return;
@@ -612,39 +677,69 @@ export function GroupedIssueList({
 
   return (
     <div>
-      {orderedGroups.map((group) => (
-        <Fragment key={group.key}>
-          {group.issues.length > 0 && (
-            <div className="drop-group">
-              <div className="group-header">
-                {group.icon}
-                <span>{group.label}</span>
-                <span className="count">{group.issues.length}</span>
-                {onQuickAdd && (
-                  <button className="icon-btn add" onClick={() => onQuickAdd(group)}>
-                    <PlusIcon size={14} />
-                  </button>
-                )}
-              </div>
+      {orderedGroups.map((group) => {
+        if (group.issues.length === 0) return null;
+        const isCollapsed = collapsed?.has(group.key) ?? false;
+        return (
+          <div className="drop-group" key={group.key}>
+            {!flat &&
+              (onToggleCollapse ? (
+                <button
+                  className="group-header collapsible"
+                  onClick={() => onToggleCollapse(group.key)}
+                  aria-expanded={!isCollapsed}
+                >
+                  <span className="group-caret">
+                    {isCollapsed ? <ChevronRightIcon size={13} /> : <ChevronDownIcon size={13} />}
+                  </span>
+                  {group.icon}
+                  <span>{group.label}</span>
+                  <span className="count">{group.issues.length}</span>
+                  {onQuickAdd && (
+                    <span
+                      className="icon-btn add"
+                      role="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onQuickAdd(group);
+                      }}
+                    >
+                      <PlusIcon size={14} />
+                    </span>
+                  )}
+                </button>
+              ) : (
+                <div className="group-header">
+                  {group.icon}
+                  <span>{group.label}</span>
+                  <span className="count">{group.issues.length}</span>
+                  {onQuickAdd && (
+                    <button className="icon-btn add" onClick={() => onQuickAdd(group)}>
+                      <PlusIcon size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            {!isCollapsed && (
               <SortableList
                 sortGroup={group.key}
-                group={grouping ? 'issue-list' : undefined}
+                group={canDrag ? 'issue-list' : undefined}
                 onDrop={handleDrop}
-                disabled={!grouping}
+                disabled={!canDrag}
               >
                 {group.issues.map((issue) => (
                   <IssueRow
                     key={issue.id}
                     issue={issue}
                     showState={showState}
-                    sortId={grouping ? issue.id : undefined}
+                    sortId={canDrag ? issue.id : undefined}
                   />
                 ))}
               </SortableList>
-            </div>
-          )}
-        </Fragment>
-      ))}
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -884,6 +979,8 @@ export function ViewControls({
   onFilters,
   grouping,
   onGrouping,
+  sort,
+  onSort,
   teamId,
   extra,
 }: {
@@ -891,6 +988,8 @@ export function ViewControls({
   onFilters: (f: IssueFilters) => void;
   grouping?: Grouping;
   onGrouping?: (g: Grouping) => void;
+  sort?: IssueSort;
+  onSort?: (s: IssueSort) => void;
   teamId?: string;
   extra?: ReactNode;
 }) {
@@ -902,6 +1001,7 @@ export function ViewControls({
     'root',
   );
   const [groupAnchor, setGroupAnchor] = useState<Anchor | null>(null);
+  const [sortAnchor, setSortAnchor] = useState<Anchor | null>(null);
 
   const closeFilter = () => {
     setFilterAnchor(null);
@@ -970,6 +1070,17 @@ export function ViewControls({
 
       <span className="grow" />
       {extra}
+      {sort && onSort && (
+        <button
+          className="filter-pill set"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setSortAnchor({ x: rect.left, y: rect.bottom + 4 });
+          }}
+        >
+          Sort: {SORT_LABELS[sort]}
+        </button>
+      )}
       {grouping && onGrouping && (
         <button
           className="filter-pill set"
@@ -978,22 +1089,30 @@ export function ViewControls({
             setGroupAnchor({ x: rect.left, y: rect.bottom + 4 });
           }}
         >
-          Group:{' '}
-          {grouping === 'state' ? 'Status' : grouping === 'priority' ? 'Priority' : 'Assignee'}
+          Group: {GROUPING_LABELS[grouping]}
         </button>
       )}
 
+      {sortAnchor && onSort && (
+        <Picker
+          anchor={sortAnchor}
+          onClose={() => setSortAnchor(null)}
+          searchable={false}
+          selectedIds={new Set([sort ?? 'priority'])}
+          items={ISSUE_SORTS.map((s) => ({ id: s, label: SORT_LABELS[s] }))}
+          onPick={(id) => {
+            onSort(id as IssueSort);
+            setSortAnchor(null);
+          }}
+        />
+      )}
       {groupAnchor && onGrouping && (
         <Picker
           anchor={groupAnchor}
           onClose={() => setGroupAnchor(null)}
           searchable={false}
           selectedIds={new Set([grouping ?? 'state'])}
-          items={[
-            { id: 'state', label: 'Status' },
-            { id: 'priority', label: 'Priority' },
-            { id: 'assignee', label: 'Assignee' },
-          ]}
+          items={GROUPINGS.map((g) => ({ id: g, label: GROUPING_LABELS[g] }))}
           onPick={(id) => {
             onGrouping(id as Grouping);
             setGroupAnchor(null);
@@ -1130,6 +1249,7 @@ export function useGroupedIssues(
   grouping: Grouping,
   teamId?: string,
   board?: boolean,
+  sortBy: IssueSort = 'priority',
 ): IssueGroup[] {
   const states = useStore((s) => s.workflowStates);
   const users = useStore((s) => s.users);
@@ -1139,8 +1259,8 @@ export function useGroupedIssues(
         issues,
         grouping,
         { states, users, teamId },
-        { board, hideEmpty: !board && grouping === 'state' },
+        { board, hideEmpty: !board && grouping === 'state', sortBy },
       ),
-    [issues, grouping, states, users, teamId, board],
+    [issues, grouping, states, users, teamId, board, sortBy],
   );
 }

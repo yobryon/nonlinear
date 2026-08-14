@@ -79,8 +79,11 @@ export const ESTIMATE_SCALE_VALUES: Record<
 export const VIEW_DISPLAYS = ['list', 'board'] as const;
 export type ViewDisplay = (typeof VIEW_DISPLAYS)[number];
 
-export const GROUPINGS = ['state', 'priority', 'assignee'] as const;
+export const GROUPINGS = ['state', 'priority', 'assignee', 'none'] as const;
 export type Grouping = (typeof GROUPINGS)[number];
+
+export const ISSUE_SORTS = ['manual', 'priority', 'updated', 'created', 'title'] as const;
+export type IssueSort = (typeof ISSUE_SORTS)[number];
 
 export const WEBHOOK_FORMATS = ['json', 'slack'] as const;
 export type WebhookFormat = (typeof WEBHOOK_FORMATS)[number];

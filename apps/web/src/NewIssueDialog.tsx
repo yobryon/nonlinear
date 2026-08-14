@@ -41,8 +41,25 @@ export const useNewIssue = create<NewIssueState>((set) => ({
   hide: () => set({ open: false, defaults: {} }),
 }));
 
-export function openNewIssue(defaults?: NewIssueState['defaults']): void {
-  useNewIssue.getState().show(defaults);
+/**
+ * Infer which team a new issue most likely belongs to from where the user is:
+ * a team route, a project, or a cycle. Returns undefined off team-bound areas
+ * (e.g. Awaiting me), where the dialog falls back to the first team.
+ */
+function inferTeamId(): string | undefined {
+  const { pathname } = window.location;
+  const { teams, projects, cycles } = useStore.getState();
+  const team = pathname.match(/^\/team\/([^/]+)(\/|$)/);
+  if (team) return Object.values(teams).find((t) => t.key === team[1])?.id;
+  const project = pathname.match(/^\/project\/([^/]+)/);
+  if (project) return projects[project[1]!]?.teamIds[0];
+  const cycle = pathname.match(/^\/cycle\/([^/]+)/);
+  if (cycle) return cycles[cycle[1]!]?.teamId;
+  return undefined;
+}
+
+export function openNewIssue(defaults: NewIssueState['defaults'] = {}): void {
+  useNewIssue.getState().show({ ...defaults, teamId: defaults.teamId ?? inferTeamId() });
 }
 
 export function NewIssueDialog() {

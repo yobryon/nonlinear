@@ -13,6 +13,7 @@ import { startSync } from './sync.js';
 import { Sidebar } from './Sidebar.js';
 import { CommandPalette, openPalette, usePalette } from './CommandPalette.js';
 import { NewIssueDialog, openNewIssue, useNewIssue } from './NewIssueDialog.js';
+import { ShortcutsDialog, useHelp } from './ShortcutsDialog.js';
 import { Toasts } from './ui.js';
 import { MenuIcon, PencilIcon, SearchIcon, SpinnerIcon } from './icons.js';
 import { applyPreferences, applyStoredPreferences } from './preferences.js';
@@ -65,7 +66,16 @@ function Shortcuts() {
         return;
       }
       if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (usePalette.getState().open || useNewIssue.getState().open) return;
+      // '?' toggles the shortcut sheet from anywhere; it's the one shortcut we
+      // still honor while the sheet itself is open (so it can dismiss it). Some
+      // keyboards/automation report shift+/ as '/', so match either shape.
+      if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+        e.preventDefault();
+        useHelp.getState().toggle();
+        return;
+      }
+      if (usePalette.getState().open || useNewIssue.getState().open || useHelp.getState().open)
+        return;
 
       const key = e.key.toLowerCase();
       if (pendingG) {
@@ -237,6 +247,7 @@ export function App() {
           <Shortcuts />
           <CommandPalette />
           <NewIssueDialog />
+          <ShortcutsDialog />
           <BulkBar />
         </>
       )}

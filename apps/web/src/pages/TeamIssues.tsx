@@ -7,13 +7,13 @@ import { anchorFromEvent, Popover, toast, toastError, type Anchor } from '../ui.
 import {
   applyFilters,
   Board,
-  EMPTY_FILTERS,
   filtersActive,
   GroupedIssueList,
   useGroupedIssues,
   ViewControls,
   type IssueFilters,
 } from '../issueViews.js';
+import { patchScopeView, toggleScopeCollapsed, useScopeView } from '../viewState.js';
 import { BoardIcon, ListIcon, PlusIcon } from '../icons.js';
 import { openNewIssue } from '../NewIssueDialog.js';
 import { OriginProvider, useUrlTab } from '../nav.js';
@@ -96,11 +96,15 @@ export function TeamIssuesPage() {
   const states = useStore((s) => s.workflowStates);
 
   const [tab, setTab] = useUrlTab(['all', 'active', 'backlog'] as const, 'all');
-  const [display, setDisplay] = useState<'list' | 'board'>('list');
-  const [grouping, setGrouping] = useState<Grouping>('state');
-  const [filters, setFilters] = useState<IssueFilters>(EMPTY_FILTERS);
 
   const team = Object.values(teams).find((t) => t.key === teamKey);
+  // Sticky per-team view: filter/group/sort/display/collapsed survive a hop
+  // into an issue and back, and a reload. The tab stays in the URL.
+  const scope = team ? `team:${team.id}` : '__none';
+  const view = useScopeView(scope);
+  const { filters, grouping, sort, display } = view;
+  const setFilters = (f: IssueFilters) => patchScopeView(scope, { filters: f });
+  const setGrouping = (g: Grouping) => patchScopeView(scope, { grouping: g });
 
   const visible = useMemo(() => {
     if (!team) return [];
@@ -132,6 +136,7 @@ export function TeamIssuesPage() {
     display === 'board' ? 'state' : grouping,
     team?.id,
     display === 'board',
+    sort,
   );
 
   if (!team) {
@@ -175,14 +180,14 @@ export function TeamIssuesPage() {
           <button
             className={`icon-btn${display === 'list' ? ' active' : ''}`}
             title="List view"
-            onClick={() => setDisplay('list')}
+            onClick={() => patchScopeView(scope, { display: 'list' })}
           >
             <ListIcon size={15} />
           </button>
           <button
             className={`icon-btn${display === 'board' ? ' active' : ''}`}
             title="Board view"
-            onClick={() => setDisplay('board')}
+            onClick={() => patchScopeView(scope, { display: 'board' })}
           >
             <BoardIcon size={15} />
           </button>
@@ -193,6 +198,8 @@ export function TeamIssuesPage() {
         onFilters={setFilters}
         grouping={display === 'list' ? grouping : undefined}
         onGrouping={display === 'list' ? setGrouping : undefined}
+        sort={display === 'list' ? sort : undefined}
+        onSort={display === 'list' ? (s) => patchScopeView(scope, { sort: s }) : undefined}
         teamId={team.id}
         extra={
           filtersActive(filters) ? (
@@ -218,6 +225,9 @@ export function TeamIssuesPage() {
               grouping={grouping}
               showState={grouping !== 'state'}
               onQuickAdd={quickAdd}
+              draggable={sort === 'manual'}
+              collapsed={new Set(view.collapsed)}
+              onToggleCollapse={(key) => toggleScopeCollapsed(scope, key)}
             />
           ) : (
             <Board groups={grouped} onQuickAdd={quickAdd} />
