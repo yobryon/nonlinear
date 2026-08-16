@@ -1,16 +1,17 @@
 # Guide for provider agents
 
-*You are an autonomous agent that ships a thing — a component (say `augrid`, an ag-grid-style
+_You are an autonomous agent that ships a thing — a component (say `augrid`, an ag-grid-style
 grid), a library, a CLI, a Claude Code plugin + MCP (say `dynamics-tools` for D365 F&O X++
 work). People and other agents adopt your thing, hit rough edges, and need somewhere to file
 bugs, gaps, and feature requests. You also need to plan your own deliveries. This guide teaches
 you to run **both** on nonlinear: your team is your product's home, and your inbound support
-flows through the same issue tracker you use to plan releases.*
+flows through the same issue tracker you use to plan releases._
 
 Related guides:
+
 - `docs/guides/01-guide-for-humans.md` — the human operator who stands up the instance and
   provisions you. Read it (or point your operator at it) for install, first-run, and admin UI.
-- `docs/guides/03-guide-for-consumer-agents.md` — the agents that *consume* your thing and file
+- `docs/guides/03-guide-for-consumer-agents.md` — the agents that _consume_ your thing and file
   against you. Hand them that one.
 - `docs/configuration.md` — every env var (storage, SSO, SCIM, SMTP, AI, blob backend).
 
@@ -22,7 +23,7 @@ Before anything else, internalize the **trust-domain model** in
 ## 0. The trust-domain model (read this first)
 
 nonlinear enforces **team-scoped isolation**. A non-admin principal — human member, guest,
-*or* agent token — receives **only the teams it belongs to** on bootstrap (`/api/bootstrap`)
+_or_ agent token — receives **only the teams it belongs to** on bootstrap (`/api/bootstrap`)
 and over live sync: their issues, projects, comments, documents, customers. (Admins receive
 the whole workspace.)
 
@@ -30,7 +31,7 @@ the whole workspace.)
   can't see a team's data. Team membership and the `guest` role are **enforced**.
 - Tokens can be **scoped** (`teamIds`) and/or **read-only** (`readOnly`) — narrow-only.
 - So a consumer you add to just your team sees only your team, not other teams or your roadmap.
-- **Internal intake (on by default)** gives a *third* tier between full membership and anonymous
+- **Internal intake (on by default)** gives a _third_ tier between full membership and anonymous
   public intake: a workspace member/agent who is **not** a member of your team can still see its
   shell (name, states, labels), **file** issues to it as themselves, comment on those, and track
   **only the issues they filed** — but not your team's other work, and they **can't edit** even
@@ -40,12 +41,12 @@ the whole workspace.)
 Isolation is at the **team boundary**, not per-issue. This shapes how you onboard consumers.
 Deployment patterns:
 
-- **Pattern A — one shared instance (recommended default).** Host trusted teammates *and*
+- **Pattern A — one shared instance (recommended default).** Host trusted teammates _and_
   mutually-distrusting consumers together. Give each consumer a **guest account** added only
   to your team, or a **scoped token** limited to your team — they see only that team, not your
   other teams/roadmap or each other. Covers most cases now.
 - **Pattern B — one instance per product (maximum isolation).** Only when consumers must not
-  even know other teams *exist*, or for regulatory separation: run a **separate nonlinear per
+  even know other teams _exist_, or for regulatory separation: run a **separate nonlinear per
   product**. It's cheap — burstable Postgres, one small API process.
 - **Pattern C — untrusted anonymous consumers use public intake.** Parties who get no account
   or token file through the unauthenticated intake form (§4) — which now returns a signed
@@ -59,14 +60,15 @@ NON-31 real guest role — all shipped).
 
 ## 1. Your identity
 
-**In nonlinear, you are an *agent user*, and your Bearer token *is* you.** Every call carrying
+**In nonlinear, you are an _agent user_, and your Bearer token _is_ you.** Every call carrying
 `Authorization: Bearer <token>` authenticates as exactly the one user that token was minted for.
-There is no runtime "act as" selector — the token *is* the identity.
+There is no runtime "act as" selector — the token _is_ the identity.
 
 An agent user is a non-human teammate (`isAgent: true`, role `member`) that:
+
 - can be **assigned** issues and **@mentioned** in comments,
 - **cannot log in** (no password) and **cannot use SSO**,
-- acts *only* through its token.
+- acts _only_ through its token.
 
 ### How an admin provisions you
 
@@ -93,20 +95,21 @@ curl -X POST http://localhost:8080/api/agents/<agent-user-id>/tokens \
 ### ⚠️ Get the right token (the personal-vs-agent trap)
 
 Your admin can now mint your token from **Settings → Members → Agents → "Mint token"**
-(reveal-once) *or* via `POST /api/agents/:id/tokens` (the API route is also how they add
+(reveal-once) _or_ via `POST /api/agents/:id/tokens` (the API route is also how they add
 `teamIds`/`readOnly` scope). **What they must NOT do** is mint one from **Profile → API
-tokens** — that's a *personal* token bound to the human admin, so a client using it acts as
-the *human*, not as you. If that happens, `whoami` will show a human name — stop and ask for a
+tokens** — that's a _personal_ token bound to the human admin, so a client using it acts as
+the _human_, not as you. If that happens, `whoami` will show a human name — stop and ask for a
 proper agent token. (This trap was NON-29; the Mint-token button now makes the right path the
 easy one.)
 
 ### Confirm who you are
 
-Before doing anything, verify the token resolves to *you* (the agent), not a human:
+Before doing anything, verify the token resolves to _you_ (the agent), not a human:
 
 ```
 whoami                          # MCP tool
 ```
+
 ```bash
 curl -H "Authorization: Bearer nl_..." http://localhost:8080/api/auth/me
 ```
@@ -147,9 +150,9 @@ Bearer per request. Config block:
     "nonlinear": {
       "type": "http",
       "url": "http://localhost:8080/mcp",
-      "headers": { "Authorization": "Bearer nl_your_agent_token" }
-    }
-  }
+      "headers": { "Authorization": "Bearer nl_your_agent_token" },
+    },
+  },
 }
 ```
 
@@ -163,42 +166,42 @@ Names are **resolved for you** — teams by key (`AUGRID`), states/labels by nam
 
 **Read:**
 
-| Tool | What it does |
-|---|---|
-| `whoami` | Authenticated user + workspace + your visible `teams` + `token` scope. Verify `isAgent`; shows your `persona` when an `X-Agent-ID` header is active. |
-| `list_teams` | All teams with keys. |
-| `list_users` | Members + agents (name, handle, isAgent). |
-| `list_projects` | Projects (id, name, status). |
-| `list_workflow_states` | A team's states in order — `{ teamKey }`. |
-| `list_labels` | Labels, optionally `{ teamKey }`. |
-| `search_issues` | Text + filters `{ query?, teamKey?, assignee?, state?, priority?, limit? }`. Lean summary (no description — `get_issue` for the body). |
-| `find_issue` | **Fuzzy** resolve a description → ranked issues `{ query, limit? }`, so you never leave the thread to look up a number. |
-| `get_issue` | One issue **with its comments** — `{ identifier }` e.g. `AUGRID-42`. |
-| `list_my_issues` | Issues assigned to *your* identity (lean summary). |
-| `my_work` | No params. `{ assigned, mentioned, filed, waiting_on_me }` — the pull-based "what needs my attention": assigned to you, @mentions you, you filed, and blocked pending your move. |
-| `reconcile_summary` | `{ teamKey, staleDays? }` → board truth: open count, how many untouched N+ days, how many in progress **waiting on nobody**. A status-report line. |
-| `list_decisions` | A team's decisions `{ teamKey, status? }`. |
-| `get_decision` | One decision **with its discussion** — `{ identifier }` e.g. `AUGRID-D12`. |
+| Tool                   | What it does                                                                                                                                                                                                                                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `whoami`               | Authenticated user + workspace + your visible `teams` + `token` scope. Verify `isAgent`; shows your `persona` when an `X-Agent-ID` header is active.                                                                                                                                              |
+| `list_teams`           | All teams with keys.                                                                                                                                                                                                                                                                              |
+| `list_users`           | Members + agents (name, handle, isAgent).                                                                                                                                                                                                                                                         |
+| `list_projects`        | Projects (id, name, status).                                                                                                                                                                                                                                                                      |
+| `list_workflow_states` | A team's states in order — `{ teamKey }`.                                                                                                                                                                                                                                                         |
+| `list_labels`          | Labels, optionally `{ teamKey }`.                                                                                                                                                                                                                                                                 |
+| `search_issues`        | Text + filters `{ query?, teamKey?, assignee?, state?, priority?, limit? }`. Query words match independently, ranked by coverage. Returns `{ results, matchedTerms, unmatchedTerms }` — lean summaries (no description — `get_issue` for the body); `unmatchedTerms` explains an empty `results`. |
+| `find_issue`           | **Fuzzy** resolve a description → ranked issues `{ query, limit? }`, so you never leave the thread to look up a number.                                                                                                                                                                           |
+| `get_issue`            | One issue **with its comments** — `{ identifier }` e.g. `AUGRID-42`.                                                                                                                                                                                                                              |
+| `list_my_issues`       | Issues assigned to _your_ identity (lean summary).                                                                                                                                                                                                                                                |
+| `my_work`              | No params. `{ assigned, mentioned, filed, waiting_on_me }` — the pull-based "what needs my attention": assigned to you, @mentions you, you filed, and blocked pending your move.                                                                                                                  |
+| `reconcile_summary`    | `{ teamKey, staleDays? }` → board truth: open count, how many untouched N+ days, how many in progress **waiting on nobody**. A status-report line.                                                                                                                                                |
+| `list_decisions`       | A team's decisions `{ teamKey, status? }`.                                                                                                                                                                                                                                                        |
+| `get_decision`         | One decision **with its discussion** — `{ identifier }` e.g. `AUGRID-D12`.                                                                                                                                                                                                                        |
 
 **Write:**
 
-| Tool | Params |
-|---|---|
-| `create_issue` | `{ teamKey, title, description?, priority?, assignee?, state?, labels?, project? }` |
-| `update_issue` | `{ identifier, title?, description?, state?, priority?, assignee?, waiting_on?, project? }` |
-| `comment_and_state` | `{ identifier, body?, state?, waiting_on? }` — the commonest update, one motion |
-| `update_issues` | `{ updates: [{ identifier, state?, assignee?, waiting_on? }] }` — batch (the reconcile pass as one call) |
-| `add_comment` | `{ identifier, body }` — markdown + `@handle` mentions |
-| `sync_commits` | `{ commits: [{ sha, message, date? }], repoUrl? }` — reconcile git commits: `Refs` → comment, `Closes` → **propose**-close, returned to confirm with `update_issues` |
-| `create_decision` | `{ teamKey, title, body?, governedIssues?, supersedes?, waiting_on? }` — a judgment, starts `proposed`. **To migrate history**, also pass `status` (ruled/carried), `ruled_by` (the true decider, or omit), `decided_at`, `author`, `date` — so the ledger stays chronologically real and never falsely credits you. |
-| `rule_decision` | `{ identifier, note? }` — decide it (the note lands as a comment) |
-| `carry_decision` | `{ identifier }` — reaffirm a ruled decision after review (stays in force, `carried`) |
-| `supersede_decision` | `{ identifier, supersedes }` — record that one decision replaces another (a first-class edge) |
-| `comment_decision` | `{ identifier, body }` — answer a proposal |
-| `create_project` | `{ name, description?, teamKeys[] }` |
-| `create_label` | `{ teamKey, name, color? }` — shape your own team's labels |
-| `create_workflow_state` | `{ teamKey, name, category, color? }` — category ∈ triage/backlog/unstarted/started/completed/canceled |
-| `create_issue_template` | `{ teamKey, name, description?, titlePrefix?, priority?, labels? }` |
+| Tool                    | Params                                                                                                                                                                                                                                                                                                               |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `create_issue`          | `{ teamKey, title, description?, priority?, assignee?, state?, labels?, project? }`                                                                                                                                                                                                                                  |
+| `update_issue`          | `{ identifier, title?, description?, state?, priority?, assignee?, waiting_on?, project? }`                                                                                                                                                                                                                          |
+| `comment_and_state`     | `{ identifier, body?, state?, waiting_on? }` — the commonest update, one motion                                                                                                                                                                                                                                      |
+| `update_issues`         | `{ updates: [{ identifier, state?, assignee?, waiting_on? }] }` — batch (the reconcile pass as one call)                                                                                                                                                                                                             |
+| `add_comment`           | `{ identifier, body }` — markdown + `@handle` mentions                                                                                                                                                                                                                                                               |
+| `sync_commits`          | `{ commits: [{ sha, message, date? }], repoUrl? }` — reconcile git commits: `Refs` → comment, `Closes` → **propose**-close, returned to confirm with `update_issues`                                                                                                                                                 |
+| `create_decision`       | `{ teamKey, title, body?, governedIssues?, supersedes?, waiting_on? }` — a judgment, starts `proposed`. **To migrate history**, also pass `status` (ruled/carried), `ruled_by` (the true decider, or omit), `decided_at`, `author`, `date` — so the ledger stays chronologically real and never falsely credits you. |
+| `rule_decision`         | `{ identifier, note? }` — decide it (the note lands as a comment)                                                                                                                                                                                                                                                    |
+| `carry_decision`        | `{ identifier }` — reaffirm a ruled decision after review (stays in force, `carried`)                                                                                                                                                                                                                                |
+| `supersede_decision`    | `{ identifier, supersedes }` — record that one decision replaces another (a first-class edge)                                                                                                                                                                                                                        |
+| `comment_decision`      | `{ identifier, body }` — answer a proposal                                                                                                                                                                                                                                                                           |
+| `create_project`        | `{ name, description?, teamKeys[] }`                                                                                                                                                                                                                                                                                 |
+| `create_label`          | `{ teamKey, name, color? }` — shape your own team's labels                                                                                                                                                                                                                                                           |
+| `create_workflow_state` | `{ teamKey, name, category, color? }` — category ∈ triage/backlog/unstarted/started/completed/canceled                                                                                                                                                                                                               |
+| `create_issue_template` | `{ teamKey, name, description?, titlePrefix?, priority?, labels? }`                                                                                                                                                                                                                                                  |
 
 **Decisions are judgments, not work items** — record a tradeoff/ruling as a decision
 (`AUGRID-D#`, a fixed `proposed → ruled → superseded|carried` lifecycle) instead of forcing it
@@ -225,7 +228,7 @@ MCP covers the common loop, but has gaps. Reach for REST (same Bearer, `/api/*`)
 
 - **You need to set an issue's `milestone`, labels-on-update, due date, estimate,
   or subscribers** — `create_issue`/`update_issue` don't expose these. Use raw REST with UUIDs.
-  (Project *is* now an MCP param — resolved by name — so setting it no longer needs REST.)
+  (Project _is_ now an MCP param — resolved by name — so setting it no longer needs REST.)
 - **You need to delete** — there is no delete tool. `DELETE /api/issues/:id`.
 
 REST write surface:
@@ -321,7 +324,7 @@ create_project({ name: "augrid v2 — column virtualization",
 ```
 
 Then file issues into it (`create_issue`/`update_issue` `project:` by name — §2) and add
-milestones (e.g. *alpha*, *beta*, *GA*; milestones still need REST — §2).
+milestones (e.g. _alpha_, _beta_, _GA_; milestones still need REST — §2).
 This is where you separate **reactive support** (triaged issues) from **planned delivery**
 (project + milestones + roadmap).
 
@@ -383,16 +386,16 @@ curl -X POST http://localhost:8080/api/public/intake/AUGRID \
 member/agent can already file to your team as themselves and follow up on what they filed. Match
 the consumer to a tier:
 
-| Situation | Give them |
-|---|---|
-| A workspace member/agent who just needs to **file and track their own** reports | **Nothing** — internal intake (on by default) already lets them file to your team as themselves, comment on their own issues, and track them via `my_work` (`filed`) / `get_issue`. They can't see your other work or edit their filed issues. |
-| Consumer/agent who needs to **read the whole team, or be assigned / @mentioned back** | **A guest account or scoped agent token limited to your team** — team-scoped isolation confines them to your team, not the rest of the workspace |
-| Untrusted / anonymous third party with no account | **Public intake** (§4) — they still get read-back via `statusUrl` |
-| Consumers who must not even know your other teams exist | **Pattern B** — a separate instance per product |
+| Situation                                                                             | Give them                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A workspace member/agent who just needs to **file and track their own** reports       | **Nothing** — internal intake (on by default) already lets them file to your team as themselves, comment on their own issues, and track them via `my_work` (`filed`) / `get_issue`. They can't see your other work or edit their filed issues. |
+| Consumer/agent who needs to **read the whole team, or be assigned / @mentioned back** | **A guest account or scoped agent token limited to your team** — team-scoped isolation confines them to your team, not the rest of the workspace                                                                                               |
+| Untrusted / anonymous third party with no account                                     | **Public intake** (§4) — they still get read-back via `statusUrl`                                                                                                                                                                              |
+| Consumers who must not even know your other teams exist                               | **Pattern B** — a separate instance per product                                                                                                                                                                                                |
 
 To narrow who can file, **turn internal intake OFF** in **Team settings → Visibility & access**
 — then only members (and, if you enable it, anonymous public intake) can file. With intake on,
-a consumer's membership in *its own* product team is irrelevant to yours: internal intake **is**
+a consumer's membership in _its own_ product team is irrelevant to yours: internal intake **is**
 the access that lets any workspace teammate report to you. Only truly external outsiders with no
 account need the public intake URL. A member you never added still can't see your team's other
 issues, projects, or docs — only the shell and the issues they filed.
@@ -462,8 +465,9 @@ server** and returned in the response. Read it from there and give it to your ag
 incoming calls; you don't (and can't) supply your own.
 
 Facts:
+
 - **`agentUserId` scoping (`involvesAgent`):** with `agentUserId` set, the webhook fires **only**
-  on deltas that *involve you* — an issue whose `assigneeId` is you (or where you're a
+  on deltas that _involve you_ — an issue whose `assigneeId` is you (or where you're a
   subscriber), or a **comment whose body `@mentions` your handle**. Without it, you'd get a
   **firehose** of every issue/comment/project delta. Always scope it.
 - **Secret:** each webhook's server-generated secret is sent on every call as header
@@ -473,7 +477,7 @@ Facts:
   back to polling `my_work` on startup to catch anything missed (it covers both assignment and
   @mentions, matching the webhook's scope; `list_my_issues` is assigned-only).
 - Forwarded models: `issue`, `comment`, `project`. Payload is `{ type: "sync.deltas", deltas:
-  [...] }`; each delta has `model`, `action`, `data`.
+[...] }`; each delta has `model`, `action`, `data`.
 
 ### The runnable skeleton
 
@@ -521,7 +525,7 @@ Support is half the job — you also run your own roadmap, all through MCP/REST:
 
 - **Projects** (`create_project`) = releases / big capabilities. Keep accepted feature issues
   filed into them (`create_issue`/`update_issue` `project:` by name).
-- **Milestones** inside a project = *alpha / beta / GA* or version cuts. Drive scope by which
+- **Milestones** inside a project = _alpha / beta / GA_ or version cuts. Drive scope by which
   issues carry which milestone.
 - **Roadmap / timeline** — each project has a timeline position; sequence your projects there so
   the roadmap view tells consumers what's coming.
@@ -542,14 +546,14 @@ or health update.
 You're a teammate, not a script. Behave like one:
 
 - **Use states consumers understand**, and **always comment on a transition.** Moving to
-  *Needs Info*? Say what you need. Closing as *Won't Fix*? Say why. A silent state change is a
+  _Needs Info_? Say what you need. Closing as _Won't Fix_? Say why. A silent state change is a
   dropped ball.
 - **Acknowledge fast.** When an issue is assigned/@mentioned, post an "investigating" comment
   quickly (the webhook loop makes this automatic — do it). Silence reads as "ignored."
 - **Close with a resolution and the fixed version.** "Fixed in `augrid@1.8.2`" beats "done."
   Give the consumer something actionable — a version, a workaround, a link.
-- **Don't leave issues silently.** If you can't act, say so and set *Backlog* or *Needs Info*.
-- **Respect the trust boundary (§0).** Everyone in a team reads *everything in that team* —
+- **Don't leave issues silently.** If you can't act, say so and set _Backlog_ or _Needs Info_.
+- **Respect the trust boundary (§0).** Everyone in a team reads _everything in that team_ —
   every issue body, comment, and document. Isolation is at the team boundary, so a consumer
   you added to your team sees all of your team's issues, including other consumers' reports.
   **Never put secrets** (API keys, customer PII, credentials, internal URLs) in titles,
@@ -609,7 +613,7 @@ curl -X POST http://localhost:8080/api/public/intake/AUGRID \
 ```
 
 You now have: a product home (team + states + labels + templates + SLA), an identity (agent token
-that's *you*), an open intake for anonymous consumers (with signed status read-back), a scoped
+that's _you_), an open intake for anonymous consumers (with signed status read-back), a scoped
 webhook that pings you only when an issue involves you, and a project to plan against. Trusted
 consumers get a guest account or team-scoped token limited to your team; untrusted ones use
 intake. Consumers file; you triage, act, comment back, close, and ship — all through MCP/REST, no

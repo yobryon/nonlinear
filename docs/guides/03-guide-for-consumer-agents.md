@@ -22,8 +22,8 @@ Everything downstream depends on this. Figure it out before you do anything else
 **three** ways you relate to the provider's team — two use a Bearer token (MCP/REST, §2), the
 third is an anonymous URL (§3):
 
-- **Member** — you have a token *in* the provider's team; full read/write of it (path (b)).
-- **Intake access** — you're in the provider's *workspace* but not a member of their team, and
+- **Member** — you have a token _in_ the provider's team; full read/write of it (path (b)).
+- **Intake access** — you're in the provider's _workspace_ but not a member of their team, and
   their team has **internal intake** on (the default). You can file to it and track **your own**
   issues, as yourself — no membership, no admin provisioning (path (a)). **For an authenticated
   fleet this is the usual path.**
@@ -36,7 +36,7 @@ need to ask for access.
 
 ### (a) You have intake access — the zero-setup path for a workspace fleet
 
-If you already have a token in the *same workspace* as the provider (because you own your own
+If you already have a token in the _same workspace_ as the provider (because you own your own
 tool there, or an admin gave your agent an account), you can very likely file to their team
 **without being added to it**. Internal intake is on by default and grants every workspace
 member/agent this third tier. The provider's team then shows up under `whoami`'s `intakeTeams`
@@ -59,7 +59,7 @@ applies to you, within these limits.
 ### (b) You're a member of the provider's team — the full path
 
 The provider's admin added your **agent user** to their team and minted a **Bearer token** for
-it. With that token you get the full loop: file issues, search *all* the team's issues, poll
+it. With that token you get the full loop: file issues, search _all_ the team's issues, poll
 status, comment anywhere you can read, and respond when the provider @mentions or assigns you.
 This is MCP + REST; `whoami` lists their team under `teams`, `list_teams` shows `access:"member"`.
 
@@ -93,7 +93,7 @@ What to do when you're on this path:
   in-progress / fixed; for questions or detail the provider reaches you another way — email,
   a shared channel, a release note.
 - **If you need to comment on issues or be @mentioned back, ask for an account.** If your agent
-  can be added to the provider's *workspace* at all, internal intake alone lets you file and
+  can be added to the provider's _workspace_ at all, internal intake alone lets you file and
   comment on **your own** issues (path (a)) with no team membership. To be assigned/@mentioned
   back or read the whole team, ask to be made a **member** of their team (path (b)). Either way
   everything in §2 opens up.
@@ -106,12 +106,12 @@ workspace file via **intake access**, and route true outsiders through **anonymo
 intake**. Being on intake access isn't a judgment — it's just the lightest authenticated trust
 level. More on this in §5.
 
-> **You file into the *provider's* team, so you need some access to *that* team — and if you're
+> **You file into the _provider's_ team, so you need some access to _that_ team — and if you're
 > in their workspace, internal intake already IS that access.** Filing isn't "post anywhere": you
-> create issues in a team you can either *see* (member) or *file to* (intake access). Because
+> create issues in a team you can either _see_ (member) or _file to_ (intake access). Because
 > internal intake is on by default, any workspace member/agent can file into any internal-intake
 > team directly — no membership needed — and track what they filed. You only hit a wall (`Unknown
-> team` over MCP, `403` over REST/GraphQL) if the team has internal intake **off** and you're not
+team` over MCP, `403` over REST/GraphQL) if the team has internal intake **off** and you're not
 > a member. Truly external outsiders — not in the workspace at all — use the **public intake URL**
 > (§3), which needs no account. If you own one tool and consume another, you'll be a **member** of
 > your own team and have at least **intake access** to the other's.
@@ -176,6 +176,13 @@ search_issues query="AUGRID-42"          # also matches identifiers
 search_issues query="focus" teamKey=AUGRID state="Todo" priority="high"
 ```
 
+Query words match independently and results are ranked by how many they cover, so a
+richer multi-word query is safe — it won't miss an issue just because the words aren't
+adjacent. The response is `{ results, matchedTerms, unmatchedTerms }`: **before you read
+an empty `results` as "nobody has raised this," check `unmatchedTerms`** — words listed
+there matched nothing within your filters, which usually means the query was
+over-specified, not that the board is empty. Re-run with the words that matched.
+
 If you find an existing issue for your problem, **don't file a new one** — add a comment
 to it (§2.5) with your extra repro/impact. That's more useful than a duplicate.
 
@@ -207,31 +214,39 @@ Notes and honest limits:
 
 **Description template** — paste this and fill it in:
 
-```markdown
+````markdown
 ## Environment
+
 - augrid version: 3.2.1 (npm), React 18.3, Chrome 126 / macOS
 - My project: "orderflow-web" (consumer). Filed by agent @orderflow-bot.
 
 ## What I expected
+
 Deleting a row should return focus to the next row.
 
 ## What actually happens
+
 Focus jumps to the drag handle of the deleted row's old position; keyboard nav is dead
 until I click elsewhere. Screen readers announce nothing.
 
 ## Steps to reproduce
+
 1. Render <AugridGrid> with 5 rows, keyboard-focus row 3.
 2. Press the delete-row shortcut (Cmd+Backspace).
 3. Press ArrowDown.
 
 ## Minimal repro
+
 ```tsx
 // 20 lines, no app-specific deps — see below in §4 for a full example
 ```
+````
 
 ## Impact
+
 Blocks keyboard-only and AT users of our order table. We can't ship the table view until
 this or a workaround lands. Currently pinned to augrid 3.1.4 as a stopgap.
+
 ```
 
 The keys that make it actionable: **version, exact repro, expected vs actual, a MINIMAL
@@ -243,7 +258,9 @@ knows which consumer this is and can @mention you back.
 You have real read-back on this path. Poll:
 
 ```
-get_issue identifier=AUGRID-42     # returns the issue + its full comment thread
+
+get_issue identifier=AUGRID-42 # returns the issue + its full comment thread
+
 ```
 
 or re-run `search_issues` to sweep several at once. Note `search_issues` and `list_my_issues`
@@ -269,14 +286,18 @@ When the provider comments asking for more (a version, a stack trace, a bigger r
 answer promptly with `add_comment`:
 
 ```
+
 add_comment identifier=AUGRID-42 body="Reproduces on 3.2.2 too. Minimal repro + trace: ..."
+
 ```
 
 Comments are markdown and support `@handle` mentions. When the issue reaches `completed`,
 **re-run your repro and close the loop**:
 
 ```
+
 add_comment identifier=AUGRID-42 body="Verified fixed on augrid 3.3.0 — focus returns to the next row and AT announces it. Thanks. Unpinning from 3.1.4."
+
 ```
 
 If it's _not_ actually fixed for you, say so with fresh evidence rather than silently
@@ -310,10 +331,12 @@ contract, verified against the code.
 ### 3.1 The endpoints
 
 ```
-GET  /api/public/intake/:teamKey/meta         -> { "teamName": "...", "enabled": true|false }
-POST /api/public/intake/:teamKey              -> creates an issue, returns { ok, identifier, statusUrl }
-GET  /api/public/intake/status/:id/:sig       -> submitter-facing status (state/category, no comments)
-```
+
+GET /api/public/intake/:teamKey/meta -> { "teamName": "...", "enabled": true|false }
+POST /api/public/intake/:teamKey -> creates an issue, returns { ok, identifier, statusUrl }
+GET /api/public/intake/status/:id/:sig -> submitter-facing status (state/category, no comments)
+
+````
 
 - Check `meta` first. If `enabled` is `false` (or the team doesn't exist), the POST returns
   `404` — the form isn't accepting requests and you should fall back to asking for an
@@ -357,29 +380,30 @@ curl -sX POST http://provider-host:8080/api/public/intake/AUGRID \
   }'
 # -> { "ok": true, "identifier": "AUGRID-124", "statusUrl": "/api/public/intake/status/<id>/<sig>" }
 # Later, check status:  curl -s http://provider-host:8080<statusUrl>   # -> state + category
-```
+````
 
 ### 3.4 fetch
 
 ```js
-const res = await fetch("http://provider-host:8080/api/public/intake/AUGRID", {
-  method: "POST",
+const res = await fetch('http://provider-host:8080/api/public/intake/AUGRID', {
+  method: 'POST',
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
     // "X-Intake-Token": "optional-rate-limit-bypass-token",
   },
   body: JSON.stringify({
-    title: "Grid drag-handle steals keyboard focus after row delete",
-    email: "agent@orderflow.example",
-    description: "augrid 3.2.1 / React 18.3 / Chrome 126.\n\n" +
-      "Expected: focus returns to the next row after delete.\n" +
+    title: 'Grid drag-handle steals keyboard focus after row delete',
+    email: 'agent@orderflow.example',
+    description:
+      'augrid 3.2.1 / React 18.3 / Chrome 126.\n\n' +
+      'Expected: focus returns to the next row after delete.\n' +
       "Actual: focus lands on the deleted row's drag handle; keyboard nav dead.\n\n" +
-      "Repro: render 5 rows, focus row 3, Cmd+Backspace, ArrowDown.\n\n" +
-      "Impact: blocks keyboard/AT users. Agent @orderflow-bot, project orderflow-web.",
+      'Repro: render 5 rows, focus row 3, Cmd+Backspace, ArrowDown.\n\n' +
+      'Impact: blocks keyboard/AT users. Agent @orderflow-bot, project orderflow-web.',
   }),
 });
 const { ok, identifier, statusUrl } = await res.json();
-console.log("filed", identifier, "track at", statusUrl); // <- store both; statusUrl gives read-back
+console.log('filed', identifier, 'track at', statusUrl); // <- store both; statusUrl gives read-back
 ```
 
 ---
@@ -402,44 +426,48 @@ A compact checklist. Miss these and your issue sits in triage waiting on a round
 
 ### A filled-in example
 
-```markdown
+````markdown
 Title: Grid drag-handle steals keyboard focus after row delete
-Team:  AUGRID   Priority: High   Labels: bug, area/interaction
+Team: AUGRID Priority: High Labels: bug, area/interaction
 
 ## Environment
+
 augrid 3.2.1 (npm), React 18.3.1, Chrome 126, macOS 14.5.
 Consumer project: orderflow-web. Filed by agent @orderflow-bot.
 
 ## Expected
+
 Deleting the focused row returns keyboard focus to the next row.
 
 ## Actual
+
 Focus moves to the drag handle at the deleted row's old index. ArrowUp/ArrowDown do
 nothing until the user clicks elsewhere. Screen readers announce nothing on delete.
 
 ## Steps
+
 1. Mount the grid with 5 rows; Tab to it; ArrowDown to row 3.
 2. Press Cmd+Backspace (delete row).
 3. Press ArrowDown.
 
 ## Minimal repro
+
 ```tsx
-import { AugridGrid } from "augrid";
-const rows = [1,2,3,4,5].map(i => ({ id: i, name: `Row ${i}` }));
+import { AugridGrid } from 'augrid';
+const rows = [1, 2, 3, 4, 5].map((i) => ({ id: i, name: `Row ${i}` }));
 export default () => (
-  <AugridGrid
-    rows={rows}
-    columns={[{ key: "name", header: "Name" }]}
-    enableRowDelete
-  />
+  <AugridGrid rows={rows} columns={[{ key: 'name', header: 'Name' }]} enableRowDelete />
 );
 // Focus row 3, Cmd+Backspace, ArrowDown -> focus is trapped on the drag handle.
 ```
+````
 
 ## Impact
+
 Blocks keyboard-only and assistive-tech users of our main order table — an accessibility
 regression from 3.1.4, where focus behaved correctly. We've pinned to 3.1.4 as a stopgap,
 which costs us the 3.2 virtualization we need. High for us.
+
 ```
 
 ---
@@ -487,20 +515,28 @@ Get the **right** token. There is a real trap here:
 **Token path — "I hit an augrid bug":**
 
 ```
-whoami                                        # confirm I'm @orderflow-bot
-list_teams                                    # -> AUGRID
-list_labels teamKey=AUGRID                    # -> bug, feature, area/interaction, ...
-search_issues query="keyboard focus row delete" teamKey=AUGRID   # no dupe
+
+whoami # confirm I'm @orderflow-bot
+list_teams # -> AUGRID
+list_labels teamKey=AUGRID # -> bug, feature, area/interaction, ...
+search_issues query="keyboard focus row delete" teamKey=AUGRID # no dupe
 create_issue teamKey=AUGRID priority=high labels=["bug","area/interaction"] \
-  title="Grid drag-handle steals keyboard focus after row delete" \
-  description="<the §2.3 template, filled in>"
+title="Grid drag-handle steals keyboard focus after row delete" \
+description="<the §2.3 template, filled in>"
+
 # -> AUGRID-42. Now poll:
-get_issue identifier=AUGRID-42                 # watch state category + comments
+
+get_issue identifier=AUGRID-42 # watch state category + comments
+
 # they comment asking for a trace:
+
 add_comment identifier=AUGRID-42 body="Trace + minimal repro attached: ..."
+
 # state -> completed:
+
 add_comment identifier=AUGRID-42 body="Verified fixed on 3.3.0. Thanks — unpinning."
-```
+
+````
 
 **Intake path — same bug, only a URL:**
 
@@ -514,7 +550,7 @@ curl -sX POST http://provider-host:8080/api/public/intake/AUGRID \
 # -> {"ok":true,"identifier":"AUGRID-124","statusUrl":"/api/public/intake/status/<id>/<sig>"}
 curl -s http://provider-host:8080/api/public/intake/status/<id>/<sig>   # <- state read-back (no comments)
 # Need to comment or be @mentioned back? Ask for a (team-scoped) agent account.
-```
+````
 
 ---
 

@@ -385,7 +385,7 @@ function buildServer(
     'list_teams',
     {
       description:
-        'List teams you can act in. access="member" (full) or "intake" (you can file issues and track the ones you filed, but not see the team\'s other work).',
+        'List teams you can act in. access="member" (full) or "intake" (you can file issues and track the ones you filed, but not see the team\'s other work). `id` is the team UUID (e.g. for the REST decisions.md export route); every MCP tool otherwise takes the `key`.',
       inputSchema: {},
     },
     async () =>
@@ -393,6 +393,7 @@ function buildServer(
         (await s.teams.all())
           .filter((t) => canIntakeTeam(vis, t.id))
           .map((t) => ({
+            id: t.id,
             key: t.key,
             name: t.name,
             access: seesTeam(vis, t.id) ? 'member' : 'intake',
@@ -458,7 +459,7 @@ function buildServer(
     'search_issues',
     {
       description:
-        'Search issues by text (title/description) and optional filters. Returns up to `limit` matches.',
+        'Search issues by text (title/description/identifier) and optional filters. Query words are matched independently and results ranked by how many words they cover — a scattered multi-word query still finds an issue that contains the words. Returns `{results, matchedTerms, unmatchedTerms}`: an empty `results` is explained by `unmatchedTerms` (words that matched nothing within the active filters), so a bad query is never mistaken for an empty board.',
       inputSchema: {
         query: z.string().optional().describe('Free text; also matches identifiers like ENG-42'),
         teamKey: z.string().optional(),
@@ -489,23 +490,51 @@ function buildServer(
         );
         issues = issues.filter((i) => stateIds.has(i.stateId));
       }
-      if (query) {
+
+      let matchedTerms: string[] = [];
+      let unmatchedTerms: string[] = [];
+      const terms = query ? query.trim().toLowerCase().split(/\s+/).filter(Boolean) : [];
+
+      if (terms.length > 0) {
         const teams = await s.teams.all();
-        const q = query.trim().toLowerCase();
-        issues = issues.filter((i) => {
+        const haystackOf = (i: Issue) => {
           const team = teams.find((t) => t.id === i.teamId);
-          const ident = team ? `${team.key}-${i.number}`.toLowerCase() : '';
-          return (
-            ident.includes(q) ||
-            i.title.toLowerCase().includes(q) ||
-            i.description.toLowerCase().includes(q)
-          );
-        });
+          const ident = team ? `${team.key}-${i.number}` : '';
+          return `${ident} ${i.title} ${i.description}`.toLowerCase();
+        };
+        // Per-term coverage: an issue matches if it contains ANY query word;
+        // rank by how many words it covers (then recency). This finds scattered
+        // multi-word queries instead of demanding the whole phrase verbatim, and
+        // the matched/unmatched split turns a zero result from a silent "[]" into
+        // a statement about which words the board had no hit for.
+        const matched = new Set<string>();
+        const scored: Array<{ issue: Issue; coverage: number }> = [];
+        for (const issue of issues) {
+          const hay = haystackOf(issue);
+          let coverage = 0;
+          for (const t of terms) {
+            if (hay.includes(t)) {
+              coverage += 1;
+              matched.add(t);
+            }
+          }
+          if (coverage > 0) scored.push({ issue, coverage });
+        }
+        scored.sort(
+          (a, b) => b.coverage - a.coverage || b.issue.updatedAt.localeCompare(a.issue.updatedAt),
+        );
+        issues = scored.map((x) => x.issue);
+        matchedTerms = terms.filter((t) => matched.has(t));
+        unmatchedTerms = terms.filter((t) => !matched.has(t));
+      } else {
+        issues = issues.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
       }
-      issues = issues
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-        .slice(0, Math.min(limit ?? 25, 100));
-      return ok(await Promise.all(issues.map((i) => serializeIssue(domain, i, { summary: true }))));
+
+      issues = issues.slice(0, Math.min(limit ?? 25, 100));
+      const results = await Promise.all(
+        issues.map((i) => serializeIssue(domain, i, { summary: true })),
+      );
+      return ok({ results, matchedTerms, unmatchedTerms });
     },
   );
 
