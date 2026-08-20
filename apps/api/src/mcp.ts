@@ -238,6 +238,78 @@ async function serializeIssue(domain: Domain, issue: Issue, opts: { summary?: bo
   return opts.summary ? base : { ...base, description: issue.description };
 }
 
+/** Compact reference to a linked issue — enough to read a dependency without opening it. */
+async function issueRef(domain: Domain, issueId: string) {
+  const s = domain.ctx.storage;
+  const i = await s.issues.get(issueId);
+  if (!i) return null;
+  const [team, state] = await Promise.all([s.teams.get(i.teamId), s.workflowStates.get(i.stateId)]);
+  return {
+    identifier: team ? `${team.key}-${i.number}` : issueId,
+    title: i.title,
+    state: state?.name ?? null,
+  };
+}
+
+/**
+ * The `blocks` dependency edges touching an issue, split by direction:
+ * `blockedBy` (issues that block this one) and `blocks` (issues this one blocks).
+ */
+async function issueDependencies(domain: Domain, issueId: string) {
+  const rels = (await domain.ctx.storage.issueRelations.all()).filter(
+    (r) => r.type === 'blocks' && (r.issueId === issueId || r.relatedIssueId === issueId),
+  );
+  const blockedBy = [];
+  const blocks = [];
+  for (const r of rels) {
+    if (r.relatedIssueId === issueId) {
+      const ref = await issueRef(domain, r.issueId);
+      if (ref) blockedBy.push(ref);
+    } else {
+      const ref = await issueRef(domain, r.relatedIssueId);
+      if (ref) blocks.push(ref);
+    }
+  }
+  return { blockedBy, blocks };
+}
+
+/**
+ * Create `blocks` dependency edges from `blocks`/`blockedBy` identifier lists.
+ * `blocks: [X]` on A → "A blocks X"; `blockedBy: [X]` on A → "X blocks A". Only
+ * issues the caller can read are linkable (resolveIssue enforces it); the
+ * relation service dedupes, so this is idempotent (additive — it does not remove
+ * edges you leave out).
+ */
+async function applyDependencies(
+  domain: Domain,
+  vis: Visibility,
+  issue: Issue,
+  opts: { blocks?: string[]; blockedBy?: string[] },
+) {
+  for (const ref of opts.blocks ?? []) {
+    const other = await resolveIssue(domain, ref, vis);
+    await domain.relations.create({ issueId: issue.id, relatedIssueId: other.id, type: 'blocks' });
+  }
+  for (const ref of opts.blockedBy ?? []) {
+    const other = await resolveIssue(domain, ref, vis);
+    await domain.relations.create({ issueId: other.id, relatedIssueId: issue.id, type: 'blocks' });
+  }
+}
+
+/** Resolve a `commentsAfter` cursor (a comment id or ISO timestamp) to a boundary time. */
+function resolveCommentCursor(
+  cursor: string,
+  comments: Array<{ id: string; createdAt: string }>,
+): string {
+  const byId = comments.find((c) => c.id === cursor);
+  if (byId) return byId.createdAt;
+  const t = Date.parse(cursor);
+  if (!Number.isNaN(t)) return new Date(t).toISOString();
+  throw new Error(
+    `Unrecognized commentsAfter cursor "${cursor}" — pass a comment id or ISO timestamp`,
+  );
+}
+
 /** Resolve a `KEY-D#` decision identifier for a member (decisions are member-only). */
 async function resolveDecision(
   domain: Domain,
@@ -541,26 +613,59 @@ function buildServer(
   server.registerTool(
     'get_issue',
     {
-      description: 'Get one issue by identifier (e.g. ENG-42), with its comments.',
-      inputSchema: { identifier: z.string() },
+      description:
+        'Get one issue by identifier (e.g. ENG-42) with its comments and dependency edges (blockedBy/blocks). Mature issues can be large — narrow the read: `descriptionOnly` returns just the brief (no comments), and `commentsAfter` (a comment id or ISO timestamp) returns only comments past that cursor. The reply carries `latestCommentAt` to page from next time.',
+      inputSchema: {
+        identifier: z.string(),
+        descriptionOnly: z
+          .boolean()
+          .optional()
+          .describe('Return the issue + description only, no comments (does not mark read)'),
+        commentsAfter: z
+          .string()
+          .optional()
+          .describe('Only comments strictly after this cursor (a comment id or ISO timestamp)'),
+      },
     },
-    async ({ identifier }) => {
-      const issue = await resolveIssue(domain, identifier, vis);
-      const comments = (await s.comments.all())
-        .filter((c) => c.issueId === issue.id)
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      const users = await s.users.all();
-      // Read-through: fetching the issue with its comments clears its inbox items.
-      if (!scope.readOnly)
-        await domain.notifications.markReadForSubject(actor.id, { issueId: issue.id });
-      return ok({
-        ...(await serializeIssue(domain, issue)),
-        comments: comments.map((c) => ({
-          author: users.find((u) => u.id === c.userId)?.displayName ?? 'unknown',
-          body: c.body,
-          createdAt: c.createdAt,
-        })),
-      });
+    async ({ identifier, descriptionOnly, commentsAfter }) => {
+      try {
+        const issue = await resolveIssue(domain, identifier, vis);
+        const deps = await issueDependencies(domain, issue.id);
+        const base = {
+          ...(await serializeIssue(domain, issue)),
+          blockedBy: deps.blockedBy,
+          blocks: deps.blocks,
+        };
+
+        // description-only: the brief without the (potentially huge) comment
+        // thread. The caller hasn't seen the comments a notification is about,
+        // so this deliberately does NOT mark the issue's inbox items read.
+        if (descriptionOnly) return ok(base);
+
+        let comments = (await s.comments.all())
+          .filter((c) => c.issueId === issue.id)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        if (commentsAfter !== undefined) {
+          const boundary = resolveCommentCursor(commentsAfter, comments);
+          comments = comments.filter((c) => c.createdAt > boundary);
+        }
+        const users = await s.users.all();
+        // Read-through: receiving the comments clears this issue's inbox items.
+        if (!scope.readOnly)
+          await domain.notifications.markReadForSubject(actor.id, { issueId: issue.id });
+        return ok({
+          ...base,
+          comments: comments.map((c) => ({
+            id: c.id,
+            author: users.find((u) => u.id === c.userId)?.displayName ?? 'unknown',
+            body: c.body,
+            createdAt: c.createdAt,
+          })),
+          latestCommentAt: comments.length ? comments[comments.length - 1]!.createdAt : null,
+        });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
     },
   );
 
@@ -657,7 +762,7 @@ function buildServer(
     'inbox',
     {
       description:
-        'Your notifications — the passive pull mirror of the human Inbox: things addressed to you (@mentions on issues AND decisions, a decision you proposed being ruled, assignments, waiting_on). Unread by default; returns `{ unread, notifications }`. Pass markRead:true to clear the ones returned so the next call is fresh.',
+        'Your notifications — the passive pull mirror of the human Inbox: things addressed to you (@mentions on issues AND decisions, a decision you proposed being ruled, assignments, waiting_on). Unread by default; returns `{ unread, notifications }`. Pass markRead:true to clear the ones returned — they come back marked read in that same response (unread reflects the post-clear state), so one call both reads and clears. `runAsHook` performs a pure read and never marks (dispositioning via get_issue/get_decision is what clears items).',
       inputSchema: {
         markRead: z
           .boolean()
@@ -697,12 +802,16 @@ function buildServer(
         .filter((n) => n.userId === actor.id && (includeRead || !n.readAt))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .slice(0, Math.min(limit ?? 50, 200));
+      const markedNow = new Set<string>();
       if (markRead) {
         guardWrite();
         await Promise.all(
           mine
             .filter((n) => !n.readAt)
-            .map((n) => domain.notifications.markRead(actor.id, n.id, true)),
+            .map((n) => {
+              markedNow.add(n.id);
+              return domain.notifications.markRead(actor.id, n.id, true);
+            }),
         );
       }
       const rows = mine.map((n) => {
@@ -746,7 +855,9 @@ function buildServer(
           what: phrase[n.type] ?? n.type,
           from,
           target,
-          read: n.readAt != null,
+          // Reflect the post-markRead state so a read+clear is a single call:
+          // items cleared in this call report read:true and drop out of `unread`.
+          read: n.readAt != null || markedNow.has(n.id),
           at: n.createdAt,
         };
       });
@@ -802,9 +913,25 @@ function buildServer(
         state: z.string().optional(),
         labels: z.array(z.string()).optional(),
         project: z.string().optional().describe('Project name to file the issue into'),
+        blockedBy: z
+          .array(z.string())
+          .optional()
+          .describe('Identifiers of issues that block this one (e.g. ["ENG-42"])'),
+        blocks: z.array(z.string()).optional().describe('Identifiers of issues this one blocks'),
       },
     },
-    async ({ teamKey, title, description, priority, assignee, state, labels, project }) => {
+    async ({
+      teamKey,
+      title,
+      description,
+      priority,
+      assignee,
+      state,
+      labels,
+      project,
+      blockedBy,
+      blocks,
+    }) => {
       try {
         guardWrite();
         const team = await resolveTeam(domain, teamKey, vis);
@@ -818,6 +945,7 @@ function buildServer(
           labelIds: await resolveLabels(domain, team.id, labels),
           projectId: await resolveProject(domain, project, vis),
         });
+        await applyDependencies(domain, vis, issue, { blocks, blockedBy });
         return ok(await serializeIssue(domain, issue));
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
@@ -840,11 +968,32 @@ function buildServer(
           .string()
           .nullable()
           .optional()
-          .describe('Person/agent this issue is blocked on (email/@handle/name); null to clear'),
+          .describe(
+            'Person/agent whose next move unblocks this (email/@handle/name); null to clear. For a dependency on another ISSUE, use blockedBy/blocks instead.',
+          ),
         project: z.string().optional().describe('Project name to move the issue into'),
+        blockedBy: z
+          .array(z.string())
+          .optional()
+          .describe('Add issues that block this one (identifiers, e.g. ["ENG-42"]); additive'),
+        blocks: z
+          .array(z.string())
+          .optional()
+          .describe('Add issues this one blocks (identifiers); additive'),
       },
     },
-    async ({ identifier, title, description, state, priority, assignee, waiting_on, project }) => {
+    async ({
+      identifier,
+      title,
+      description,
+      state,
+      priority,
+      assignee,
+      waiting_on,
+      project,
+      blockedBy,
+      blocks,
+    }) => {
       try {
         guardWrite();
         const issue = await resolveIssue(domain, identifier, vis);
@@ -863,6 +1012,7 @@ function buildServer(
           waitingOnId: await resolveAssignee(domain, waiting_on, actor),
           projectId: await resolveProject(domain, project, vis),
         });
+        await applyDependencies(domain, vis, updated, { blocks, blockedBy });
         return ok(await serializeIssue(domain, updated));
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
@@ -1322,7 +1472,7 @@ function buildServer(
     'reconcile_summary',
     {
       description:
-        'A board-truth summary for a team — a pull diagnostic, not an alarm: how many issues are open, how many are stale (untouched N+ days by any activity), and how many are in progress waiting on nobody (the board-review finding, mechanized). Drops into a status report.',
+        "A board-truth summary for a team — a pull diagnostic, not an alarm. Counts, each reported beside the primitive that falsifies it: open; untouched (stale N+ days by any activity); inProgress (started state) and, of those, stalledUnowned — started with nobody named as blocker (the board-review finding, staleness-independent); and blockedOnUnresolved (blocked by an issue that isn't done). Drops into a status report.",
       inputSchema: {
         teamKey: z.string(),
         staleDays: z.number().optional().describe('Staleness threshold in days (default 5)'),
@@ -1331,11 +1481,13 @@ function buildServer(
     async ({ teamKey, staleDays }) => {
       try {
         const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
-        const [issues, states, comments, decisions] = await Promise.all([
+        const [issues, allIssues, states, comments, decisions, relations] = await Promise.all([
           domain.ctx.storage.issues.byTeam(team.id),
+          domain.ctx.storage.issues.all(),
           domain.ctx.storage.workflowStates.all(),
           domain.ctx.storage.comments.all(),
           domain.ctx.storage.decisions.all(),
+          domain.ctx.storage.issueRelations.all(),
         ]);
         const catOf = (stateId: string) => states.find((s) => s.id === stateId)?.category;
         const open = issues.filter((i) => {
@@ -1354,9 +1506,27 @@ function buildServer(
           return latest;
         };
         const stale = open.filter((i) => now - lastActivity(i.id, i.updatedAt) > threshold);
-        // The board-review finding: of the stale ones, which have nobody named as
-        // the blocker (waiting_on) — genuinely adrift, not just paused on someone.
-        const stalledUnowned = stale.filter((i) => !i.waitingOnId);
+        // The board-review finding, mechanized honestly: issues in a STARTED state
+        // (in progress / in review) with nobody named as blocker — someone owns the
+        // status but no one is named as moving it. This is about started work, not
+        // staleness, so it is independent of staleDays. `inProgress` ships beside it
+        // as the falsifier: the ratio is checkable in one read.
+        const inProgress = open.filter((i) => catOf(i.stateId) === 'started');
+        const stalledUnowned = inProgress.filter((i) => !i.waitingOnId);
+        // Blocked on unresolved work: has a `blocks` edge from an issue that isn't
+        // done/canceled/archived (the blocker may be in another team).
+        const byId = new Map(allIssues.map((i) => [i.id, i]));
+        const isUnresolved = (id: string) => {
+          const b = byId.get(id);
+          if (!b || b.archivedAt) return false;
+          const c = catOf(b.stateId);
+          return c !== 'completed' && c !== 'canceled';
+        };
+        const blocked = open.filter((i) =>
+          relations.some(
+            (r) => r.type === 'blocks' && r.relatedIssueId === i.id && isUnresolved(r.issueId),
+          ),
+        );
         // Decisions: what awaits a ruling, and what was decided lately.
         const teamDecisions = decisions.filter((d) => d.teamId === team.id);
         const awaitingRuling = teamDecisions.filter((d) => d.status === 'proposed');
@@ -1366,8 +1536,9 @@ function buildServer(
         const parts = [
           `${open.length} open`,
           `${stale.length} untouched ${days}+ days`,
-          `${stalledUnowned.length} stalled with no owner`,
+          `${stalledUnowned.length}/${inProgress.length} in progress, no blocker`,
         ];
+        if (blocked.length) parts.push(`${blocked.length} blocked on open work`);
         const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
         if (awaitingRuling.length)
           parts.push(`${plural(awaitingRuling.length, 'decision')} to rule`);
@@ -1378,7 +1549,9 @@ function buildServer(
           open: open.length,
           untouched: stale.length,
           untouchedDays: days,
+          inProgress: inProgress.length,
           stalledUnowned: stalledUnowned.length,
+          blockedOnUnresolved: blocked.length,
           decisionsAwaitingRuling: awaitingRuling.length,
           decisionsRuledRecently: ruledRecently.map((d) => `${team.key}-D${d.number}`),
           summary: parts.join(' · '),
@@ -1386,6 +1559,7 @@ function buildServer(
             .sort((a, b) => lastActivity(a.id, a.updatedAt) - lastActivity(b.id, b.updatedAt))
             .slice(0, 10)
             .map((i) => `${team.key}-${i.number}`),
+          blocked: blocked.slice(0, 10).map((i) => `${team.key}-${i.number}`),
         });
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
