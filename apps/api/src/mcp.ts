@@ -762,7 +762,7 @@ function buildServer(
     'inbox',
     {
       description:
-        'Your notifications — the passive pull mirror of the human Inbox: things addressed to you (@mentions on issues AND decisions, a decision you proposed being ruled, assignments, waiting_on). Unread by default; returns `{ unread, notifications }`. Pass markRead:true to clear the ones returned — they come back marked read in that same response (unread reflects the post-clear state), so one call both reads and clears. `runAsHook` performs a pure read and never marks (dispositioning via get_issue/get_decision is what clears items).',
+        'Your notifications — the passive pull mirror of the human Inbox: things addressed to you (@mentions on issues AND decisions, a decision you proposed being ruled, assignments, waiting_on). Unread by default; returns `{ unread, notifications }`. Pass markRead:true to clear the ones returned — they come back marked read in that same response (unread reflects the post-clear state), so one call both reads and clears. Scope with `team` (a team key) or `dispositionable:true` (only items on issues/decisions you can act on — your member teams, or assigned to / waiting on you — dropping noise from a thread you merely got subscribed to). `runAsHook` performs a pure read and never marks (dispositioning via get_issue/get_decision is what clears items), and it blocks stopping on the DISPOSITIONABLE set by default, so a foreign-team thread you cannot act on does not hold your turn open (pass dispositionable:false to override).',
       inputSchema: {
         markRead: z
           .boolean()
@@ -770,6 +770,13 @@ function buildServer(
           .describe('Mark the returned notifications read (so you stop seeing them)'),
         includeRead: z.boolean().optional().describe('Include already-read ones too'),
         limit: z.number().optional(),
+        team: z.string().optional().describe('Restrict to one team by key (e.g. ENG)'),
+        dispositionable: z
+          .boolean()
+          .optional()
+          .describe(
+            'Only items you can act on: subject in a member team, or assigned to / waiting on you. Defaults to true under runAsHook, false otherwise.',
+          ),
         runAsHook: z
           .boolean()
           .optional()
@@ -778,7 +785,7 @@ function buildServer(
           ),
       },
     },
-    async ({ markRead, includeRead, limit, runAsHook }) => {
+    async ({ markRead, includeRead, limit, team, dispositionable, runAsHook }) => {
       const [notifications, teams, issues, decisions, users] = await Promise.all([
         s.notifications.all(),
         s.teams.all(),
@@ -798,8 +805,41 @@ function buildServer(
         issue_waiting_on: 'is waiting on you',
         decision_ruled: 'ruled',
       };
+      // Scope: an item is dispositionable if its subject sits in a member team,
+      // or (for an issue) is assigned to / waiting on the actor, or (for a
+      // decision) awaits or was authored by them. This drops the noise from a
+      // thread the actor merely got subscribed to on a team they can't act in.
+      const subjectTeamId = (n: (typeof notifications)[number]) => {
+        if (n.issueId) return issues.find((i) => i.id === n.issueId)?.teamId ?? null;
+        if (n.decisionId) return decisions.find((d) => d.id === n.decisionId)?.teamId ?? null;
+        return null;
+      };
+      const isDispositionable = (n: (typeof notifications)[number]) => {
+        if (n.issueId) {
+          const i = issues.find((x) => x.id === n.issueId);
+          return (
+            !!i &&
+            (seesTeam(vis, i.teamId) || i.assigneeId === actor.id || i.waitingOnId === actor.id)
+          );
+        }
+        if (n.decisionId) {
+          const d = decisions.find((x) => x.id === n.decisionId);
+          return (
+            !!d &&
+            (seesTeam(vis, d.teamId) || d.waitingOnId === actor.id || d.authorId === actor.id)
+          );
+        }
+        return false;
+      };
+      // runAsHook blocks on the actionable set by default; interactive reads see
+      // everything unless a filter is passed. Explicit dispositionable wins.
+      const wantDispositionable = dispositionable ?? !!runAsHook;
+      const scopeTeamId = team ? (await resolveTeam(domain, team, vis)).id : null;
+
       const mine = notifications
         .filter((n) => n.userId === actor.id && (includeRead || !n.readAt))
+        .filter((n) => (scopeTeamId ? subjectTeamId(n) === scopeTeamId : true))
+        .filter((n) => (wantDispositionable ? isDispositionable(n) : true))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .slice(0, Math.min(limit ?? 50, 200));
       const markedNow = new Set<string>();
@@ -1038,6 +1078,44 @@ function buildServer(
     },
   );
 
+  server.registerTool(
+    'leave_issue',
+    {
+      description:
+        "Remove YOURSELF from an issue's participants — drop yourself as a subscriber, and unassign yourself if you're the assignee. Works even on an issue whose team you can't edit (self-removal is consented and needs no edit rights), so it's how you silence a mis-subscription — e.g. a stale cross-team assignment — that you couldn't otherwise clear. Also clears that issue's items from your inbox.",
+      inputSchema: { identifier: z.string() },
+    },
+    async ({ identifier }) => {
+      try {
+        guardWrite();
+        // Resolve WITHOUT the visibility gate: the victim of a cross-team
+        // mis-subscription is not a member of the issue's team, yet must be able
+        // to leave it. Authorization is that you're actually on it. A not-found
+        // issue and a you're-not-on-it issue return the SAME message, so this
+        // can't be used to probe issue existence across the team boundary.
+        const notOn = `You are not a participant on ${identifier} — nothing to leave`;
+        const dash = identifier.lastIndexOf('-');
+        if (dash < 1)
+          throw new Error(`Bad issue identifier "${identifier}" (expected e.g. ENG-42)`);
+        const key = identifier.slice(0, dash).toUpperCase();
+        const number = Number(identifier.slice(dash + 1));
+        const team = (await s.teams.all()).find((t) => t.key.toUpperCase() === key);
+        const issue = team
+          ? (await s.issues.byTeam(team.id)).find((i) => i.number === number)
+          : undefined;
+        if (!issue || (!issue.subscriberIds.includes(actor.id) && issue.assigneeId !== actor.id)) {
+          throw new Error(notOn);
+        }
+        await domain.issues.leave(actor.id, issue.id);
+        if (!scope.readOnly)
+          await domain.notifications.markReadForSubject(actor.id, { issueId: issue.id });
+        return ok({ ok: true, left: identifier });
+      } catch (err) {
+        return fail(err instanceof Error ? err.message : String(err));
+      }
+    },
+  );
+
   // ---- ergonomic tools: resolve, and write in one motion ----
 
   server.registerTool(
@@ -1250,24 +1328,50 @@ function buildServer(
   server.registerTool(
     'list_decisions',
     {
-      description: 'List a team’s decisions (optionally by status), newest first.',
+      description:
+        'List a team’s decisions, newest first — paginated, because the ledger only grows (decisions are superseded, never deleted). Returns `{ decisions, nextCursor }`; pass the returned `nextCursor` back as `cursor` for the next page (null when exhausted). Rows are compact (no body — use get_decision for the argument). Filter by `status`, `since` (ISO date, on creation), and `q` (free text over title + body).',
       inputSchema: {
         teamKey: z.string(),
         status: z
           .enum(['proposed', 'ruled', 'superseded', 'carried'])
           .optional()
           .describe('Filter by lifecycle status'),
+        since: z.string().optional().describe('Only decisions created on/after this ISO date'),
+        q: z.string().optional().describe('Free-text match over title and body'),
+        limit: z.number().optional().describe('Page size (default 30, max 100)'),
+        cursor: z
+          .number()
+          .optional()
+          .describe('Return decisions numbered below this (from a prior nextCursor)'),
       },
     },
-    async ({ teamKey, status }) => {
+    async ({ teamKey, status, since, q, limit, cursor }) => {
       try {
         const team = await resolveTeam(domain, teamKey, vis, { requireMember: true });
-        const rows = (await domain.ctx.storage.decisions.all())
-          .filter((d) => d.teamId === team.id && (!status || d.status === status))
+        const sinceMs = since ? Date.parse(since) : NaN;
+        if (since && Number.isNaN(sinceMs)) throw new Error(`Bad since date "${since}"`);
+        const needle = q?.trim().toLowerCase();
+        const matches = (await domain.ctx.storage.decisions.all())
+          .filter((d) => d.teamId === team.id)
+          .filter((d) => !status || d.status === status)
+          .filter((d) => !since || Date.parse(d.createdAt) >= sinceMs)
+          .filter(
+            (d) =>
+              !needle ||
+              d.title.toLowerCase().includes(needle) ||
+              d.body.toLowerCase().includes(needle),
+          )
+          .filter((d) => cursor === undefined || d.number < cursor)
           .sort((a, b) => b.number - a.number);
-        return ok(
-          await Promise.all(rows.map((d) => serializeDecision(domain, d, { summary: true }))),
-        );
+        const size = Math.min(limit ?? 30, 100);
+        const page = matches.slice(0, size);
+        const nextCursor = matches.length > size ? page[page.length - 1]!.number : null;
+        return ok({
+          decisions: await Promise.all(
+            page.map((d) => serializeDecision(domain, d, { summary: true })),
+          ),
+          nextCursor,
+        });
       } catch (err) {
         return fail(err instanceof Error ? err.message : String(err));
       }

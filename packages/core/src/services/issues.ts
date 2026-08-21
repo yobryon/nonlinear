@@ -369,6 +369,28 @@ export class IssueService {
     return issue;
   }
 
+  /**
+   * Self-removal: drop `userId` from the issue's subscribers, and unassign them
+   * if they are the assignee. Consented by definition — a person may always take
+   * themselves off an issue — so it carries no team-edit authorization of its
+   * own; the caller decides who may invoke it (the MCP layer allows it only for
+   * the actor themselves). Idempotent: a no-op if they weren't on it.
+   */
+  async leave(userId: string, issueId: string): Promise<Issue> {
+    const { storage, bus } = this.ctx;
+    const issue = await storage.issues.get(issueId);
+    if (!issue) throw notFound('Issue');
+    const wasSubscribed = issue.subscriberIds.includes(userId);
+    const wasAssignee = issue.assigneeId === userId;
+    if (!wasSubscribed && !wasAssignee) return issue;
+    issue.subscriberIds = issue.subscriberIds.filter((id) => id !== userId);
+    if (wasAssignee) issue.assigneeId = null;
+    issue.updatedAt = nowIso();
+    await storage.issues.update(issue);
+    await bus.publish([updated('issue', issue)]);
+    return issue;
+  }
+
   async remove(issueId: string): Promise<void> {
     const { storage, bus } = this.ctx;
     const issue = await storage.issues.get(issueId);
