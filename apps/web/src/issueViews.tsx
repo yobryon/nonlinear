@@ -100,6 +100,14 @@ export const GROUPING_LABELS: Record<Grouping, string> = {
   none: 'No grouping',
 };
 
+/** Which closed issues a list shows (mirrors Linear's "Completed issues" option). */
+export type CompletedMode = 'recent' | 'all' | 'none';
+export const COMPLETED_LABELS: Record<CompletedMode, string> = {
+  recent: 'Past 2 weeks',
+  all: 'All',
+  none: 'Hidden',
+};
+
 export const SORT_LABELS: Record<IssueSort, string> = {
   manual: 'Manual',
   priority: 'Priority',
@@ -981,6 +989,8 @@ export function ViewControls({
   onGrouping,
   sort,
   onSort,
+  completed,
+  onCompleted,
   teamId,
   extra,
 }: {
@@ -990,6 +1000,9 @@ export function ViewControls({
   onGrouping?: (g: Grouping) => void;
   sort?: IssueSort;
   onSort?: (s: IssueSort) => void;
+  /** Which closed issues to show; omit to hide the control. */
+  completed?: CompletedMode;
+  onCompleted?: (c: CompletedMode) => void;
   teamId?: string;
   extra?: ReactNode;
 }) {
@@ -1002,6 +1015,7 @@ export function ViewControls({
   );
   const [groupAnchor, setGroupAnchor] = useState<Anchor | null>(null);
   const [sortAnchor, setSortAnchor] = useState<Anchor | null>(null);
+  const [completedAnchor, setCompletedAnchor] = useState<Anchor | null>(null);
 
   const closeFilter = () => {
     setFilterAnchor(null);
@@ -1070,6 +1084,18 @@ export function ViewControls({
 
       <span className="grow" />
       {extra}
+      {completed && onCompleted && (
+        <button
+          className="filter-pill set"
+          title="Which completed and canceled issues to show"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            setCompletedAnchor({ x: rect.left, y: rect.bottom + 4 });
+          }}
+        >
+          Completed: {COMPLETED_LABELS[completed]}
+        </button>
+      )}
       {sort && onSort && (
         <button
           className="filter-pill set"
@@ -1093,6 +1119,22 @@ export function ViewControls({
         </button>
       )}
 
+      {completedAnchor && onCompleted && (
+        <Picker
+          anchor={completedAnchor}
+          onClose={() => setCompletedAnchor(null)}
+          searchable={false}
+          selectedIds={new Set([completed ?? 'recent'])}
+          items={(['recent', 'all', 'none'] as CompletedMode[]).map((c) => ({
+            id: c,
+            label: COMPLETED_LABELS[c],
+          }))}
+          onPick={(id) => {
+            onCompleted(id as CompletedMode);
+            setCompletedAnchor(null);
+          }}
+        />
+      )}
       {sortAnchor && onSort && (
         <Picker
           anchor={sortAnchor}

@@ -2056,3 +2056,13 @@ button.group-header.collapsible:hover .group-caret {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* "N older completed issues hidden — Show all" footer under a team issue list */
+.hidden-closed-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}

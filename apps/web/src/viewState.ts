@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { Grouping, IssueSort } from '@nonlinear/shared';
-import { EMPTY_FILTERS, type IssueFilters } from './issueViews.js';
+import { EMPTY_FILTERS, type CompletedMode, type IssueFilters } from './issueViews.js';
+
+export type { CompletedMode };
 
 /**
  * Per-scope issue-list view settings (filter / group / sort / display /
@@ -18,6 +20,11 @@ export interface ScopeView {
   display: 'list' | 'board';
   /** Group keys the user has collapsed. */
   collapsed: string[];
+  /**
+   * Which closed (completed/canceled) issues the "All" tab shows: those closed
+   * in the past two weeks (Linear's default), all of them, or none.
+   */
+  completed: CompletedMode;
 }
 
 export const DEFAULT_SCOPE_VIEW: ScopeView = {
@@ -26,6 +33,7 @@ export const DEFAULT_SCOPE_VIEW: ScopeView = {
   sort: 'priority',
   display: 'list',
   collapsed: [],
+  completed: 'recent',
 };
 
 const STORAGE_KEY = 'nl.viewState';

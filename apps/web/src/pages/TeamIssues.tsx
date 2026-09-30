@@ -102,12 +102,15 @@ export function TeamIssuesPage() {
   // into an issue and back, and a reload. The tab stays in the URL.
   const scope = team ? `team:${team.id}` : '__none';
   const view = useScopeView(scope);
-  const { filters, grouping, sort, display } = view;
+  const { filters, grouping, sort, display, completed } = view;
   const setFilters = (f: IssueFilters) => patchScopeView(scope, { filters: f });
   const setGrouping = (g: Grouping) => patchScopeView(scope, { grouping: g });
 
-  const visible = useMemo(() => {
-    if (!team) return [];
+  // Closed issues the "All" tab is holding back under the current Completed
+  // setting — counted so the list can say so instead of silently dropping them.
+  const { visible, hiddenClosed } = useMemo(() => {
+    if (!team) return { visible: [], hiddenClosed: 0 };
+    let hidden = 0;
     let rows = Object.values(issues).filter((i) => i.teamId === team.id && !i.archivedAt);
     if (tab !== 'all') {
       rows = rows.filter((i) => {
@@ -116,20 +119,26 @@ export function TeamIssuesPage() {
         if (tab === 'active') return category === 'unstarted' || category === 'started';
         return category === 'backlog' || category === 'triage';
       });
-    } else {
-      // "All" hides completed/canceled issues older than two weeks.
+    } else if (completed !== 'all') {
+      // "All" shows closed (completed/canceled) issues per the Completed
+      // setting: the past two weeks by default (Linear's default), or none.
       const cutoff = new Date(Date.now() - 14 * 86400000).toISOString();
-      rows = rows.filter((i) => {
+      const isShown = (i: (typeof rows)[number]) => {
         const category = states[i.stateId]?.category;
-        if (category === 'completed' || category === 'canceled') {
-          const closedAt = i.completedAt ?? i.canceledAt;
-          return closedAt !== null && closedAt > cutoff;
-        }
-        return true;
-      });
+        if (category !== 'completed' && category !== 'canceled') return true;
+        if (completed === 'none') return false;
+        const closedAt = i.completedAt ?? i.canceledAt;
+        return closedAt !== null && closedAt > cutoff;
+      };
+      // Count after the user's filters so the note matches what they'd see.
+      hidden = applyFilters(
+        rows.filter((i) => !isShown(i)),
+        filters,
+      ).length;
+      rows = rows.filter(isShown);
     }
-    return applyFilters(rows, filters);
-  }, [issues, team, tab, states, filters]);
+    return { visible: applyFilters(rows, filters), hiddenClosed: hidden };
+  }, [issues, team, tab, states, filters, completed]);
 
   const grouped = useGroupedIssues(
     visible,
@@ -198,6 +207,8 @@ export function TeamIssuesPage() {
         onFilters={setFilters}
         grouping={display === 'list' ? grouping : undefined}
         onGrouping={display === 'list' ? setGrouping : undefined}
+        completed={tab === 'all' ? completed : undefined}
+        onCompleted={(c) => patchScopeView(scope, { completed: c })}
         sort={display === 'list' ? sort : undefined}
         onSort={display === 'list' ? (s) => patchScopeView(scope, { sort: s }) : undefined}
         teamId={team.id}
@@ -231,6 +242,18 @@ export function TeamIssuesPage() {
             />
           ) : (
             <Board groups={grouped} onQuickAdd={quickAdd} />
+          )}
+          {hiddenClosed > 0 && (
+            <div className="hidden-closed-note">
+              {hiddenClosed} {completed === 'none' ? '' : 'older '}completed or canceled issue
+              {hiddenClosed === 1 ? '' : 's'} hidden
+              <button
+                className="btn ghost"
+                onClick={() => patchScopeView(scope, { completed: 'all' })}
+              >
+                Show all
+              </button>
+            </div>
           )}
         </div>
       </OriginProvider>
